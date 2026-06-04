@@ -86,13 +86,28 @@ export default function ReportScreen() {
   });
 
   const handlePickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUrl(result.assets[0].uri);
+    try {
+      if (Platform.OS !== "web") {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "권한 필요",
+            "사진을 첨부하려면 사진 접근 권한을 허용해주세요."
+          );
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setPhotoUrl(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert("오류", "사진을 불러오는 중 문제가 발생했습니다.");
     }
   };
 

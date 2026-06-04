@@ -112,6 +112,13 @@ const config: ExpoConfig = {
       },
     ],
     [
+      "expo-image-picker",
+      {
+        photosPermission:
+          "$(PRODUCT_NAME)에서 고장 사진을 첨부하기 위해 사진 접근 권한이 필요합니다.",
+      },
+    ],
+    [
       "expo-build-properties",
       {
         android: {

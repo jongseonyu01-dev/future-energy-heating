@@ -69,3 +69,8 @@
 - [x] 기존 기능 유지 확인 (AS접수/배관청소/예약/관리자 모두 정상)
 - [x] 동 정보 없는 주소(박민수) 표시 보완
 - [x] 웹훅/SMS 연동 가이드 문서 작성 (IoT_Sensor_Webhook_Guide.md)
+
+## 버그 수정 (4차)
+- [x] 난방 고장 접수 화면 이탈/크래시 수정: expo-image-picker를 SDK54 신형 API(mediaTypes 배열)로 교체 + 사진 권한 요청 + try/catch 예외 처리
+- [x] app.config.ts에 expo-image-picker 권한 플러그인(photosPermission) 추가 (네이티브 빌드 권한 누락 크래시 방지)
+- [x] 수정 후 테스트 27개 통과, 웹 미리보기에서 고장접수 진입/증상선택 정상 확인
