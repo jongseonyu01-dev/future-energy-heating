@@ -60,7 +60,7 @@ export default function ReportScreen() {
       }
       Alert.alert(
         "접수 완료",
-        `접수번호: ${data.requestNumber}\n\n접수가 완료되었습니다.\n담당자가 확인 후 연락드리겠습니다.`,
+        `접수번호: ${data.requestNumber}\n\n접수가 완료되었습니다.\n입력하신 휴대폰으로 접수 확인 문자가 발송되며,\n담당자가 확인 후 연락드리겠습니다.`,
         [
           {
             text: "확인",

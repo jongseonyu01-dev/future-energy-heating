@@ -17,8 +17,8 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 
-// 관리자 비밀번호 (간단한 로컬 인증)
-const ADMIN_PASSWORD = "admin1234";
+// 관리자 화면 탭 정의
+type AdminTab = "requests" | "technicians" | "settings";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   신규접수: { label: "신규 접수", color: "#3B82F6", bg: "#EFF6FF", icon: "📋" },
@@ -70,19 +70,37 @@ export default function AdminScreen() {
   const colors = useColors();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
+  const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [selectedStatus, setSelectedStatus] = useState("전체");
   const [selectedItem, setSelectedItem] = useState<RepairRequest | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
-  const handleLogin = () => {
-    if (password === ADMIN_PASSWORD) {
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const verifyMutation = trpc.admin.verifyPassword.useMutation({
+    onSuccess: (res) => {
+      if (res.valid) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        setIsLoggedIn(true);
+        setPassword("");
+      } else {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+        Alert.alert("오류", "비밀번호가 올바르지 않습니다.");
       }
-      setIsLoggedIn(true);
-    } else {
-      Alert.alert("오류", "비밀번호가 올바르지 않습니다.");
+    },
+    onError: () => {
+      Alert.alert("오류", "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    },
+  });
+
+  const handleLogin = () => {
+    if (!password.trim()) {
+      Alert.alert("입력 오류", "비밀번호를 입력해주세요.");
+      return;
     }
+    verifyMutation.mutate({ password });
   };
 
   if (!isLoggedIn) {
@@ -91,22 +109,77 @@ export default function AdminScreen() {
         password={password}
         setPassword={setPassword}
         onLogin={handleLogin}
+        isLoading={verifyMutation.isPending}
         colors={colors}
       />
     );
   }
 
   return (
-    <AdminDashboard
-      colors={colors}
-      selectedStatus={selectedStatus}
-      setSelectedStatus={setSelectedStatus}
-      selectedItem={selectedItem}
-      setSelectedItem={setSelectedItem}
-      showDetailModal={showDetailModal}
-      setShowDetailModal={setShowDetailModal}
-      onLogout={() => setIsLoggedIn(false)}
-    />
+    <ScreenContainer containerClassName="bg-background">
+      {/* 헤더 */}
+      <View style={[styles.adminHeader, { backgroundColor: "#1A1A1A" }]}>
+        <View>
+          <Text style={styles.adminHeaderTitle}>⚙️ 관리자</Text>
+          <Text style={styles.adminHeaderSubtitle}>퓨처에너지 난방케어</Text>
+        </View>
+        <Pressable
+          style={[styles.logoutButton, { borderColor: "rgba(255,255,255,0.3)" }]}
+          onPress={() => {
+            setIsLoggedIn(false);
+            setActiveTab("requests");
+          }}
+        >
+          <Text style={styles.logoutText}>로그아웃</Text>
+        </Pressable>
+      </View>
+
+      {/* 상단 탭 메뉴 */}
+      <View style={[styles.adminTabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        {([
+          { key: "requests", label: "접수 관리", icon: "📋" },
+          { key: "technicians", label: "기사 관리", icon: "👷" },
+          { key: "settings", label: "설정", icon: "⚙️" },
+        ] as { key: AdminTab; label: string; icon: string }[]).map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              style={[
+                styles.adminTab,
+                isActive && { borderBottomColor: "#E84B2F", borderBottomWidth: 3 },
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text style={styles.adminTabIcon}>{tab.icon}</Text>
+              <Text
+                style={[
+                  styles.adminTabLabel,
+                  { color: isActive ? "#E84B2F" : colors.muted },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* 탭 컨텐츠 */}
+      {activeTab === "requests" && (
+        <RequestsTab
+          colors={colors}
+          selectedStatus={selectedStatus}
+          setSelectedStatus={setSelectedStatus}
+          selectedItem={selectedItem}
+          setSelectedItem={setSelectedItem}
+          showDetailModal={showDetailModal}
+          setShowDetailModal={setShowDetailModal}
+        />
+      )}
+      {activeTab === "technicians" && <TechniciansTab colors={colors} />}
+      {activeTab === "settings" && <SettingsTab colors={colors} />}
+    </ScreenContainer>
   );
 }
 
@@ -115,11 +188,13 @@ function AdminLoginScreen({
   password,
   setPassword,
   onLogin,
+  isLoading,
   colors,
 }: {
   password: string;
   setPassword: (v: string) => void;
   onLogin: () => void;
+  isLoading: boolean;
   colors: any;
 }) {
   return (
@@ -155,11 +230,16 @@ function AdminLoginScreen({
           <Pressable
             style={({ pressed }) => [
               styles.loginButton,
-              { backgroundColor: "#E84B2F", opacity: pressed ? 0.9 : 1 },
+              { backgroundColor: "#E84B2F", opacity: pressed || isLoading ? 0.9 : 1 },
             ]}
             onPress={onLogin}
+            disabled={isLoading}
           >
-            <Text style={styles.loginButtonText}>로그인</Text>
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginButtonText}>로그인</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -168,7 +248,7 @@ function AdminLoginScreen({
 }
 
 // ─── 관리자 대시보드 ───────────────────────────────────────────
-function AdminDashboard({
+function RequestsTab({
   colors,
   selectedStatus,
   setSelectedStatus,
@@ -176,7 +256,6 @@ function AdminDashboard({
   setSelectedItem,
   showDetailModal,
   setShowDetailModal,
-  onLogout,
 }: {
   colors: any;
   selectedStatus: string;
@@ -185,7 +264,6 @@ function AdminDashboard({
   setSelectedItem: (v: RepairRequest | null) => void;
   showDetailModal: boolean;
   setShowDetailModal: (v: boolean) => void;
-  onLogout: () => void;
 }) {
   const { data: allRequests, isLoading, refetch } = trpc.repair.listAll.useQuery(
     undefined,
@@ -210,23 +288,7 @@ function AdminDashboard({
   };
 
   return (
-    <ScreenContainer containerClassName="bg-background">
-      {/* 헤더 */}
-      <View style={[styles.adminHeader, { backgroundColor: "#1A1A1A" }]}>
-        <View>
-          <Text style={styles.adminHeaderTitle}>⚙️ 관리자 대시보드</Text>
-          <Text style={styles.adminHeaderSubtitle}>
-            전체 {allRequests?.length || 0}건
-          </Text>
-        </View>
-        <Pressable
-          style={[styles.logoutButton, { borderColor: "rgba(255,255,255,0.3)" }]}
-          onPress={onLogout}
-        >
-          <Text style={styles.logoutText}>로그아웃</Text>
-        </Pressable>
-      </View>
-
+    <View style={{ flex: 1 }}>
       {/* 상태 필터 */}
       <ScrollView
         horizontal
@@ -394,11 +456,11 @@ function AdminDashboard({
           colors={colors}
         />
       )}
-    </ScreenContainer>
+    </View>
   );
 }
 
-// ─── 상세 모달 ─────────────────────────────────────────────────
+// ─── 상세 모달 ──────────────────────────────
 function DetailModal({
   item,
   visible,
@@ -788,6 +850,438 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
     </View>
+  );
+}
+
+// ─── 기사 관리 탭 ──────────────────────────
+type Technician = {
+  id: number;
+  name: string;
+  phoneNumber: string | null;
+  specialty: string | null;
+  isActive: boolean;
+  createdAt: Date;
+};
+
+function TechniciansTab({ colors }: { colors: any }) {
+  const { data: technicians, isLoading, refetch } =
+    trpc.technicians.listAll.useQuery();
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<Technician | null>(null);
+
+  const setActiveMutation = trpc.technicians.setActive.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const openCreate = () => {
+    setEditTarget(null);
+    setShowFormModal(true);
+  };
+
+  const openEdit = (tech: Technician) => {
+    setEditTarget(tech);
+    setShowFormModal(true);
+  };
+
+  const handleToggleActive = (tech: Technician) => {
+    setActiveMutation.mutate({ id: tech.id, isActive: !tech.isActive });
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.techTopBar}>
+        <Text style={[styles.techTopBarText, { color: colors.foreground }]}>
+          등록 기사 {technicians?.length || 0}명
+        </Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.techAddButton,
+            { backgroundColor: "#E84B2F", opacity: pressed ? 0.85 : 1 },
+          ]}
+          onPress={openCreate}
+        >
+          <Text style={styles.techAddButtonText}>+ 기사 등록</Text>
+        </Pressable>
+      </View>
+
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#E84B2F" />
+        </View>
+      ) : (
+        <FlatList
+          data={technicians as Technician[] | undefined}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>👷</Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>
+                등록된 기사가 없습니다{"\n"}상단 버튼으로 기사를 등록하세요
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View
+              style={[
+                styles.techCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: item.isActive ? 1 : 0.55,
+                },
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <View style={styles.techCardNameRow}>
+                  <Text style={[styles.techCardName, { color: colors.foreground }]}>
+                    👷 {item.name}
+                  </Text>
+                  <View
+                    style={[
+                      styles.techStatusPill,
+                      {
+                        backgroundColor: item.isActive ? "#F0FDF4" : "#F3F4F6",
+                        borderColor: item.isActive ? "#86EFAC" : "#D1D5DB",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: item.isActive ? "#16A34A" : "#9CA3AF",
+                      }}
+                    >
+                      {item.isActive ? "활성" : "비활성"}
+                    </Text>
+                  </View>
+                </View>
+                {item.phoneNumber ? (
+                  <Text style={[styles.techCardSub, { color: colors.muted }]}>
+                    📞 {item.phoneNumber}
+                  </Text>
+                ) : null}
+                {item.specialty ? (
+                  <Text style={[styles.techCardSub, { color: colors.muted }]}>
+                    🔧 {item.specialty}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.techCardActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.techSmallBtn,
+                    { borderColor: "#0EA5E9", opacity: pressed ? 0.7 : 1 },
+                  ]}
+                  onPress={() => openEdit(item)}
+                >
+                  <Text style={{ color: "#0EA5E9", fontWeight: "700", fontSize: 13 }}>
+                    수정
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.techSmallBtn,
+                    {
+                      borderColor: item.isActive ? "#DC2626" : "#16A34A",
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                  onPress={() => handleToggleActive(item)}
+                >
+                  <Text
+                    style={{
+                      color: item.isActive ? "#DC2626" : "#16A34A",
+                      fontWeight: "700",
+                      fontSize: 13,
+                    }}
+                  >
+                    {item.isActive ? "비활성" : "활성화"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        />
+      )}
+
+      {showFormModal && (
+        <TechnicianFormModal
+          visible={showFormModal}
+          editTarget={editTarget}
+          colors={colors}
+          onClose={() => setShowFormModal(false)}
+          onSaved={() => {
+            refetch();
+            setShowFormModal(false);
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+// ─── 기사 등록/수정 모달 ────────────────────
+function TechnicianFormModal({
+  visible,
+  editTarget,
+  colors,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  editTarget: Technician | null;
+  colors: any;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(editTarget?.name || "");
+  const [phoneNumber, setPhoneNumber] = useState(editTarget?.phoneNumber || "");
+  const [specialty, setSpecialty] = useState(editTarget?.specialty || "");
+
+  const createMutation = trpc.technicians.create.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "기사가 등록되었습니다.");
+      onSaved();
+    },
+  });
+  const updateMutation = trpc.technicians.update.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "기사 정보가 수정되었습니다.");
+      onSaved();
+    },
+  });
+
+  const handleSave = () => {
+    if (!name.trim()) {
+      Alert.alert("입력 오류", "기사 이름을 입력해주세요.");
+      return;
+    }
+    if (editTarget) {
+      updateMutation.mutate({
+        id: editTarget.id,
+        name: name.trim(),
+        phoneNumber: phoneNumber.trim() || undefined,
+        specialty: specialty.trim() || undefined,
+      });
+    } else {
+      createMutation.mutate({
+        name: name.trim(),
+        phoneNumber: phoneNumber.trim() || undefined,
+        specialty: specialty.trim() || undefined,
+      });
+    }
+  };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.formModalOverlay}>
+        <View style={[styles.formModalCard, { backgroundColor: colors.background }]}>
+          <Text style={[styles.formModalTitle, { color: colors.foreground }]}>
+            {editTarget ? "기사 정보 수정" : "새 기사 등록"}
+          </Text>
+
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>이름 *</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+            value={name}
+            onChangeText={setName}
+            placeholder="기사 이름"
+            placeholderTextColor={colors.muted}
+          />
+
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>연락처</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            placeholder="010-0000-0000"
+            placeholderTextColor={colors.muted}
+            keyboardType="phone-pad"
+          />
+
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>전문분야</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+            value={specialty}
+            onChangeText={setSpecialty}
+            placeholder="예: 분배기/배관, 온도조절기"
+            placeholderTextColor={colors.muted}
+          />
+
+          <View style={styles.formModalButtons}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.formCancelBtn,
+                { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={[styles.formCancelText, { color: colors.muted }]}>취소</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.formSaveBtn,
+                { backgroundColor: "#E84B2F", opacity: pressed || isPending ? 0.85 : 1 },
+              ]}
+              onPress={handleSave}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.formSaveText}>저장</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── 설정 탭 ────────────────────────────
+function SettingsTab({ colors }: { colors: any }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const { data: smsStatus } = trpc.admin.smsStatus.useQuery();
+
+  const changePwMutation = trpc.admin.changePassword.useMutation({
+    onSuccess: (res) => {
+      if (res.success) {
+        Alert.alert("완료", "비밀번호가 변경되었습니다.");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        Alert.alert("오류", res.error || "현재 비밀번호가 올바르지 않습니다.");
+      }
+    },
+    onError: () => {
+      Alert.alert("오류", "비밀번호 변경 중 문제가 발생했습니다.");
+    },
+  });
+
+  const handleChangePassword = () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("입력 오류", "모든 항목을 입력해주세요.");
+      return;
+    }
+    if (newPassword.length < 4) {
+      Alert.alert("입력 오류", "새 비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("입력 오류", "새 비밀번호가 서로 일치하지 않습니다.");
+      return;
+    }
+    changePwMutation.mutate({ currentPassword, newPassword });
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.settingsContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* 비밀번호 변경 */}
+      <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.sectionCardTitle, { color: colors.foreground }]}>
+          🔑 관리자 비밀번호 변경
+        </Text>
+        <View style={styles.sectionCardContent}>
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>현재 비밀번호</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder="현재 비밀번호"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+          />
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>새 비밀번호</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="새 비밀번호 (4자 이상)"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+          />
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>새 비밀번호 확인</Text>
+          <TextInput
+            style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="새 비밀번호 다시 입력"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleChangePassword}
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionButton,
+              { backgroundColor: "#E84B2F", marginTop: 4, opacity: pressed || changePwMutation.isPending ? 0.85 : 1 },
+            ]}
+            onPress={handleChangePassword}
+            disabled={changePwMutation.isPending}
+          >
+            {changePwMutation.isPending ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.actionButtonText}>비밀번호 변경</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+
+      {/* SMS 알림 상태 */}
+      <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.sectionCardTitle, { color: colors.foreground }]}>
+          📩 SMS 알림 연동 상태
+        </Text>
+        <View style={styles.sectionCardContent}>
+          <View
+            style={[
+              styles.smsStatusBox,
+              {
+                backgroundColor: smsStatus?.configured ? "#F0FDF4" : "#FEF2F2",
+                borderColor: smsStatus?.configured ? "#86EFAC" : "#FECACA",
+              },
+            ]}
+          >
+            <Text style={{ fontSize: 22 }}>{smsStatus?.configured ? "✅" : "⚠️"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: "700",
+                  color: smsStatus?.configured ? "#16A34A" : "#DC2626",
+                }}
+              >
+                {smsStatus?.configured ? "알림 발송 활성화됨" : "알림 발송 비활성"}
+              </Text>
+              <Text style={{ fontSize: 13, color: colors.muted, marginTop: 2, lineHeight: 19 }}>
+                {smsStatus?.configured
+                  ? "접수 및 상태 변경 시 고객에게 자동으로 문자가 발송됩니다."
+                  : "Solapi 자격증명을 등록하면 자동 문자 발송이 활성화됩니다."}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <Text style={[styles.settingsFooter, { color: colors.muted }]}>
+        퓨처에너지 난방케어 관리자 설정
+      </Text>
+    </ScrollView>
   );
 }
 
@@ -1231,5 +1725,164 @@ const styles = StyleSheet.create({
     padding: 10,
     fontSize: 14,
     minHeight: 100,
+  },
+
+  // 관리자 탭 바
+  adminTabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+  },
+  adminTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    gap: 2,
+    borderBottomWidth: 3,
+    borderBottomColor: "transparent",
+  },
+  adminTabIcon: {
+    fontSize: 20,
+  },
+  adminTabLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // 기사 관리
+  techTopBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  techTopBarText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  techAddButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  techAddButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  techCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  techCardNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  techCardName: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  techStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  techCardSub: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  techCardActions: {
+    gap: 8,
+  },
+  techSmallBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    alignItems: "center",
+    minWidth: 64,
+  },
+
+  // 폼 모달
+  formModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  formModalCard: {
+    borderRadius: 16,
+    padding: 20,
+    gap: 6,
+  },
+  formModalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  formInput: {
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  formModalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  formCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formCancelText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  formSaveBtn: {
+    flex: 2,
+    height: 50,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formSaveText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  // 설정
+  settingsContent: {
+    padding: 16,
+    gap: 14,
+    paddingBottom: 40,
+  },
+  smsStatusBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  settingsFooter: {
+    textAlign: "center",
+    fontSize: 13,
+    marginTop: 8,
   },
 });

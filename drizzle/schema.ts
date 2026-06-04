@@ -101,7 +101,33 @@ export const technicians = mysqlTable("technicians", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 50 }).notNull(),
   phoneNumber: varchar("phoneNumber", { length: 20 }),
+  // 담당 구역/전문 분야
+  specialty: varchar("specialty", { length: 100 }),
   isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// 앱 설정 테이블 (관리자 비밀번호, SMS 알림 설정 등 key-value)
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 64 }).notNull().unique(),
+  settingValue: text("settingValue"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// 알림 발송 로그 테이블
+export const notificationLogs = mysqlTable("notification_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId"),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  channel: mysqlEnum("channel", ["SMS", "ALIMTALK"]).notNull().default("SMS"),
+  messageType: varchar("messageType", { length: 50 }),
+  content: text("content"),
+  // 발송 결과: SUCCESS, FAILED, SKIPPED(미설정)
+  result: mysqlEnum("result", ["SUCCESS", "FAILED", "SKIPPED"])
+    .notNull()
+    .default("SKIPPED"),
+  errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -112,3 +138,7 @@ export type RepairRequest = typeof repairRequests.$inferSelect;
 export type InsertRepairRequest = typeof repairRequests.$inferInsert;
 export type Technician = typeof technicians.$inferSelect;
 export type InsertTechnician = typeof technicians.$inferInsert;
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = typeof appSettings.$inferInsert;
+export type NotificationLog = typeof notificationLogs.$inferSelect;
+export type InsertNotificationLog = typeof notificationLogs.$inferInsert;

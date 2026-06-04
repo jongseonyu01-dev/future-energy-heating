@@ -1,0 +1,157 @@
+import crypto from "crypto";
+
+/**
+ * Solapi(쏠라피) 기반 SMS / 카카오 알림톡 발송 모듈
+ *
+ * 환경변수:
+ * - SOLAPI_API_KEY: Solapi API Key
+ * - SOLAPI_API_SECRET: Solapi API Secret
+ * - SOLAPI_SENDER: 사전 등록된 발신번호 (숫자만)
+ *
+ * 환경변수가 설정되지 않은 경우, 발송은 건너뛰며(SKIPPED) 앱 동작에는 영향을 주지 않습니다.
+ */
+
+const SOLAPI_BASE_URL = "https://api.solapi.com";
+
+export interface SendResult {
+  result: "SUCCESS" | "FAILED" | "SKIPPED";
+  errorMessage?: string;
+}
+
+/**
+ * Solapi HMAC-SHA256 인증 헤더 생성
+ */
+function buildAuthHeader(apiKey: string, apiSecret: string): string {
+  const date = new Date().toISOString();
+  const salt = crypto.randomBytes(32).toString("hex");
+  const signature = crypto
+    .createHmac("sha256", apiSecret)
+    .update(date + salt)
+    .digest("hex");
+
+  return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
+}
+
+/**
+ * SMS 자격증명이 설정되어 있는지 확인
+ */
+export function isSmsConfigured(): boolean {
+  return Boolean(
+    process.env.SOLAPI_API_KEY &&
+      process.env.SOLAPI_API_SECRET &&
+      process.env.SOLAPI_SENDER
+  );
+}
+
+/**
+ * 단건 SMS/LMS 발송
+ *
+ * @param to 수신번호 (숫자만, 예: 01012345678)
+ * @param text 메시지 내용
+ */
+export async function sendSms(to: string, text: string): Promise<SendResult> {
+  const apiKey = process.env.SOLAPI_API_KEY;
+  const apiSecret = process.env.SOLAPI_API_SECRET;
+  const sender = process.env.SOLAPI_SENDER;
+
+  // 자격증명 미설정 시 건너뜀 (앱은 정상 동작)
+  if (!apiKey || !apiSecret || !sender) {
+    return {
+      result: "SKIPPED",
+      errorMessage: "SMS 자격증명(SOLAPI_API_KEY 등)이 설정되지 않았습니다.",
+    };
+  }
+
+  // 수신번호 정규화 (숫자만)
+  const normalizedTo = to.replace(/[^0-9]/g, "");
+  const normalizedFrom = sender.replace(/[^0-9]/g, "");
+
+  try {
+    const response = await fetch(
+      `${SOLAPI_BASE_URL}/messages/v4/send-many/detail`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: buildAuthHeader(apiKey, apiSecret),
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              to: normalizedTo,
+              from: normalizedFrom,
+              text,
+              // autoTypeDetect: 90byte 초과 시 자동으로 LMS 발송
+              autoTypeDetect: true,
+            },
+          ],
+        }),
+      }
+    );
+
+    const data = (await response.json()) as {
+      failedMessageList?: unknown[];
+      errorMessage?: string;
+    };
+
+    if (!response.ok) {
+      return {
+        result: "FAILED",
+        errorMessage: data?.errorMessage || `HTTP ${response.status}`,
+      };
+    }
+
+    // 등록 실패 메시지가 있는 경우
+    if (
+      Array.isArray(data.failedMessageList) &&
+      data.failedMessageList.length > 0
+    ) {
+      return {
+        result: "FAILED",
+        errorMessage: JSON.stringify(data.failedMessageList),
+      };
+    }
+
+    return { result: "SUCCESS" };
+  } catch (error) {
+    return {
+      result: "FAILED",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 접수 완료 안내 메시지 생성
+ */
+export function buildReceivedMessage(
+  customerName: string,
+  requestNumber: string,
+  requestTypeLabel: string
+): string {
+  return `[퓨처에너지 난방케어]\n${customerName}님, ${requestTypeLabel} 접수가 완료되었습니다.\n접수번호: ${requestNumber}\n담당 기사 배정 후 다시 안내드리겠습니다.\n문의: 1588-0000`;
+}
+
+/**
+ * 상태 변경 안내 메시지 생성
+ */
+export function buildStatusChangeMessage(
+  customerName: string,
+  requestNumber: string,
+  status: string,
+  technicianName?: string | null,
+  scheduledDate?: string | null,
+  scheduledTime?: string | null
+): string {
+  let extra = "";
+  if (status === "방문예정" && technicianName) {
+    extra = `\n담당 기사: ${technicianName}`;
+    if (scheduledDate) {
+      extra += `\n방문 예정: ${scheduledDate} ${scheduledTime ?? ""}`.trimEnd();
+    }
+  }
+  if (status === "작업완료") {
+    extra = "\n작업이 완료되었습니다. 이용해 주셔서 감사합니다.";
+  }
+  return `[퓨처에너지 난방케어]\n${customerName}님, 접수하신 건(${requestNumber})의 처리 상태가 '${status}'(으)로 변경되었습니다.${extra}\n문의: 1588-0000`;
+}

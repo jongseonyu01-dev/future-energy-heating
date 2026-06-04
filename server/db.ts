@@ -1,13 +1,17 @@
-import { eq, desc, or } from "drizzle-orm";
+import { eq, desc, or, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   users,
   repairRequests,
   technicians,
+  appSettings,
+  notificationLogs,
   InsertRepairRequest,
   RepairRequest,
   Technician,
+  InsertTechnician,
+  InsertNotificationLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -227,7 +231,8 @@ export async function updateInspectionResult(
     .where(eq(repairRequests.id, id));
 }
 
-// ─── 기사 목록 ─────────────────────────────────────────────────
+// ─── 기사 관리 ─────────────────────────────────────────────────
+// 활성 기사 목록
 export async function getActiveTechnicians(): Promise<Technician[]> {
   const db = await getDb();
   if (!db) return [];
@@ -235,5 +240,150 @@ export async function getActiveTechnicians(): Promise<Technician[]> {
   return db
     .select()
     .from(technicians)
-    .where(eq(technicians.isActive, true));
+    .where(eq(technicians.isActive, true))
+    .orderBy(desc(technicians.createdAt));
+}
+
+// 전체 기사 목록 (관리자용 - 비활성 포함)
+export async function getAllTechnicians(): Promise<Technician[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(technicians).orderBy(desc(technicians.createdAt));
+}
+
+// 기사 등록
+export async function createTechnician(
+  data: InsertTechnician
+): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(technicians).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+// 기사 수정
+export async function updateTechnician(
+  id: number,
+  data: Partial<Pick<Technician, "name" | "phoneNumber" | "specialty" | "isActive">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(technicians).set(data).where(eq(technicians.id, id));
+}
+
+// 기사 활성/비활성 토글
+export async function setTechnicianActive(
+  id: number,
+  isActive: boolean
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(technicians)
+    .set({ isActive })
+    .where(eq(technicians.id, id));
+}
+
+// ─── 앱 설정 (key-value) ───────────────────────────────────────
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.settingKey, key))
+    .limit(1);
+  return rows[0]?.settingValue ?? null;
+}
+
+export async function setSetting(
+  key: string,
+  value: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .insert(appSettings)
+    .values({ settingKey: key, settingValue: value })
+    .onDuplicateKeyUpdate({ set: { settingValue: value } });
+}
+
+// 여러 설정 한번에 조회
+export async function getSettings(
+  keys: string[]
+): Promise<Record<string, string | null>> {
+  const result: Record<string, string | null> = {};
+  for (const key of keys) {
+    result[key] = await getSetting(key);
+  }
+  return result;
+}
+
+// ─── 관리자 비밀번호 ───────────────────────────────────────────
+export async function getAdminPassword(): Promise<string> {
+  const stored = await getSetting("admin_password");
+  // 설정이 없으면 기본값 반환
+  return stored ?? "admin1234";
+}
+
+export async function verifyAdminPassword(
+  password: string
+): Promise<boolean> {
+  const current = await getAdminPassword();
+  return password === current;
+}
+
+export async function changeAdminPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  const isValid = await verifyAdminPassword(currentPassword);
+  if (!isValid) {
+    return { success: false, error: "현재 비밀번호가 일치하지 않습니다." };
+  }
+  if (newPassword.length < 4) {
+    return { success: false, error: "새 비밀번호는 4자 이상이어야 합니다." };
+  }
+  await setSetting("admin_password", newPassword);
+  return { success: true };
+}
+
+// ─── 알림 로그 ─────────────────────────────────────────────────
+export async function createNotificationLog(
+  data: InsertNotificationLog
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  try {
+    await db.insert(notificationLogs).values(data);
+  } catch (error) {
+    console.error("[Database] Failed to log notification:", error);
+  }
+}
+
+export async function getNotificationLogs(
+  requestId?: number
+): Promise<(typeof notificationLogs.$inferSelect)[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (requestId !== undefined) {
+    return db
+      .select()
+      .from(notificationLogs)
+      .where(eq(notificationLogs.requestId, requestId))
+      .orderBy(desc(notificationLogs.createdAt));
+  }
+  return db
+    .select()
+    .from(notificationLogs)
+    .orderBy(desc(notificationLogs.createdAt))
+    .limit(100);
 }
