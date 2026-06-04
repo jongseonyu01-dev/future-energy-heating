@@ -82,6 +82,12 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="leak-sensor"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

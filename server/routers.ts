@@ -6,7 +6,9 @@ import {
   isSmsConfigured,
   buildReceivedMessage,
   buildStatusChangeMessage,
+  buildLeakAlertMessage,
 } from "./notification";
+import { dispatchLeakSms } from "./leak-sms";
 
 // 증상 enum
 const symptomValues = [
@@ -306,6 +308,116 @@ export const appRouter = router({
       .input(z.object({ requestId: z.number().optional() }).optional())
       .query(async ({ input }) => {
         return db.getNotificationLogs(input?.requestId);
+      }),
+  }),
+
+  // ─── 누수센서 ──────────────────────────────────────────────
+  sensor: router({
+    // 전체 센서 목록 (관리자용)
+    listAll: publicProcedure.query(async () => {
+      return db.getAllSensors();
+    }),
+
+    // 고객 센서 목록 (전화번호 조회)
+    listByPhone: publicProcedure
+      .input(z.object({ phoneNumber: z.string().min(1) }))
+      .query(async ({ input }) => {
+        return db.getSensorsByPhone(input.phoneNumber);
+      }),
+
+    // 센서 단건 조회
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return db.getSensorById(input.id);
+      }),
+
+    // 관리자 처리: 기사 배정
+    assignTechnician: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          technicianId: z.number(),
+          technicianName: z.string(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await db.updateSensorAdmin(input.id, {
+          technicianId: input.technicianId,
+          technicianName: input.technicianName,
+          status: "점검필요",
+        });
+        return { success: true };
+      }),
+
+    // 관리자 처리: 처리 완료 (메모 포함)
+    resolve: publicProcedure
+      .input(z.object({ id: z.number(), adminMemo: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        await db.updateSensorAdmin(input.id, {
+          status: "정상",
+          isResolved: true,
+          adminMemo: input.adminMemo,
+        });
+        // 처리 완료 시 누수 감지 시간 초기화
+        const sensor = await db.getSensorById(input.id);
+        if (sensor) {
+          await db.updateSensorState(sensor.sensorUid, {
+            leakDetectedAt: null,
+          });
+        }
+        return { success: true };
+      }),
+
+    // 관리자 처리: 메모만 저장
+    updateMemo: publicProcedure
+      .input(z.object({ id: z.number(), adminMemo: z.string() }))
+      .mutation(async ({ input }) => {
+        await db.updateSensorAdmin(input.id, { adminMemo: input.adminMemo });
+        return { success: true };
+      }),
+
+    // 누수 감지 테스트 (관리자용): 특정 센서를 누수 감지 상태로 변경 + SMS
+    triggerLeakTest: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const sensor = await db.getSensorById(input.id);
+        if (!sensor) {
+          return { success: false, error: "센서를 찾을 수 없습니다." };
+        }
+        const now = new Date();
+        // 센서 상태 변경
+        await db.updateSensorState(sensor.sensorUid, {
+          status: "누수감지",
+          leakDetectedAt: now,
+          lastCommAt: now,
+          isResolved: false,
+        });
+        // 이벤트 기록
+        await db.createSensorEvent({
+          sensorUid: sensor.sensorUid,
+          leakDetected: true,
+          batteryLevel: sensor.batteryLevel,
+          reportedAt: now,
+          source: "DEMO_TEST",
+          rawPayload: JSON.stringify({ test: true, sensorId: input.id }),
+        });
+        // SMS 발송 (고객 + 관리자)
+        const message = buildLeakAlertMessage(
+          sensor.apartmentName,
+          sensor.dong,
+          sensor.ho,
+          sensor.installLocation
+        );
+        const result = await dispatchLeakSms(sensor, message);
+        return { success: true, sms: result };
+      }),
+
+    // 센서 이벤트 로그 조회
+    events: publicProcedure
+      .input(z.object({ sensorUid: z.string() }))
+      .query(async ({ input }) => {
+        return db.getSensorEvents(input.sensorUid);
       }),
   }),
 });

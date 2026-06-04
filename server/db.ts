@@ -387,3 +387,136 @@ export async function getNotificationLogs(
     .orderBy(desc(notificationLogs.createdAt))
     .limit(100);
 }
+
+// ─── 누수센서 ─────────────────────────────────────────────────
+import {
+  leakSensors,
+  sensorEvents,
+  LeakSensor,
+  InsertLeakSensor,
+  InsertSensorEvent,
+} from "../drizzle/schema";
+
+// 전체 센서 목록 (관리자용)
+export async function getAllSensors(): Promise<LeakSensor[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(leakSensors).orderBy(desc(leakSensors.updatedAt));
+}
+
+// 고객 센서 조회 (전화번호 기준)
+export async function getSensorsByPhone(
+  phoneNumber: string
+): Promise<LeakSensor[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const normalized = phoneNumber.replace(/[^0-9]/g, "");
+  const all = await db.select().from(leakSensors);
+  return all
+    .filter((s) => s.phoneNumber.replace(/[^0-9]/g, "") === normalized)
+    .sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : -1));
+}
+
+// 센서 단건 조회 (id)
+export async function getSensorById(id: number): Promise<LeakSensor | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(leakSensors)
+    .where(eq(leakSensors.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// 센서 단건 조회 (sensorUid)
+export async function getSensorByUid(
+  sensorUid: string
+): Promise<LeakSensor | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(leakSensors)
+    .where(eq(leakSensors.sensorUid, sensorUid))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// 센서 등록 (관리자/연동용)
+export async function createSensor(
+  data: InsertLeakSensor
+): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(leakSensors).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+// 센서 상태 업데이트 (테스트/웹훅 공통)
+export async function updateSensorState(
+  sensorUid: string,
+  patch: Partial<
+    Pick<
+      LeakSensor,
+      | "status"
+      | "batteryLevel"
+      | "lastCommAt"
+      | "leakDetectedAt"
+      | "isResolved"
+    >
+  >
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(leakSensors)
+    .set(patch)
+    .where(eq(leakSensors.sensorUid, sensorUid));
+}
+
+// 센서 관리자 처리 (기사 배정/메모/완료)
+export async function updateSensorAdmin(
+  id: number,
+  patch: Partial<
+    Pick<
+      LeakSensor,
+      | "status"
+      | "isResolved"
+      | "technicianId"
+      | "technicianName"
+      | "adminMemo"
+    >
+  >
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(leakSensors).set(patch).where(eq(leakSensors.id, id));
+}
+
+// 센서 이벤트 기록
+export async function createSensorEvent(
+  data: InsertSensorEvent
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(sensorEvents).values(data);
+  } catch (error) {
+    console.error("[Database] Failed to log sensor event:", error);
+  }
+}
+
+// 센서 이벤트 목록 (특정 센서)
+export async function getSensorEvents(
+  sensorUid: string
+): Promise<(typeof sensorEvents.$inferSelect)[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(sensorEvents)
+    .where(eq(sensorEvents.sensorUid, sensorUid))
+    .orderBy(desc(sensorEvents.createdAt))
+    .limit(50);
+}

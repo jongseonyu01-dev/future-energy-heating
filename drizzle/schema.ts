@@ -115,7 +115,7 @@ export const appSettings = mysqlTable("app_settings", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-// 알림 발송 로그 테이블
+// 알림 발송 로그 테이블 (requestId는 누수 알림 등 접수건이 없는 경우 null)
 export const notificationLogs = mysqlTable("notification_logs", {
   id: int("id").autoincrement().primaryKey(),
   requestId: int("requestId"),
@@ -131,6 +131,75 @@ export const notificationLogs = mysqlTable("notification_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// 센서 상태 enum (정상/누수감지/배터리부족/통신끊김/점검필요)
+export const sensorStatusEnum = mysqlEnum("status", [
+  "정상",
+  "누수감지",
+  "배터리부족",
+  "통신끊김",
+  "점검필요",
+]);
+
+// 누수센서 테이블
+export const leakSensors = mysqlTable("leak_sensors", {
+  id: int("id").autoincrement().primaryKey(),
+  // 외부 센서 연동용 고유 ID (업체 API/웹훅에서 사용)
+  sensorUid: varchar("sensorUid", { length: 64 }).notNull().unique(),
+  // 고객 정보
+  customerName: varchar("customerName", { length: 50 }).notNull(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
+  dong: varchar("dong", { length: 20 }).notNull(),
+  ho: varchar("ho", { length: 20 }).notNull(),
+  // 센서 정보
+  sensorName: varchar("sensorName", { length: 100 }).notNull(),
+  installLocation: varchar("installLocation", { length: 100 }).notNull(),
+  // 현재 상태
+  status: mysqlEnum("status", [
+    "정상",
+    "누수감지",
+    "배터리부족",
+    "통신끊김",
+    "점검필요",
+  ])
+    .notNull()
+    .default("정상"),
+  // 배터리 잔량 (0~100)
+  batteryLevel: int("batteryLevel").default(100).notNull(),
+  // 마지막 통신 시간
+  lastCommAt: timestamp("lastCommAt").defaultNow().notNull(),
+  // 누수 감지 시간 (null이면 미감지)
+  leakDetectedAt: timestamp("leakDetectedAt"),
+  // 관리자 처리 상태
+  isResolved: boolean("isResolved").default(true).notNull(),
+  // 배정된 기사
+  technicianId: int("technicianId"),
+  technicianName: varchar("technicianName", { length: 50 }),
+  // 처리 메모
+  adminMemo: text("adminMemo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// 센서 이벤트 로그 테이블 (외부 웹훅/API 수신 기록)
+export const sensorEvents = mysqlTable("sensor_events", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorUid: varchar("sensorUid", { length: 64 }).notNull(),
+  // 누수 여부
+  leakDetected: boolean("leakDetected").default(false).notNull(),
+  // 배터리 잔량
+  batteryLevel: int("batteryLevel"),
+  // 수신 당시 통신 시간
+  reportedAt: timestamp("reportedAt").defaultNow().notNull(),
+  // 이벤트 출처: DEMO_TEST(테스트), WEBHOOK(외부연동)
+  source: mysqlEnum("source", ["DEMO_TEST", "WEBHOOK"])
+    .notNull()
+    .default("WEBHOOK"),
+  // 원본 페이로드 (디버깅용)
+  rawPayload: text("rawPayload"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // 타입 내보내기
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -142,3 +211,7 @@ export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = typeof appSettings.$inferInsert;
 export type NotificationLog = typeof notificationLogs.$inferSelect;
 export type InsertNotificationLog = typeof notificationLogs.$inferInsert;
+export type LeakSensor = typeof leakSensors.$inferSelect;
+export type InsertLeakSensor = typeof leakSensors.$inferInsert;
+export type SensorEvent = typeof sensorEvents.$inferSelect;
+export type InsertSensorEvent = typeof sensorEvents.$inferInsert;

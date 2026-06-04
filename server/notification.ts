@@ -155,3 +155,16 @@ export function buildStatusChangeMessage(
   }
   return `[퓨처에너지 난방케어]\n${customerName}님, 접수하신 건(${requestNumber})의 처리 상태가 '${status}'(으)로 변경되었습니다.${extra}\n문의: 1588-0000`;
 }
+
+/**
+ * 누수 감지 알림 메시지 생성 (고객/관리자 공통)
+ */
+export function buildLeakAlertMessage(
+  apartmentName: string,
+  dong: string,
+  ho: string,
+  installLocation: string
+): string {
+  const dongPart = dong && dong !== "-" ? `${dong}동 ` : "";
+  return `[퓨처에너지 난방케어]\n누수 감지 알림입니다.\n${apartmentName} ${dongPart}${ho}호의 ${installLocation}에서 누수가 감지되었습니다.\n즉시 확인하거나 고객센터로 연락해 주세요.`;
+}

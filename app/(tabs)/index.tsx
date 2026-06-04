@@ -49,6 +49,15 @@ const menuItems = [
     color: "#16A34A",
     bg: "#F0FDF4",
   },
+  {
+    id: "leak",
+    title: "우리 집 누수센서",
+    subtitle: "누수·배터리·통신 상태 확인",
+    icon: "💧",
+    route: "/leak-sensor",
+    color: "#0284C7",
+    bg: "#EFF6FF",
+  },
 ];
 
 export default function HomeScreen() {

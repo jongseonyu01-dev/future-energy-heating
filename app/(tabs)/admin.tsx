@@ -10,6 +10,7 @@ import {
   Modal,
   FlatList,
   Platform,
+  Linking,
 } from "react-native";
 import { useState, useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
@@ -18,7 +19,7 @@ import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 
 // 관리자 화면 탭 정의
-type AdminTab = "requests" | "technicians" | "settings";
+type AdminTab = "requests" | "leak" | "technicians" | "settings";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   신규접수: { label: "신규 접수", color: "#3B82F6", bg: "#EFF6FF", icon: "📋" },
@@ -138,6 +139,7 @@ export default function AdminScreen() {
       <View style={[styles.adminTabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         {([
           { key: "requests", label: "접수 관리", icon: "📋" },
+          { key: "leak", label: "누수관제", icon: "💧" },
           { key: "technicians", label: "기사 관리", icon: "👷" },
           { key: "settings", label: "설정", icon: "⚙️" },
         ] as { key: AdminTab; label: string; icon: string }[]).map((tab) => {
@@ -177,6 +179,7 @@ export default function AdminScreen() {
           setShowDetailModal={setShowDetailModal}
         />
       )}
+      {activeTab === "leak" && <LeakMonitorTab colors={colors} />}
       {activeTab === "technicians" && <TechniciansTab colors={colors} />}
       {activeTab === "settings" && <SettingsTab colors={colors} />}
     </ScreenContainer>
@@ -1144,6 +1147,378 @@ function TechnicianFormModal({
   );
 }
 
+// ─── 누수센서 관제 탭 ────────────────────────────
+const SENSOR_STATUS_CFG: Record<
+  string,
+  { label: string; color: string; bg: string; icon: string }
+> = {
+  정상: { label: "정상", color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
+  누수감지: { label: "누수 감지", color: "#DC2626", bg: "#FEF2F2", icon: "🚨" },
+  배터리부족: { label: "배터리 부족", color: "#F59E0B", bg: "#FFFBEB", icon: "🔋" },
+  통신끊김: { label: "통신 끊김", color: "#6B7280", bg: "#F3F4F6", icon: "📡" },
+  점검필요: { label: "점검 필요", color: "#8B5CF6", bg: "#F5F3FF", icon: "🛠️" },
+};
+
+function sensorDateTime(value: any): string {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function LeakMonitorTab({ colors }: { colors: any }) {
+  const { data: sensors, isLoading, refetch } = trpc.sensor.listAll.useQuery(
+    undefined,
+    { refetchInterval: 20000 }
+  );
+  const { data: technicians } = trpc.technicians.list.useQuery();
+
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [pickerId, setPickerId] = useState<number | null>(null);
+  const [memoMap, setMemoMap] = useState<Record<number, string>>({});
+
+  const triggerMutation = trpc.sensor.triggerLeakTest.useMutation({
+    onSuccess: (res) => {
+      if (res.success) {
+        const smsMsg =
+          res.sms && (res.sms as any).skipped
+            ? "\n(SMS 미설정 상태로 발송은 건너뛰었습니다)"
+            : "\n고객과 관리자에게 문자가 발송되었습니다.";
+        Alert.alert("누수 감지 테스트", "누수 감지 상태로 변경되었습니다." + smsMsg);
+        refetch();
+      } else {
+        Alert.alert("오류", res.error || "테스트 처리 중 문제가 발생했습니다.");
+      }
+    },
+    onError: () => Alert.alert("오류", "테스트 처리 중 문제가 발생했습니다."),
+  });
+
+  const assignMutation = trpc.sensor.assignTechnician.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "기사가 배정되었습니다.");
+      setPickerId(null);
+      refetch();
+    },
+    onError: () => Alert.alert("오류", "기사 배정 중 문제가 발생했습니다."),
+  });
+
+  const resolveMutation = trpc.sensor.resolve.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "처리 완료로 변경되었습니다.");
+      refetch();
+    },
+    onError: () => Alert.alert("오류", "처리 중 문제가 발생했습니다."),
+  });
+
+  const memoMutation = trpc.sensor.updateMemo.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "처리 메모가 저장되었습니다.");
+      refetch();
+    },
+    onError: () => Alert.alert("오류", "메모 저장 중 문제가 발생했습니다."),
+  });
+
+  const handleCall = (phone: string) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Linking.openURL(`tel:${phone}`);
+  };
+
+  const handleTest = (id: number, name: string) => {
+    const confirmMsg = `'${name}' 센서를 누수 감지 상태로 변경하고 문자를 발송합니다. 진행할까요?`;
+    // 웹 미리보기에서는 Alert.alert의 버튼 콜백이 동작하지 않으므로 window.confirm 사용
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(confirmMsg)) {
+        triggerMutation.mutate({ id });
+      }
+      return;
+    }
+    Alert.alert("누수 감지 테스트", confirmMsg, [
+      { text: "취소", style: "cancel" },
+      {
+        text: "실행",
+        style: "destructive",
+        onPress: () => triggerMutation.mutate({ id }),
+      },
+    ]);
+  };
+
+  const list = sensors ?? [];
+  // 통계 집계
+  const stats = {
+    total: list.length,
+    정상: list.filter((s) => s.status === "정상").length,
+    누수감지: list.filter((s) => s.status === "누수감지").length,
+    배터리부족: list.filter((s) => s.status === "배터리부족").length,
+    통신끊김: list.filter((s) => s.status === "통신끊김").length,
+    점검필요: list.filter((s) => s.status === "점검필요").length,
+  };
+
+  // 누수 감지 우선 정렬
+  const sorted = [...list].sort((a, b) => {
+    if (a.status === "누수감지" && b.status !== "누수감지") return -1;
+    if (a.status !== "누수감지" && b.status === "누수감지") return 1;
+    return 0;
+  });
+
+  const statCards = [
+    { key: "total", label: "전체 센서", value: stats.total, color: "#1A1A1A", bg: colors.surface },
+    { key: "정상", label: "정상", value: stats.정상, color: "#16A34A", bg: "#F0FDF4" },
+    { key: "누수감지", label: "누수 감지", value: stats.누수감지, color: "#DC2626", bg: "#FEF2F2" },
+    { key: "배터리부족", label: "배터리 부족", value: stats.배터리부족, color: "#F59E0B", bg: "#FFFBEB" },
+    { key: "통신끊김", label: "통신 끊김", value: stats.통신끊김, color: "#6B7280", bg: "#F3F4F6" },
+    { key: "점검필요", label: "점검 필요", value: stats.점검필요, color: "#8B5CF6", bg: "#F5F3FF" },
+  ];
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0284C7" />
+        <Text style={[styles.loadingText, { color: colors.muted }]}>
+          센서 정보를 불러오는 중...
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* 통계 카드 그리드 */}
+      <View style={styles.statGrid}>
+        {statCards.map((c) => (
+          <View
+            key={c.key}
+            style={[
+              styles.statCard,
+              { backgroundColor: c.bg, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: c.color }]}>{c.value}</Text>
+            <Text style={[styles.statLabel, { color: colors.muted }]}>{c.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <Text style={[styles.leakListTitle, { color: colors.foreground }]}>
+        설치 센서 목록 ({sorted.length})
+      </Text>
+
+      {sorted.length === 0 && (
+        <View style={[styles.emptyBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={styles.emptyIcon}>💧</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            등록된 센서가 없습니다
+          </Text>
+        </View>
+      )}
+
+      {sorted.map((sensor) => {
+        const cfg = SENSOR_STATUS_CFG[sensor.status] || SENSOR_STATUS_CFG["정상"];
+        const isLeaking = sensor.status === "누수감지";
+        const expanded = expandedId === sensor.id;
+        const addr = `${sensor.apartmentName}${sensor.dong ? ` ${sensor.dong}동` : ""} ${sensor.ho}호`;
+        return (
+          <View
+            key={sensor.id}
+            style={[
+              styles.leakCard,
+              {
+                backgroundColor: isLeaking ? "#FEF2F2" : colors.surface,
+                borderColor: isLeaking ? "#DC2626" : colors.border,
+                borderWidth: isLeaking ? 2 : 1,
+              },
+            ]}
+          >
+            {/* 상단 요약 (탭하여 펼치기) */}
+            <Pressable
+              style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+              onPress={() => setExpandedId(expanded ? null : sensor.id)}
+            >
+              <View style={styles.leakCardHeader}>
+                <View style={[styles.leakStatusPill, { backgroundColor: cfg.color }]}>
+                  <Text style={styles.leakStatusPillText}>
+                    {cfg.icon} {cfg.label}
+                  </Text>
+                </View>
+                <Text style={[styles.leakExpandHint, { color: colors.muted }]}>
+                  {expanded ? "접기 ▲" : "상세 ▼"}
+                </Text>
+              </View>
+              <Text style={[styles.leakCustomer, { color: colors.foreground }]}>
+                {sensor.customerName} · {addr}
+              </Text>
+              <Text style={[styles.leakSensorInfo, { color: colors.muted }]}>
+                {sensor.sensorName} ({sensor.installLocation})
+              </Text>
+              {isLeaking && sensor.leakDetectedAt && (
+                <Text style={styles.leakDetectedTime}>
+                  🚨 감지: {sensorDateTime(sensor.leakDetectedAt)}
+                </Text>
+              )}
+            </Pressable>
+
+            {/* 상세 (펼침) */}
+            {expanded && (
+              <View style={styles.leakDetailBox}>
+                <View style={[styles.leakDivider, { backgroundColor: colors.border }]} />
+                <LeakInfoRow label="고객 이름" value={sensor.customerName} colors={colors} />
+                <LeakInfoRow label="휴대폰" value={sensor.phoneNumber} colors={colors} />
+                <LeakInfoRow label="아파트" value={sensor.apartmentName} colors={colors} />
+                <LeakInfoRow label="동/호" value={sensor.dong ? `${sensor.dong}동 ${sensor.ho}호` : `${sensor.ho}호`} colors={colors} />
+                <LeakInfoRow label="센서 이름" value={sensor.sensorName} colors={colors} />
+                <LeakInfoRow label="설치 위치" value={sensor.installLocation} colors={colors} />
+                <LeakInfoRow label="배터리" value={`${sensor.batteryLevel}%`} colors={colors} />
+                <LeakInfoRow label="마지막 통신" value={sensorDateTime(sensor.lastCommAt)} colors={colors} />
+                <LeakInfoRow label="감지 시간" value={sensorDateTime(sensor.leakDetectedAt)} colors={colors} />
+                {sensor.technicianName && (
+                  <LeakInfoRow label="배정 기사" value={sensor.technicianName} colors={colors} />
+                )}
+                {sensor.adminMemo && (
+                  <LeakInfoRow label="처리 메모" value={sensor.adminMemo} colors={colors} />
+                )}
+
+                {/* 처리 메모 입력 */}
+                <TextInput
+                  style={[
+                    styles.leakMemoInput,
+                    { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground },
+                  ]}
+                  value={memoMap[sensor.id] ?? ""}
+                  onChangeText={(t) => setMemoMap((m) => ({ ...m, [sensor.id]: t }))}
+                  placeholder="처리 메모를 입력하세요"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.leakMemoSaveBtn,
+                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                  onPress={() => {
+                    const memo = memoMap[sensor.id];
+                    if (!memo || !memo.trim()) {
+                      Alert.alert("입력 오류", "메모를 입력해주세요.");
+                      return;
+                    }
+                    memoMutation.mutate({ id: sensor.id, adminMemo: memo.trim() });
+                  }}
+                >
+                  <Text style={[styles.leakMemoSaveText, { color: colors.foreground }]}>💾 메모 저장</Text>
+                </Pressable>
+
+                {/* 기사 배정 선택 목록 */}
+                {pickerId === sensor.id && (
+                  <View style={[styles.techPickerList, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    {technicians && technicians.length > 0 ? (
+                      technicians.map((tech) => (
+                        <Pressable
+                          key={tech.id}
+                          style={[styles.techPickerItem, { borderBottomColor: colors.border }]}
+                          onPress={() =>
+                            assignMutation.mutate({
+                              id: sensor.id,
+                              technicianId: tech.id,
+                              technicianName: tech.name,
+                            })
+                          }
+                        >
+                          <Text style={[styles.techPickerName, { color: colors.foreground }]}>
+                            👷 {tech.name}
+                          </Text>
+                          {tech.phoneNumber && (
+                            <Text style={[styles.techPickerPhone, { color: colors.muted }]}>
+                              {tech.phoneNumber}
+                            </Text>
+                          )}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <Text style={{ color: colors.muted, padding: 12 }}>
+                        등록된 활성 기사가 없습니다. 기사 관리에서 추가해주세요.
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* 액션 버튼 */}
+            <View style={styles.leakActionRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.leakActionBtn,
+                  { backgroundColor: "#0284C7", opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() => handleCall(sensor.phoneNumber)}
+              >
+                <Text style={styles.leakActionText}>📞 전화</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.leakActionBtn,
+                  { backgroundColor: "#8B5CF6", opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() => setPickerId(pickerId === sensor.id ? null : sensor.id)}
+              >
+                <Text style={styles.leakActionText}>👷 기사배정</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.leakActionBtn,
+                  { backgroundColor: "#16A34A", opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() =>
+                  resolveMutation.mutate({ id: sensor.id, adminMemo: memoMap[sensor.id]?.trim() || undefined })
+                }
+              >
+                <Text style={styles.leakActionText}>✅ 처리완료</Text>
+              </Pressable>
+            </View>
+
+            {/* 누수 감지 테스트 버튼 */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.leakTestBtn,
+                { opacity: pressed ? 0.85 : 1 },
+              ]}
+              onPress={() => handleTest(sensor.id, sensor.sensorName)}
+            >
+              <Text style={styles.leakTestText}>🧪 누수 감지 테스트</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function LeakInfoRow({
+  label,
+  value,
+  colors,
+}: {
+  label: string;
+  value: string;
+  colors: any;
+}) {
+  return (
+    <View style={styles.leakInfoRow}>
+      <Text style={[styles.leakInfoLabel, { color: colors.muted }]}>{label}</Text>
+      <Text style={[styles.leakInfoValue, { color: colors.foreground }]}>{value}</Text>
+    </View>
+  );
+}
+
 // ─── 설정 탭 ────────────────────────────
 function SettingsTab({ colors }: { colors: any }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -1421,6 +1796,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 60,
     gap: 12,
+  },
+  emptyBox: {
+    padding: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
   },
   emptyIcon: {
     fontSize: 40,
@@ -1884,5 +2270,148 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 13,
     marginTop: 8,
+  },
+  // 누수 관제
+  statGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statCard: {
+    width: "31%",
+    flexGrow: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  leakListTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  leakCard: {
+    borderRadius: 14,
+    padding: 14,
+    gap: 6,
+  },
+  leakCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  leakStatusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  leakStatusPillText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  leakExpandHint: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  leakCustomer: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  leakSensorInfo: {
+    fontSize: 14,
+  },
+  leakDetectedTime: {
+    fontSize: 14,
+    color: "#DC2626",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  leakDetailBox: {
+    gap: 6,
+    marginTop: 6,
+  },
+  leakDivider: {
+    height: 1,
+    marginBottom: 4,
+  },
+  leakInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingVertical: 2,
+  },
+  leakInfoLabel: {
+    fontSize: 14,
+    flex: 1,
+  },
+  leakInfoValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 2,
+    textAlign: "right",
+  },
+  leakMemoInput: {
+    minHeight: 60,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    padding: 12,
+    fontSize: 15,
+    textAlignVertical: "top",
+    marginTop: 6,
+  },
+  leakMemoSaveBtn: {
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  leakMemoSaveText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  leakActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  leakActionBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leakActionText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  leakTestBtn: {
+    marginTop: 8,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B",
+  },
+  leakTestText: {
+    color: "#B45309",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });
