@@ -202,18 +202,26 @@
       <div id="branchCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
         <div style="text-align:center;padding:40px;color:#6b7280">지사 정보를 불러오는 중...</div>
       </div>
-      <!-- 지사 추가 폼 -->
+      <!-- 지사 추가/수정 폼 -->
       <div id="createBranchForm" style="display:none" class="section-card">
-        <h3>🏢 새 지사 추가</h3>
+        <h3 id="branchFormTitle">🏢 새 지사 추가</h3>
+        <input type="hidden" id="editBranchId" value="" />
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사명</label><input type="text" id="newBranchName" placeholder="예: 수원지사" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
-          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사 코드</label><input type="text" id="newBranchCode" placeholder="예: suwon" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
-          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">전화번호</label><input type="text" id="newBranchPhone" placeholder="031-000-0000" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
-          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">주소</label><input type="text" id="newBranchAddr" placeholder="경기도 수원시..." style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사명 *</label><input type="text" id="newBranchName" placeholder="예: 통영지사" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사 코드 *</label><input type="text" id="newBranchCode" placeholder="예: tongyeong" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">대표 연락싹 *</label><input type="text" id="newBranchPhone" placeholder="010-0000-0000" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">상세 주소</label><input type="text" id="newBranchAddr" placeholder="예: 경기도 부천시 ..." style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div style="grid-column:1/-1"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">담당 지역 (콤마로 구분)</label><input type="text" id="newBranchRegions" placeholder="예: 부천시, 인천 서구, 서울 강서구" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">활성화 여부</label>
+            <select id="newBranchStatus" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px">
+              <option value="active">활성</option>
+              <option value="inactive">정지</option>
+            </select>
+          </div>
         </div>
         <div style="margin-top:14px;display:flex;gap:10px">
-          <button onclick="createBranch()" style="padding:10px 24px;background:#e85d04;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">저장</button>
-          <button onclick="document.getElementById('createBranchForm').style.display='none'" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:14px;cursor:pointer">취소</button>
+          <button onclick="saveBranchForm()" style="padding:10px 24px;background:#e85d04;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">저장</button>
+          <button onclick="closeBranchForm()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:14px;cursor:pointer">취소</button>
         </div>
       </div>
     </div>
@@ -538,16 +546,28 @@
     const list = data || [];
     const el = document.getElementById('branchCards');
     el.innerHTML = list.length ? list.map(b => `
-      <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid #e85d04">
-        <div style="font-size:18px;font-weight:700;color:#e85d04;margin-bottom:12px">🏢 ${b.name}</div>
+      <div
+        data-branch-id="${b.id}"
+        data-name="${(b.name||'').replace(/"/g,'&quot;')}"
+        data-code="${(b.code||'').replace(/"/g,'&quot;')}"
+        data-phone="${(b.phone||'').replace(/"/g,'&quot;')}"
+        data-address="${(b.address||'').replace(/"/g,'&quot;')}"
+        data-regions="${(Array.isArray(b.regions)?b.regions.join(', '):(b.regions||'')).replace(/"/g,'&quot;')}"
+        data-status="${b.status||'active'}"
+        style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${b.status==='inactive'?'#94a3b8':'#e85d04'}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div style="font-size:18px;font-weight:700;color:${b.status==='inactive'?'#94a3b8':'#e85d04'}">🏢 ${b.name}</div>
+          <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${b.status==='active'?'#dcfce7':'#f1f5f9'};color:${b.status==='active'?'#166534':'#64748b'}">${b.status==='active'?'활성':'정지'}</span>
+        </div>
         <div style="font-size:14px;color:#4b5563;line-height:2">
           <div>📞 ${b.phone || '미등록'}</div>
           <div>📍 ${b.address || '주소 미등록'}</div>
+          ${b.regions?.length ? `<div>🗺️ ${Array.isArray(b.regions)?b.regions.join(', '):b.regions}</div>` : ''}
           <div>🔑 코드: ${b.code || '-'}</div>
         </div>
         <div style="margin-top:12px;display:flex;gap:8px">
-          <button onclick="editBranch(${b.id})" style="flex:1;padding:8px;background:#f3f4f6;border:none;border-radius:8px;font-size:13px;cursor:pointer">수정</button>
-          <button onclick="toggleBranch(${b.id}, '${b.status}')" style="flex:1;padding:8px;background:${b.status==='active'?'#fee2e2':'#dcfce7'};border:none;border-radius:8px;font-size:13px;cursor:pointer;color:${b.status==='active'?'#991b1b':'#166534'}">${b.status==='active'?'정지':'활성화'}</button>
+          <button onclick="editBranch(${b.id})" style="flex:1;padding:8px;background:#f3f4f6;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">✏️ 수정</button>
+          <button onclick="toggleBranch(${b.id}, '${b.status||'active'}')" style="flex:1;padding:8px;background:${b.status==='active'?'#fee2e2':'#dcfce7'};border:none;border-radius:8px;font-size:13px;cursor:pointer;color:${b.status==='active'?'#991b1b':'#166534'};font-weight:600">${b.status==='active'?'⏸ 정지':'▶ 활성화'}</button>
         </div>
       </div>
     `).join('') : '<div style="text-align:center;padding:40px;color:#6b7280">등록된 지사가 없습니다</div>';
@@ -774,8 +794,90 @@
     alert('엑셀 다운로드 기능은 준비 중입니다.\n(서버에서 xlsx 파일 생성 후 다운로드 제공 예정)');
   }
 
-  function editBranch(id) { alert('지사 수정 기능은 앱에서 이용해 주세요.'); }
-  function toggleBranch(id, status) { alert('지사 상태 변경 기능은 앱에서 이용해 주세요.'); }
+  // 지사 추가 폼 표시
+  function showCreateBranch() {
+    document.getElementById('branchFormTitle').textContent = '🏢 새 지사 추가';
+    document.getElementById('editBranchId').value = '';
+    ['newBranchName','newBranchCode','newBranchPhone','newBranchAddr','newBranchRegions'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    document.getElementById('newBranchStatus').value = 'active';
+    document.getElementById('createBranchForm').style.display = 'block';
+    document.getElementById('createBranchForm').scrollIntoView({behavior:'smooth'});
+  }
+
+  // 지사 수정 폼 표시
+  function editBranch(id) {
+    const card = document.querySelector(`[data-branch-id="${id}"]`);
+    if (!card) return;
+    const name = card.dataset.name || '';
+    const code = card.dataset.code || '';
+    const phone = card.dataset.phone || '';
+    const address = card.dataset.address || '';
+    const regions = card.dataset.regions || '';
+    const status = card.dataset.status || 'active';
+    document.getElementById('branchFormTitle').textContent = '🏢 지사 정보 수정';
+    document.getElementById('editBranchId').value = id;
+    document.getElementById('newBranchName').value = name;
+    document.getElementById('newBranchCode').value = code;
+    document.getElementById('newBranchPhone').value = phone;
+    document.getElementById('newBranchAddr').value = address;
+    document.getElementById('newBranchRegions').value = regions;
+    document.getElementById('newBranchStatus').value = status;
+    document.getElementById('createBranchForm').style.display = 'block';
+    document.getElementById('createBranchForm').scrollIntoView({behavior:'smooth'});
+  }
+
+  function closeBranchForm() {
+    document.getElementById('createBranchForm').style.display = 'none';
+    document.getElementById('editBranchId').value = '';
+  }
+
+  // 지사 저장 (추가/수정 통합)
+  async function saveBranchForm() {
+    const editId = document.getElementById('editBranchId').value;
+    const name = document.getElementById('newBranchName').value.trim();
+    const code = document.getElementById('newBranchCode').value.trim();
+    const phone = document.getElementById('newBranchPhone').value.trim();
+    const address = document.getElementById('newBranchAddr').value.trim();
+    const regionsRaw = document.getElementById('newBranchRegions').value.trim();
+    const status = document.getElementById('newBranchStatus').value;
+    const regions = regionsRaw ? regionsRaw.split(',').map(r => r.trim()).filter(Boolean) : [];
+    if (!name || !code) { alert('지사명과 코드는 필수 입력항목입니다.'); return; }
+    const isEdit = !!editId;
+    const endpoint = isEdit ? '/api/trpc/branch.update' : '/api/trpc/branch.create';
+    const body = isEdit
+      ? { json: { id: parseInt(editId), name, code, phone, address, regions, status } }
+      : { json: { name, code, phone, address, regions, status } };
+    const res = await fetch(API + (isEdit ? '/branch.update' : '/branch.create'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.id || data.result?.data?.json?.success) {
+      alert(isEdit ? '지사 정보가 수정되었습니다.' : '지사가 추가되었습니다.');
+      closeBranchForm();
+      loadBranches();
+    } else {
+      alert((isEdit ? '수정' : '추가') + ' 실패: ' + (data.error?.message || JSON.stringify(data)));
+    }
+  }
+
+  async function toggleBranch(id, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const label = newStatus === 'active' ? '활성화' : '정지';
+    if (!confirm(`이 지사를 ${label}하시겠습니까?`)) return;
+    const res = await fetch(API + '/branch.update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      body: JSON.stringify({ json: { id: parseInt(id), status: newStatus } })
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.success || data.result?.data?.json?.id) {
+      loadBranches();
+    } else {
+      alert('상태 변경 실패: ' + (data.error?.message || '오류'));
+    }
+  }
 
   // 연도 셀렉트 초기화
   function initYearSelects() {
