@@ -144,6 +144,16 @@ export default function TabLayout() {
         }}
       />
 
+      {/* ─── 고객센터 (고객 + 비로그인) ─── */}
+      <Tabs.Screen
+        name="customer-center"
+        options={{
+          title: "고객센터",
+          href: isStaff ? null : undefined,
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="phone.circle.fill" color={color} />,
+        }}
+      />
+
       {/* ─── 숨김 탭 (라우팅 유지) ─── */}
       <Tabs.Screen name="pipe-cleaning" options={{ href: null }} />
       <Tabs.Screen name="inspection-result" options={{ href: null }} />

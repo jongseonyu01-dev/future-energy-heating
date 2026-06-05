@@ -129,7 +129,7 @@ export function buildReceivedMessage(
   requestNumber: string,
   requestTypeLabel: string
 ): string {
-  return `[퓨처에너지 난방케어]\n${customerName}님, ${requestTypeLabel} 접수가 완료되었습니다.\n접수번호: ${requestNumber}\n담당 기사 배정 후 다시 안내드리겠습니다.\n문의: 1588-0000`;
+  return `[퓨처에너지테크]\n${customerName}님, ${requestTypeLabel} 접수가 완료되었습니다.\n접수번호: ${requestNumber}\n담당 기사 배정 후 다시 안내드리겠습니다.\n문의: 031-8042-7310`;
 }
 
 /**
@@ -145,7 +145,7 @@ export function buildCustomerReceivedMessage(params: {
   const symptomsText = params.symptoms.length > 0
     ? params.symptoms.join(", ")
     : "(증상 미선택)";
-  return `[퓨처에너지 난방케어]\n접수가 완료되었습니다.\n접수 유형: ${params.requestType}\n증상: ${symptomsText}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n담당자가 확인 후 연락드리겠습니다.`;
+  return `[퓨처에너지테크]\n접수가 완료되었습니다.\n접수 유형: ${params.requestType}\n증상: ${symptomsText}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n담당자가 확인 후 연락드리겠습니다.`;
 }
 
 /**
@@ -163,14 +163,15 @@ export function buildAdminReceivedMessage(params: {
   const symptomsText = params.symptoms.length > 0
     ? params.symptoms.join(", ")
     : "(증상 미선택)";
-  return `[퓨처에너지 난방케어]\n신규 접수가 등록되었습니다.\n고객명: ${params.customerName}\n전화번호: ${params.phoneNumber}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n접수 유형: ${params.requestType}\n증상: ${symptomsText}`;
+  return `[퓨처에너지테크]
+신규 접수가 등록되었습니다.\n고객명: ${params.customerName}\n전화번호: ${params.phoneNumber}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n접수 유형: ${params.requestType}\n증상: ${symptomsText}`;
 }
 
 /**
  * 문자 발송 테스트 메시지
  */
 export function buildSmsTestMessage(): string {
-  return `[퓨처에너지 난방케어]\n문자 발송 테스트가 정상적으로 완료되었습니다.`;
+  return `[퓨처에너지테크]\n문자 발송 테스트가 정상적으로 완료되었습니다.`;
 }
 
 /**
@@ -218,7 +219,7 @@ export function buildStatusChangeMessage(
   if (status === "작업완료") {
     extra = "\n작업이 완료되었습니다. 이용해 주셔서 감사합니다.";
   }
-  return `[퓨처에너지 난방케어]\n${customerName}님, 접수하신 건(${requestNumber})의 처리 상태가 '${status}'(으)로 변경되었습니다.${extra}\n문의: 1588-0000`;
+  return `[퓨처에너지테크]\n${customerName}님, 접수하신 건(${requestNumber})의 처리 상태가 '${status}'(으)로 변경되었습니다.${extra}\n문의: 031-8042-7310`;
 }
 
 /**
@@ -231,5 +232,5 @@ export function buildLeakAlertMessage(
   installLocation: string
 ): string {
   const dongPart = dong && dong !== "-" ? `${dong}동 ` : "";
-  return `[퓨처에너지 난방케어]\n누수 감지 알림입니다.\n${apartmentName} ${dongPart}${ho}호의 ${installLocation}에서 누수가 감지되었습니다.\n즉시 확인하거나 고객센터로 연락해 주세요.`;
+  return `[퓨처에너지테크]\n누수 감지 알림입니다.\n${apartmentName} ${dongPart}${ho}호의 ${installLocation}에서 누수가 감지되었습니다.\n즉시 확인하거나 고객센터로 연락해 주세요. 031-8042-7310`;
 }

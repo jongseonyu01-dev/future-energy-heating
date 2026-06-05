@@ -154,3 +154,15 @@
 - [x] admin/login.html 로고 이미지 및 회사명 업데이트
 - [x] admin/dashboard.html 사이드바 로고 이미지 및 회사명 업데이트
 - [x] admin/branch.html 사이드바 로고 이미지 및 회사명 업데이트
+
+## 실제 회사 정보 적용 (11차)
+- [x] 앱 전체 임시 전화번호(1588-0000) → 031-8042-7310 교체
+- [x] 앱 전체 "퓨처에너지 난방케어" → "퓨처에너지테크" 브랜드명 통일
+- [x] index.tsx 긴급 연락처 섹션: 실제 전화번호 표시 + 전화 연결 기능
+- [x] leak-sensor.tsx CUSTOMER_CENTER 상수 실제 번호로 교체
+- [x] notification.ts SMS 메시지 템플릿 브랜드명 및 전화번호 교체
+- [x] leak-sms.ts SMS 메시지 브랜드명 교체
+- [x] 고객센터 탭(customer-center.tsx) 신규 추가 (대표전화/휴대전화 전화연결, 이메일, 지도, 카카오톡 준비중)
+- [x] icon-symbol.tsx에 phone.circle.fill 아이콘 추가
+- [x] _layout.tsx에 고객센터 탭 추가 (고객/비로그인 전용)
+- [x] HTML 파일(faq, contact, download, index) 임시 전화번호 교체

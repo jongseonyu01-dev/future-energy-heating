@@ -16,7 +16,8 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 
-const CUSTOMER_CENTER = "1588-0000";
+const CUSTOMER_CENTER = "031-8042-7310";
+const CUSTOMER_CENTER_MOBILE = "010-5754-7310";
 
 // 센서 상태별 표시 설정
 const SENSOR_STATUS: Record<

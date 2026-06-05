@@ -37,7 +37,7 @@ export async function dispatchLeakSms(
   if (sensor.branchId) {
     const branch = await db.getBranchById(sensor.branchId);
     if (branch?.phoneNumber) {
-      const branchMessage = `[퓨처에너지 누수경보]\n${branch.name} 관할 고객 누수 감지\n${sensor.apartmentName ?? ""} ${sensor.dong ?? ""}동 ${sensor.ho ?? ""}호\n즉시 확인 바랍니다.`;
+      const branchMessage = `[퓨처에너지테크 누수경보]\n${branch.name} 관할 고객 누수 감지\n${sensor.apartmentName ?? ""} ${sensor.dong ?? ""}동 ${sensor.ho ?? ""}호\n즉시 확인 바랍니다.`;
       const branchResult = await sendSms(branch.phoneNumber, branchMessage);
       results.branch = branchResult.result;
       await db.createNotificationLog({
@@ -55,7 +55,7 @@ export async function dispatchLeakSms(
   // 3) 본사 관리자 발송 (설정된 관리자 번호가 있을 경우)
   const adminPhone = await db.getSetting("admin_phone");
   if (adminPhone) {
-    const adminMessage = `[퓨처에너지 본사 누수경보]\n${sensor.apartmentName ?? ""} ${sensor.dong ?? ""}동 ${sensor.ho ?? ""}호 누수 감지\n${sensor.branchId ? `담당 지사 ID: ${sensor.branchId}` : "담당 지사 없음 (본사 접수)"}`;
+    const adminMessage = `[퓨처에너지테크 본사 누수경보]\n${sensor.apartmentName ?? ""} ${sensor.dong ?? ""}동 ${sensor.ho ?? ""}호 누수 감지\n${sensor.branchId ? `담당 지사 ID: ${sensor.branchId}` : "담당 지사 없음 (본사 접수)"}`;
     const adminResultRaw = await sendSms(adminPhone, adminMessage);
     results.admin = adminResultRaw.result;
     await db.createNotificationLog({

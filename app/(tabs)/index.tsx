@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   TouchableOpacity,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -12,6 +13,11 @@ import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 import { useAppAuth, getRoleLabel } from "@/lib/auth-context";
+
+const MAIN_PHONE = "031-8042-7310";
+const MOBILE_PHONE = "010-5754-7310";
+const MAIN_PHONE_TEL = "tel:031-8042-7310";
+const MOBILE_PHONE_TEL = "tel:010-5754-7310";
 
 // ─── 고객 메뉴 ──────────────────────────────────────────────────
 const customerMenuItems = [
@@ -110,11 +116,18 @@ export default function HomeScreen() {
 
         {/* 긴급 연락처 */}
         <View style={[styles.noticeBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.noticeText, { color: colors.foreground }]}>
-            📞 긴급 출동: <Text style={{ color: "#FF6B35", fontWeight: "700" }}>1588-0000</Text>
-          </Text>
+          <TouchableOpacity onPress={() => Linking.openURL(MAIN_PHONE_TEL)} activeOpacity={0.75}>
+            <Text style={[styles.noticeText, { color: colors.foreground }]}>
+              📞 긴급 상담: <Text style={{ color: "#FF6B35", fontWeight: "700" }}>{MAIN_PHONE}</Text>
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(MOBILE_PHONE_TEL)} activeOpacity={0.75} style={{ marginTop: 4 }}>
+            <Text style={[styles.noticeText, { color: colors.foreground }]}>
+              📱 휴대전화 상담: <Text style={{ color: "#0EA5E9", fontWeight: "700" }}>{MOBILE_PHONE}</Text>
+            </Text>
+          </TouchableOpacity>
           <Text style={[styles.noticeSubText, { color: colors.muted }]}>
-            평일 08:00 ~ 18:00 / 긴급출동 24시간
+            평일 08:00 ~ 18:00 / 긴급 상담 가능
           </Text>
         </View>
 

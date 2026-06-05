@@ -38,6 +38,8 @@ const MAPPING = {
   "drop.fill": "water-drop",
   "thermometer": "thermostat",
   "building.2.fill": "apartment",
+  "headphones": "headset",
+  "phone.circle.fill": "support-agent",
 } as IconMapping;
 
 /**
