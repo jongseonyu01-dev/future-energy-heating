@@ -122,7 +122,7 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
 }
 
 /**
- * 접수 완료 안내 메시지 생성
+ * 접수 완료 안내 메시지 생성 (기존 - 하위 호환 유지)
  */
 export function buildReceivedMessage(
   customerName: string,
@@ -130,6 +130,71 @@ export function buildReceivedMessage(
   requestTypeLabel: string
 ): string {
   return `[퓨처에너지 난방케어]\n${customerName}님, ${requestTypeLabel} 접수가 완료되었습니다.\n접수번호: ${requestNumber}\n담당 기사 배정 후 다시 안내드리겠습니다.\n문의: 1588-0000`;
+}
+
+/**
+ * 고객에게 발송할 접수 완료 문자 (요청 형식)
+ */
+export function buildCustomerReceivedMessage(params: {
+  requestType: string;
+  symptoms: string[];
+  apartmentName: string;
+  dong: string;
+  ho: string;
+}): string {
+  const symptomsText = params.symptoms.length > 0
+    ? params.symptoms.join(", ")
+    : "(증상 미선택)";
+  return `[퓨처에너지 난방케어]\n접수가 완료되었습니다.\n접수 유형: ${params.requestType}\n증상: ${symptomsText}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n담당자가 확인 후 연락드리겠습니다.`;
+}
+
+/**
+ * 본사 관리자에게 발송할 신규 접수 알림 문자 (요청 형식)
+ */
+export function buildAdminReceivedMessage(params: {
+  customerName: string;
+  phoneNumber: string;
+  requestType: string;
+  symptoms: string[];
+  apartmentName: string;
+  dong: string;
+  ho: string;
+}): string {
+  const symptomsText = params.symptoms.length > 0
+    ? params.symptoms.join(", ")
+    : "(증상 미선택)";
+  return `[퓨처에너지 난방케어]\n신규 접수가 등록되었습니다.\n고객명: ${params.customerName}\n전화번호: ${params.phoneNumber}\n주소: ${params.apartmentName} ${params.dong}동 ${params.ho}호\n접수 유형: ${params.requestType}\n증상: ${symptomsText}`;
+}
+
+/**
+ * 문자 발송 테스트 메시지
+ */
+export function buildSmsTestMessage(): string {
+  return `[퓨처에너지 난방케어]\n문자 발송 테스트가 정상적으로 완료되었습니다.`;
+}
+
+/**
+ * SOLAPI 에러코드 → 사람이 읽기 쉬운 메시지로 변환
+ */
+export function friendlySmsError(errorMessage: string | undefined): string {
+  if (!errorMessage) return "알 수 없는 오류";
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("authentication") || msg.includes("unauthorized") || msg.includes("invalid api")) {
+    return "SOLAPI 인증 실패 (API Key/Secret 확인 필요)";
+  }
+  if (msg.includes("unregistered") || msg.includes("sender") || msg.includes("from")) {
+    return "발신번호 미등록 (SOLAPI에서 발신번호 등록 필요)";
+  }
+  if (msg.includes("balance") || msg.includes("credit") || msg.includes("insufficient")) {
+    return "잔액 부족 (SOLAPI 충전 필요)";
+  }
+  if (msg.includes("to") || msg.includes("phone") || msg.includes("number")) {
+    return "수신번호 형식 오류";
+  }
+  if (msg.includes("server") || msg.includes("500") || msg.includes("503")) {
+    return "서버 오류 (잠시 후 재시도)";
+  }
+  return errorMessage;
 }
 
 /**

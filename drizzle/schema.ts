@@ -111,6 +111,8 @@ export const repairRequests = mysqlTable("repair_requests", {
   // 접수 유형 및 증상
   requestType: requestTypeEnum.notNull().default("난방고장"),
   symptom: symptomEnum.notNull(),
+  // 복수 증상 선택 (JSON 배열, 예: ["집전체가춥다","기타문의"])
+  symptoms: text("symptoms"),
   detailContent: text("detailContent"),
   photoUrl: text("photoUrl"),
   // 방문 희망 일정

@@ -14,7 +14,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 
-type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "notices" | "materials";
+type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "notices" | "materials" | "sms";
 
 const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "📊" },
@@ -24,6 +24,7 @@ const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
   { id: "sensors", label: "누수센서", icon: "💧" },
   { id: "notices", label: "공지 작성", icon: "📢" },
   { id: "materials", label: "자재 주문", icon: "📦" },
+  { id: "sms", label: "SMS 설정", icon: "📱" },
 ];
 
 const STATUS_COLOR: Record<string, string> = {
@@ -109,6 +110,7 @@ export default function HQAdminScreen() {
           {activeTab === "sensors" && <HQSensors colors={colors} />}
           {activeTab === "notices" && <HQNotices colors={colors} userId={user.userId} />}
           {activeTab === "materials" && <HQMaterials colors={colors} />}
+          {activeTab === "sms" && <HQSmsSettings colors={colors} />}
         </View>
       </View>
     </ScreenContainer>
@@ -689,6 +691,146 @@ function HQMaterials({ colors }: { colors: any }) {
           )}
         </View>
       ))}
+    </ScrollView>
+  );
+}
+
+// ─── SMS 설정 ────────────────────────────────────────────────────
+function HQSmsSettings({ colors }: { colors: any }) {
+  const utils = trpc.useUtils();
+  const { data: adminPhoneData, isLoading: phoneLoading } = trpc.admin.getAdminPhone.useQuery();
+  const { data: smsStatus } = trpc.admin.smsStatus.useQuery();
+  const { data: logs = [], isLoading: logsLoading } = trpc.admin.notificationLogs.useQuery({});
+
+  const [adminPhone, setAdminPhone] = useState("");
+  const [phoneEditing, setPhoneEditing] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  React.useEffect(() => {
+    if (adminPhoneData?.phone) setAdminPhone(adminPhoneData.phone);
+  }, [adminPhoneData?.phone]);
+
+  const setPhoneMutation = trpc.admin.setAdminPhone.useMutation({
+    onSuccess: () => {
+      utils.admin.getAdminPhone.invalidate();
+      setPhoneEditing(false);
+      Alert.alert("저장 완료", "관리자 휴대폰 번호가 저장되었습니다.");
+    },
+    onError: () => Alert.alert("오류", "저장에 실패했습니다."),
+  });
+
+  const testMutation = trpc.admin.sendSmsTest.useMutation({
+    onSuccess: (data) => {
+      setTestResult(data);
+      utils.admin.notificationLogs.invalidate();
+    },
+    onError: () => setTestResult({ success: false, error: "서버 오류가 발생했습니다." }),
+  });
+
+  const formatPhone = (v: string) => {
+    const d = v.replace(/[^0-9]/g, "").slice(0, 11);
+    if (d.length <= 3) return d;
+    if (d.length <= 7) return `${d.slice(0,3)}-${d.slice(3)}`;
+    return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`;
+  };
+
+  const LOG_RESULT_COLOR: Record<string, string> = { SUCCESS: "#22C55E", FAILED: "#EF4444", SKIPPED: "#F59E0B" };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>SMS 설정 및 발송 이력</Text>
+
+      {/* SOLAPI 연동 상태 */}
+      <View style={{ backgroundColor: smsStatus?.configured ? "#F0FDF4" : "#FEF2F2", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: smsStatus?.configured ? "#22C55E" : "#EF4444" }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: smsStatus?.configured ? "#22C55E" : "#EF4444" }}>
+          {smsStatus?.configured ? "✅ SOLAPI 연동됨 (환경변수 정상)" : "❌ SOLAPI 미연동 — 환경변수 설정 필요"}
+        </Text>
+        {!smsStatus?.configured && (
+          <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
+            SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.
+          </Text>
+        )}
+      </View>
+
+      {/* 관리자 휴대폰 번호 설정 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📱 본사 관리자 휴대폰 번호</Text>
+        <Text style={{ fontSize: 12, color: colors.muted }}>신규 접수 시 이 번호로 SMS가 자동 발송됩니다.</Text>
+        {phoneLoading ? <ActivityIndicator color="#FF6B35" /> : (
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <TextInput
+              style={{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: phoneEditing ? "#FF6B35" : colors.border, paddingHorizontal: 12, fontSize: 16, color: colors.foreground, backgroundColor: colors.background }}
+              value={adminPhone}
+              onChangeText={(v) => { setAdminPhone(formatPhone(v)); setPhoneEditing(true); }}
+              placeholder="010-0000-0000"
+              placeholderTextColor={colors.muted}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: phoneEditing ? "#FF6B35" : colors.border, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 }}
+              onPress={() => {
+                if (phoneEditing) setPhoneMutation.mutate({ phone: adminPhone });
+                else setPhoneEditing(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: phoneEditing ? "#fff" : colors.foreground, fontWeight: "700", fontSize: 14 }}>
+                {setPhoneMutation.isPending ? "저장중..." : phoneEditing ? "저장" : "수정"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 문자 발송 테스트 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📨 문자 발송 테스트</Text>
+        <Text style={{ fontSize: 12, color: colors.muted }}>등록된 관리자 번호로 테스트 문자를 발송합니다.</Text>
+        <TouchableOpacity
+          style={{ backgroundColor: testMutation.isPending ? "#ccc" : "#FF6B35", borderRadius: 10, padding: 14, alignItems: "center" }}
+          onPress={() => { setTestResult(null); testMutation.mutate(); }}
+          disabled={testMutation.isPending}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+            {testMutation.isPending ? "발송 중..." : "테스트 문자 발송"}
+          </Text>
+        </TouchableOpacity>
+        {testResult && (
+          <View style={{ backgroundColor: testResult.success ? "#F0FDF4" : "#FEF2F2", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: testResult.success ? "#22C55E" : "#EF4444" }}>
+            <Text style={{ fontWeight: "700", color: testResult.success ? "#22C55E" : "#EF4444", fontSize: 14 }}>
+              {testResult.success ? "✅ 발송 성공!" : `❌ 발송 실패`}
+            </Text>
+            {!testResult.success && testResult.error && (
+              <Text style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>실패 원인: {testResult.error}</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* 문자 발송 이력 */}
+      <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📊 문자 발송 이력</Text>
+      {logsLoading ? <ActivityIndicator color="#FF6B35" /> : logs.length === 0 ? (
+        <Text style={{ color: colors.muted, textAlign: "center", padding: 16 }}>발송 이력이 없습니다.</Text>
+      ) : (
+        logs.slice(0, 50).map((log, i) => (
+          <View key={log.id ?? i} style={{ backgroundColor: colors.surface, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 4 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                <View style={{ backgroundColor: (LOG_RESULT_COLOR[log.result ?? ""] ?? "#6B7280") + "20", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: LOG_RESULT_COLOR[log.result ?? ""] ?? "#6B7280" }}>{log.result ?? "-"}</Text>
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground }}>{log.messageType}</Text>
+              </View>
+              <Text style={{ fontSize: 11, color: colors.muted }}>{log.createdAt ? new Date(log.createdAt).toLocaleString("ko-KR") : ""}</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: colors.muted }}>수신: {log.phoneNumber}</Text>
+            {log.errorMessage && (
+              <Text style={{ fontSize: 12, color: "#EF4444" }}>오류: {log.errorMessage}</Text>
+            )}
+          </View>
+        ))
+      )}
     </ScrollView>
   );
 }

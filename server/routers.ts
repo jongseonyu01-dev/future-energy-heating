@@ -7,6 +7,10 @@ import {
   buildReceivedMessage,
   buildStatusChangeMessage,
   buildLeakAlertMessage,
+  buildCustomerReceivedMessage,
+  buildAdminReceivedMessage,
+  buildSmsTestMessage,
+  friendlySmsError,
 } from "./notification";
 import { dispatchLeakSms } from "./leak-sms";
 
@@ -228,6 +232,8 @@ export const appRouter = router({
         ho: z.string().min(1).max(20),
         requestType: z.enum(["난방고장", "배관청소"]).default("난방고장"),
         symptom: z.enum(symptomValues),
+        // 복수 증상 선택 (배열)
+        symptoms: z.array(z.enum(symptomValues)).optional(),
         detailContent: z.string().max(2000).optional(),
         photoUrl: z.string().optional(),
         preferredDate: z.string().optional(),
@@ -237,23 +243,65 @@ export const appRouter = router({
         // 주소 기반 지사 자동 배정
         const address = `${input.apartmentName} ${input.dong}`;
         const branch = await db.findBranchByAddress(address);
-        const created = await db.createRepairRequest({ ...input, branchId: branch?.id ?? null });
 
-        const message = buildReceivedMessage(
-          input.customerName,
-          created.requestNumber,
-          requestTypeLabel[input.requestType] ?? "서비스"
-        );
-        const sendResult = await sendSms(input.phoneNumber, message);
+        // symptoms 배열을 JSON 문자열로 저장
+        const symptomsJson = input.symptoms && input.symptoms.length > 0
+          ? JSON.stringify(input.symptoms)
+          : null;
+        const created = await db.createRepairRequest({
+          ...input,
+          symptoms: symptomsJson,
+          branchId: branch?.id ?? null,
+        });
+
+        // 실제 증상 목록 (복수 선택 우선, 없으면 단일 symptom 사용)
+        const symptomsForSms: string[] = input.symptoms && input.symptoms.length > 0
+          ? input.symptoms
+          : [input.symptom];
+        const typeLabel = requestTypeLabel[input.requestType] ?? "서비스";
+
+        // ① 고객에게 접수 완료 SMS 발송
+        const customerMsg = buildCustomerReceivedMessage({
+          requestType: typeLabel,
+          symptoms: symptomsForSms,
+          apartmentName: input.apartmentName,
+          dong: input.dong,
+          ho: input.ho,
+        });
+        const customerSendResult = await sendSms(input.phoneNumber, customerMsg);
         await db.createNotificationLog({
           requestId: created.id,
           phoneNumber: input.phoneNumber,
           channel: "SMS",
-          messageType: "접수완료",
-          content: message,
-          result: sendResult.result,
-          errorMessage: sendResult.errorMessage,
+          messageType: "접수완료_고객",
+          content: customerMsg,
+          result: customerSendResult.result,
+          errorMessage: customerSendResult.errorMessage,
         });
+
+        // ② 본사 관리자에게 신규 접수 알림 SMS 발송 (관리자 번호가 설정된 경우만)
+        const adminPhone = await db.getSetting("hq_admin_phone");
+        if (adminPhone && adminPhone.trim().length >= 9) {
+          const adminMsg = buildAdminReceivedMessage({
+            customerName: input.customerName,
+            phoneNumber: input.phoneNumber,
+            requestType: typeLabel,
+            symptoms: symptomsForSms,
+            apartmentName: input.apartmentName,
+            dong: input.dong,
+            ho: input.ho,
+          });
+          const adminSendResult = await sendSms(adminPhone.trim(), adminMsg);
+          await db.createNotificationLog({
+            requestId: created.id,
+            phoneNumber: adminPhone.trim(),
+            channel: "SMS",
+            messageType: "접수완료_관리자",
+            content: adminMsg,
+            result: adminSendResult.result,
+            errorMessage: adminSendResult.errorMessage,
+          });
+        }
 
         return { ...created, branchId: branch?.id ?? null, branchName: branch?.name ?? "본사" };
       }),
@@ -488,6 +536,46 @@ export const appRouter = router({
     notificationLogs: publicProcedure
       .input(z.object({ requestId: z.number().optional() }).optional())
       .query(async ({ input }) => db.getNotificationLogs(input?.requestId)),
+
+    // 본사 관리자 휴대폰 번호 조회
+    getAdminPhone: publicProcedure.query(async () => {
+      const phone = await db.getSetting("hq_admin_phone");
+      return { phone: phone ?? "" };
+    }),
+
+    // 본사 관리자 휴대폰 번호 저장
+    setAdminPhone: publicProcedure
+      .input(z.object({ phone: z.string().max(20) }))
+      .mutation(async ({ input }) => {
+        await db.setSetting("hq_admin_phone", input.phone.replace(/[^0-9]/g, ""));
+        return { success: true };
+      }),
+
+    // 문자 발송 테스트
+    sendSmsTest: publicProcedure.mutation(async () => {
+      const adminPhone = await db.getSetting("hq_admin_phone");
+      if (!adminPhone || adminPhone.trim().length < 9) {
+        return { success: false, error: "관리자 휴대폰 번호가 등록되지 않았습니다. 먼저 설정 화면에서 번호를 입력해 주세요." };
+      }
+      if (!isSmsConfigured()) {
+        return { success: false, error: "SOLAPI 환경변수(API Key/Secret/발신번호)가 설정되지 않았습니다." };
+      }
+      const msg = buildSmsTestMessage();
+      const result = await sendSms(adminPhone.trim(), msg);
+      await db.createNotificationLog({
+        requestId: undefined,
+        phoneNumber: adminPhone.trim(),
+        channel: "SMS",
+        messageType: "SMS테스트",
+        content: msg,
+        result: result.result,
+        errorMessage: result.errorMessage,
+      });
+      if (result.result === "SUCCESS") {
+        return { success: true };
+      }
+      return { success: false, error: friendlySmsError(result.errorMessage) };
+    }),
   }),
 
   // ─── 공지사항 ─────────────────────────────────────────────────

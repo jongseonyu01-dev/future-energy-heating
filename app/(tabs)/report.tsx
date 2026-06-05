@@ -44,8 +44,18 @@ export default function ReportScreen() {
   const [apartmentName, setApartmentName] = useState("");
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
-  const [symptom, setSymptom] = useState<SymptomId | null>(null);
+  // 복수 증상 선택 (체크박스)
+  const [selectedSymptoms, setSelectedSymptoms] = useState<SymptomId[]>([]);
   const [detailContent, setDetailContent] = useState("");
+
+  const toggleSymptom = (id: SymptomId) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setSelectedSymptoms(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
   const [preferredDate, setPreferredDate] = useState("");
   const [preferredTime, setPreferredTime] = useState("");
   const [showTimeSlots, setShowTimeSlots] = useState(false);
@@ -67,7 +77,7 @@ export default function ReportScreen() {
               setApartmentName("");
               setDong("");
               setHo("");
-              setSymptom(null);
+              setSelectedSymptoms([]);
               setDetailContent("");
               setPreferredDate("");
               setPreferredTime("");
@@ -102,8 +112,8 @@ export default function ReportScreen() {
       Alert.alert("입력 오류", "호수를 입력해주세요.");
       return;
     }
-    if (!symptom) {
-      Alert.alert("입력 오류", "증상을 선택해주세요.");
+    if (selectedSymptoms.length === 0) {
+      Alert.alert("입력 오류", "증상을 하나 이상 선택해주세요.");
       return;
     }
 
@@ -114,7 +124,8 @@ export default function ReportScreen() {
       dong: dong.trim(),
       ho: ho.trim(),
       requestType: "난방고장",
-      symptom,
+      symptom: selectedSymptoms[0],
+      symptoms: selectedSymptoms,
       detailContent: detailContent.trim() || undefined,
       preferredDate: preferredDate.trim() || undefined,
       preferredTime: preferredTime.trim() || undefined,
@@ -192,61 +203,107 @@ export default function ReportScreen() {
           </View>
 
           {/* 증상 선택 섹션 */}
-          <SectionTitle title="⚠️ 증상 선택 *" />
+          <SectionTitle title="⚠️ 증상 선택 * (복수 선택 가능)" />
 
           <View style={styles.symptomGrid}>
-            {SYMPTOMS.map((s) => (
-              <Pressable
-                key={s.id}
-                style={[
-                  styles.symptomButton,
-                  {
-                    backgroundColor:
-                      symptom === s.id ? "#E84B2F" : colors.surface,
-                    borderColor:
-                      symptom === s.id ? "#E84B2F" : colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  setSymptom(s.id);
-                }}
-              >
-                <Text style={styles.symptomIcon}>{s.icon}</Text>
-                <Text
+            {SYMPTOMS.map((s) => {
+              const isSelected = selectedSymptoms.includes(s.id);
+              return (
+                <Pressable
+                  key={s.id}
                   style={[
-                    styles.symptomLabel,
-                    { color: symptom === s.id ? "#FFFFFF" : colors.foreground },
+                    styles.symptomButton,
+                    {
+                      backgroundColor: isSelected ? "#E84B2F" : colors.surface,
+                      borderColor: isSelected ? "#E84B2F" : colors.border,
+                    },
                   ]}
+                  onPress={() => toggleSymptom(s.id)}
                 >
-                  {s.label}
-                </Text>
-              </Pressable>
-            ))}
+                  {/* 체크박스 아이콘 */}
+                  <View style={[
+                    styles.checkbox,
+                    {
+                      backgroundColor: isSelected ? "#FFFFFF" : "transparent",
+                      borderColor: isSelected ? "#FFFFFF" : (colors.muted),
+                    }
+                  ]}>
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                  <Text style={styles.symptomIcon}>{s.icon}</Text>
+                  <Text
+                    style={[
+                      styles.symptomLabel,
+                      { color: isSelected ? "#FFFFFF" : colors.foreground },
+                    ]}
+                  >
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          {/* 상세 내용 */}
-          <SectionTitle title="📝 상세 내용" />
+          {/* 선택된 증상 요약 */}
+          {selectedSymptoms.length > 0 && (
+            <View style={[styles.selectedSummary, { backgroundColor: "#FFF3F0", borderColor: "#E84B2F" }]}>
+              <Text style={{ color: "#E84B2F", fontWeight: "600", fontSize: 13 }}>
+                선택된 증상 ({selectedSymptoms.length}개):
+              </Text>
+              <Text style={{ color: "#E84B2F", fontSize: 13, marginTop: 2 }}>
+                {selectedSymptoms.map(id => SYMPTOMS.find(s => s.id === id)?.label).join(", ")}
+              </Text>
+            </View>
+          )}
 
-          <View
-            style={[
-              styles.textAreaContainer,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <TextInput
-              style={[styles.textArea, { color: colors.foreground }]}
-              value={detailContent}
-              onChangeText={setDetailContent}
-              placeholder="증상에 대해 자세히 설명해주세요 (선택사항)"
-              placeholderTextColor={colors.muted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
+          {/* 기타 문의 선택 시 상세 내용 입력 (자동 표시) */}
+          {selectedSymptoms.includes("기타문의") && (
+            <>
+              <SectionTitle title="📝 기타 문의 내용 *" />
+              <View
+                style={[
+                  styles.textAreaContainer,
+                  { backgroundColor: colors.surface, borderColor: "#E84B2F" },
+                ]}
+              >
+                <TextInput
+                  style={[styles.textArea, { color: colors.foreground }]}
+                  value={detailContent}
+                  onChangeText={setDetailContent}
+                  placeholder="문의 내용을 자세히 입력해주세요"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+              </View>
+            </>
+          )}
+
+          {/* 상세 내용 (기타 문의 제외) */}
+          {!selectedSymptoms.includes("기타문의") && (
+            <>
+              <SectionTitle title="📝 상세 내용" />
+              <View
+                style={[
+                  styles.textAreaContainer,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <TextInput
+                  style={[styles.textArea, { color: colors.foreground }]}
+                  value={detailContent}
+                  onChangeText={setDetailContent}
+                  placeholder="증상에 대해 자세히 설명해주세요 (선택사항)"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+            </>
+          )}
 
           {/* 방문 희망 일정 */}
           <SectionTitle title="📅 방문 희망 일정" />
@@ -531,5 +588,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "700",
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkmark: {
+    color: "#E84B2F",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  selectedSummary: {
+    borderRadius: 10,
+    borderWidth: 1.5,
+    padding: 12,
+    marginBottom: 8,
   },
 });
