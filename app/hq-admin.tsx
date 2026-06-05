@@ -705,6 +705,14 @@ function HQSmsSettings({ colors }: { colors: any }) {
   const [adminPhone, setAdminPhone] = useState("");
   const [phoneEditing, setPhoneEditing] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [repairTestPhone, setRepairTestPhone] = useState("");
+  const [repairTestResult, setRepairTestResult] = useState<{
+    success: boolean;
+    customerResult?: { result: string; phone: string; error?: string } | null;
+    adminResult?: { result: string; phone: string; error?: string } | null;
+    adminPhoneSet?: boolean;
+    error?: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (adminPhoneData?.phone) setAdminPhone(adminPhoneData.phone);
@@ -727,6 +735,14 @@ function HQSmsSettings({ colors }: { colors: any }) {
     onError: () => setTestResult({ success: false, error: "서버 오류가 발생했습니다." }),
   });
 
+  const repairTestMutation = trpc.admin.sendRepairSmsTest.useMutation({
+    onSuccess: (data) => {
+      setRepairTestResult(data);
+      utils.admin.notificationLogs.invalidate();
+    },
+    onError: () => setRepairTestResult({ success: false, error: "서버 오류가 발생했습니다." }),
+  });
+
   const formatPhone = (v: string) => {
     const d = v.replace(/[^0-9]/g, "").slice(0, 11);
     if (d.length <= 3) return d;
@@ -738,7 +754,7 @@ function HQSmsSettings({ colors }: { colors: any }) {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>SMS 설정 및 발송 이력</Text>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>SMS 설정 및 발송 테스트</Text>
 
       {/* SOLAPI 연동 상태 */}
       <View style={{ backgroundColor: smsStatus?.configured ? "#F0FDF4" : "#FEF2F2", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: smsStatus?.configured ? "#22C55E" : "#EF4444" }}>
@@ -748,6 +764,12 @@ function HQSmsSettings({ colors }: { colors: any }) {
         {!smsStatus?.configured && (
           <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
             SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.
+          </Text>
+        )}
+        {smsStatus?.configured && (
+          <Text style={{ fontSize: 12, color: "#15803D", marginTop: 6 }}>
+            현재 서버 IP: 138.185.96.120{"\n"}
+            SOLAPI 콘솔(console.solapi.com) → 계정 설정 → IP 보안 설정에서 위 IP를 허용하거나 IP 제한을 해제하세요.
           </Text>
         )}
       </View>
@@ -782,9 +804,9 @@ function HQSmsSettings({ colors }: { colors: any }) {
         )}
       </View>
 
-      {/* 문자 발송 테스트 */}
+      {/* 테스트 문자 발송 (1) - 관리자 번호로 단순 테스트 */}
       <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
-        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📨 문자 발송 테스트</Text>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📨 관리자 번호 테스트</Text>
         <Text style={{ fontSize: 12, color: colors.muted }}>등록된 관리자 번호로 테스트 문자를 발송합니다.</Text>
         <TouchableOpacity
           style={{ backgroundColor: testMutation.isPending ? "#ccc" : "#FF6B35", borderRadius: 10, padding: 14, alignItems: "center" }}
@@ -803,6 +825,78 @@ function HQSmsSettings({ colors }: { colors: any }) {
             </Text>
             {!testResult.success && testResult.error && (
               <Text style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>실패 원인: {testResult.error}</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* 테스트 문자 발송 (2) - 고장접수 시뮬레이션 (고객+관리자 동시 발송) */}
+      <View style={{ backgroundColor: "#FFF7ED", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#FDBA74", gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: "#C2410C" }}>🔧 고장접수 SMS 시뮬레이션</Text>
+        <Text style={{ fontSize: 12, color: "#9A3412" }}>실제 고장접수 시 발송되는 문자를 시뮬레이션합니다.{"\n"}고객 번호로 고객용 SMS, 관리자 번호로 관리자용 SMS를 동시 발송합니다.</Text>
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: "#9A3412" }}>고객 테스트 수신 번호</Text>
+          <TextInput
+            style={{ height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: "#FDBA74", paddingHorizontal: 12, fontSize: 16, color: colors.foreground, backgroundColor: colors.background }}
+            value={repairTestPhone}
+            onChangeText={(v) => setRepairTestPhone(formatPhone(v))}
+            placeholder="010-0000-0000 (고객 테스트 번호)"
+            placeholderTextColor={colors.muted}
+            keyboardType="phone-pad"
+          />
+        </View>
+        <TouchableOpacity
+          style={{ backgroundColor: repairTestMutation.isPending ? "#ccc" : "#EA580C", borderRadius: 10, padding: 14, alignItems: "center" }}
+          onPress={() => {
+            if (!repairTestPhone || repairTestPhone.replace(/[^0-9]/g, "").length < 9) {
+              Alert.alert("입력 오류", "고객 테스트 번호를 입력해 주세요.");
+              return;
+            }
+            setRepairTestResult(null);
+            repairTestMutation.mutate({ customerPhone: repairTestPhone });
+          }}
+          disabled={repairTestMutation.isPending}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+            {repairTestMutation.isPending ? "발송 중..." : "🔧 고장접수 SMS 시뮬레이션 실행"}
+          </Text>
+        </TouchableOpacity>
+        {repairTestResult && (
+          <View style={{ gap: 8 }}>
+            {/* 고객 SMS 결과 */}
+            <View style={{
+              backgroundColor: repairTestResult.customerResult?.result === "SUCCESS" ? "#F0FDF4" : "#FEF2F2",
+              borderRadius: 10, padding: 12, borderWidth: 1,
+              borderColor: repairTestResult.customerResult?.result === "SUCCESS" ? "#22C55E" : "#EF4444"
+            }}>
+              <Text style={{ fontWeight: "700", fontSize: 13, color: repairTestResult.customerResult?.result === "SUCCESS" ? "#22C55E" : "#EF4444" }}>
+                고객 SMS: {repairTestResult.customerResult?.result === "SUCCESS" ? "✅ 발송 성공" : "❌ 발송 실패"}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>수신: {repairTestResult.customerResult?.phone}</Text>
+              {repairTestResult.customerResult?.error && (
+                <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>실패 원인: {repairTestResult.customerResult.error}</Text>
+              )}
+            </View>
+            {/* 관리자 SMS 결과 */}
+            {repairTestResult.adminResult ? (
+              <View style={{
+                backgroundColor: repairTestResult.adminResult.result === "SUCCESS" ? "#F0FDF4" : "#FEF2F2",
+                borderRadius: 10, padding: 12, borderWidth: 1,
+                borderColor: repairTestResult.adminResult.result === "SUCCESS" ? "#22C55E" : "#EF4444"
+              }}>
+                <Text style={{ fontWeight: "700", fontSize: 13, color: repairTestResult.adminResult.result === "SUCCESS" ? "#22C55E" : "#EF4444" }}>
+                  관리자 SMS: {repairTestResult.adminResult.result === "SUCCESS" ? "✅ 발송 성공" : "❌ 발송 실패"}
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>수신: {repairTestResult.adminResult.phone}</Text>
+                {repairTestResult.adminResult.error && (
+                  <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>실패 원인: {repairTestResult.adminResult.error}</Text>
+                )}
+              </View>
+            ) : (
+              <View style={{ backgroundColor: "#FEF9C3", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#FDE047" }}>
+                <Text style={{ fontSize: 12, color: "#92400E" }}>⚠️ 관리자 SMS: 관리자 번호가 설정되지 않아 발송되지 않았습니다. 위의 관리자 번호를 먼저 등록해 주세요.</Text>
+              </View>
             )}
           </View>
         )}

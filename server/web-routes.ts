@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import path from "path";
 import fs from "fs";
 import { getAllRepairRequests } from "./db";
@@ -9,9 +9,7 @@ export function registerWebRoutes(app: Express) {
   // 정적 파일 서빙 - /web 경로로 홈페이지 HTML 파일 제공
   const webDir = path.join(PUBLIC_DIR, "web");
   if (fs.existsSync(webDir)) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const serveStatic = require("express").static as (dir: string, opts?: object) => any;
-    app.use("/web", serveStatic(webDir, { index: "index.html" }));
+    app.use("/web", express.static(webDir, { index: "index.html" }));
   }
 
   // 엑셀(CSV) 다운로드 API - 전국 접수 현황

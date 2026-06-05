@@ -576,6 +576,86 @@ export const appRouter = router({
       }
       return { success: false, error: friendlySmsError(result.errorMessage) };
     }),
+
+    // 고장접수 SMS 시뮬레이션 테스트 (지정 번호로 고객/관리자 SMS 동시 발송)
+    sendRepairSmsTest: publicProcedure
+      .input(z.object({
+        customerPhone: z.string().min(9, "고객 전화번호를 입력해 주세요"),
+      }))
+      .mutation(async ({ input }) => {
+        if (!isSmsConfigured()) {
+          return {
+            success: false,
+            customerResult: null,
+            adminResult: null,
+            error: "SOLAPI 환경변수(API Key/Secret/발신번호)가 설정되지 않았습니다.",
+          };
+        }
+        const customerPhone = input.customerPhone.replace(/[^0-9]/g, "");
+        const adminPhone = await db.getSetting("hq_admin_phone");
+
+        // 고객 SMS
+        const customerMsg = buildCustomerReceivedMessage({
+          requestType: "난방 고장 접수 (테스트)",
+          symptoms: ["난방 불량", "온도조절기 이상"],
+          apartmentName: "테스트 아파트",
+          dong: "101",
+          ho: "1234",
+        });
+        const customerResult = await sendSms(customerPhone, customerMsg);
+        await db.createNotificationLog({
+          requestId: undefined,
+          phoneNumber: customerPhone,
+          channel: "SMS",
+          messageType: "접수완료(테스트-고객)",
+          content: customerMsg,
+          result: customerResult.result,
+          errorMessage: customerResult.errorMessage,
+        });
+
+        // 관리자 SMS
+        let adminResult = null;
+        if (adminPhone && adminPhone.trim().length >= 9) {
+          const adminMsg = buildAdminReceivedMessage({
+            customerName: "홍길동(테스트)",
+            phoneNumber: customerPhone,
+            requestType: "난방 고장 접수 (테스트)",
+            symptoms: ["난방 불량", "온도조절기 이상"],
+            apartmentName: "테스트 아파트",
+            dong: "101",
+            ho: "1234",
+          });
+          adminResult = await sendSms(adminPhone.trim(), adminMsg);
+          await db.createNotificationLog({
+            requestId: undefined,
+            phoneNumber: adminPhone.trim(),
+            channel: "SMS",
+            messageType: "접수완료(테스트-관리자)",
+            content: adminMsg,
+            result: adminResult.result,
+            errorMessage: adminResult.errorMessage,
+          });
+        }
+
+        const customerOk = customerResult.result === "SUCCESS";
+        const adminOk = !adminResult || adminResult.result === "SUCCESS";
+
+        return {
+          success: customerOk,
+          customerResult: {
+            result: customerResult.result,
+            phone: customerPhone,
+            error: customerResult.result !== "SUCCESS" ? friendlySmsError(customerResult.errorMessage) : undefined,
+          },
+          adminResult: adminResult ? {
+            result: adminResult.result,
+            phone: adminPhone?.trim() ?? "",
+            error: adminResult.result !== "SUCCESS" ? friendlySmsError(adminResult.errorMessage) : undefined,
+          } : null,
+          adminPhoneSet: !!(adminPhone && adminPhone.trim().length >= 9),
+          error: !customerOk ? friendlySmsError(customerResult.errorMessage) : undefined,
+        };
+      }),
   }),
 
   // ─── 공지사항 ─────────────────────────────────────────────────

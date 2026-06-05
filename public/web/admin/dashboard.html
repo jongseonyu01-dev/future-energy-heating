@@ -241,6 +241,32 @@
 
     <!-- 문자 발송 이력 -->
     <div class="panel" id="panel-sms">
+      <!-- SOLAPI 연동 상태 카드 -->
+      <div id="smsStatusCard" class="section-card" style="margin-bottom:16px">
+        <h3>📡 SOLAPI 연동 상태</h3>
+        <div id="smsStatusContent" style="padding:8px 0;color:#6b7280">상태를 확인하는 중...</div>
+      </div>
+
+      <!-- SMS 테스트 카드 -->
+      <div class="section-card" style="margin-bottom:16px">
+        <h3>🧪 SMS 발송 테스트</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px">
+          <div>
+            <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:4px">① 관리자 번호 테스트</label>
+            <button id="btnSmsTest" onclick="runSmsTest()" style="background:#ff6b35;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">📨 테스트 문자 발송</button>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:4px">② 고장접수 시뮬레이션 (고객 번호 입력)</label>
+            <div style="display:flex;gap:8px">
+              <input type="tel" id="repairTestPhone" placeholder="010-0000-0000" style="flex:1;height:40px;border:1.5px solid #e5e7eb;border-radius:8px;padding:0 12px;font-size:14px" />
+              <button id="btnRepairTest" onclick="runRepairSmsTest()" style="background:#ea580c;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">🔧 접수 SMS 시뮬레이션</button>
+            </div>
+          </div>
+        </div>
+        <div id="smsTestResult" style="display:none"></div>
+      </div>
+
+      <!-- 발송 이력 -->
       <div class="inline-form">
         <input type="date" id="smsDateFrom" />
         <span>~</span>
@@ -388,7 +414,7 @@
     else if (currentPanel === 'requests') loadRequests();
     else if (currentPanel === 'branches') loadBranches();
     else if (currentPanel === 'stats') loadStats();
-    else if (currentPanel === 'sms') loadSmsLogs();
+    else if (currentPanel === 'sms') { loadSmsStatus(); loadSmsLogs(); }
     else if (currentPanel === 'sensors') loadSensors();
     else if (currentPanel === 'sales') loadSales();
     else if (currentPanel === 'assign') loadAssign();
@@ -398,15 +424,17 @@
 
   async function trpc(proc, input) {
     try {
-      const isQuery = !input || Object.keys(input).length === 0;
+      // mutation 여부 판단: _mutation 플래그가 있거나 진짜 페이로드가 있으면 POST
+      const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
+      const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => k !== '_mutation' && k !== '_query' && k !== '_dummy')) : {};
       let url = API + '/' + proc;
       let opts = { headers: { 'Content-Type': 'application/json' } };
-      if (isQuery) {
-        url += '?input=' + encodeURIComponent(JSON.stringify({ json: input || {} }));
+      if (!isMutation) {
+        url += '?input=' + encodeURIComponent(JSON.stringify({ json: cleanInput }));
         opts.method = 'GET';
       } else {
         opts.method = 'POST';
-        opts.body = JSON.stringify({ json: input });
+        opts.body = JSON.stringify({ json: cleanInput });
       }
       const res = await fetch(url, opts);
       const data = await res.json();
@@ -545,18 +573,91 @@
     renderChart('statsCompletionChart', 'line', months.map(m => parseInt(m.slice(5))+'월'), rates, '완료율(%)', '#22c55e');
   }
 
+  async function loadSmsStatus() {
+    const el = document.getElementById('smsStatusContent');
+    const data = await trpc('admin.smsStatus', {});
+    const adminPhoneData = await trpc('admin.getAdminPhone', {});
+    const configured = data?.configured;
+    const adminPhone = adminPhoneData?.phone || '';
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${configured?'#dcfce7':'#fee2e2'};color:${configured?'#15803d':'#dc2626'}">
+          ${configured ? '✅ SOLAPI 연동됨' : '❌ SOLAPI 미연동'}
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${adminPhone?'#dbeafe':'#fef3c7'};color:${adminPhone?'#1d4ed8':'#92400e'}">
+          📱 관리자 번호: ${adminPhone || '미등록'}
+        </span>
+      </div>
+      <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:12px;color:#374151;line-height:1.8">
+        <strong>🌐 현재 서버 IP: 138.185.96.120</strong><br>
+        ${configured
+          ? 'SOLAPI 콘솔(console.solapi.com) → 계정 설정 → IP 보안 설정에서 위 IP를 허용하거나 IP 제한을 해제하면 SMS가 정상 발송됩니다.'
+          : 'SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.'}
+      </div>
+    `;
+  }
+
+  async function runSmsTest() {
+    const btn = document.getElementById('btnSmsTest');
+    const resultEl = document.getElementById('smsTestResult');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    const data = await trpc('admin.sendSmsTest', { _mutation: true });
+    btn.disabled = false; btn.textContent = '📨 테스트 문자 발송';
+    resultEl.style.display = 'block';
+    if (data?.success) {
+      resultEl.innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #22c55e;border-radius:8px;color:#15803d;font-weight:700">✅ 발송 성공! 관리자 번호로 테스트 문자가 발송되었습니다.</div>';
+    } else {
+      resultEl.innerHTML = `<div style="padding:12px;background:#fef2f2;border:1px solid #ef4444;border-radius:8px"><div style="color:#dc2626;font-weight:700">❌ 발송 실패</div><div style="color:#ef4444;font-size:13px;margin-top:4px">실패 원인: ${data?.error || '알 수 없는 오류'}</div></div>`;
+    }
+    loadSmsLogs();
+  }
+
+  async function runRepairSmsTest() {
+    const phone = document.getElementById('repairTestPhone').value.trim();
+    if (!phone || phone.replace(/[^0-9]/g,'').length < 9) {
+      alert('고객 테스트 번호를 입력해 주세요.'); return;
+    }
+    const btn = document.getElementById('btnRepairTest');
+    const resultEl = document.getElementById('smsTestResult');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    const data = await trpc('admin.sendRepairSmsTest', { customerPhone: phone });
+    btn.disabled = false; btn.textContent = '🔧 접수 SMS 시뮬레이션';
+    resultEl.style.display = 'block';
+    const cr = data?.customerResult;
+    const ar = data?.adminResult;
+    const crOk = cr?.result === 'SUCCESS';
+    const arOk = ar?.result === 'SUCCESS';
+    resultEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="padding:12px;background:${crOk?'#f0fdf4':'#fef2f2'};border:1px solid ${crOk?'#22c55e':'#ef4444'};border-radius:8px">
+          <div style="font-weight:700;color:${crOk?'#15803d':'#dc2626'}">고객 SMS: ${crOk?'✅ 발송 성공':'❌ 발송 실패'}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">수신: ${cr?.phone || phone}</div>
+          ${cr?.error?`<div style="font-size:12px;color:#ef4444;margin-top:2px">실패 원인: ${cr.error}</div>`:''}
+        </div>
+        ${ar ? `<div style="padding:12px;background:${arOk?'#f0fdf4':'#fef2f2'};border:1px solid ${arOk?'#22c55e':'#ef4444'};border-radius:8px">
+          <div style="font-weight:700;color:${arOk?'#15803d':'#dc2626'}">관리자 SMS: ${arOk?'✅ 발송 성공':'❌ 발송 실패'}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">수신: ${ar.phone}</div>
+          ${ar.error?`<div style="font-size:12px;color:#ef4444;margin-top:2px">실패 원인: ${ar.error}</div>`:''}
+        </div>` : `<div style="padding:12px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:13px;color:#92400e">⚠️ 관리자 SMS: 관리자 번호가 설정되지 않아 발송되지 않았습니다.</div>`}
+      </div>
+    `;
+    loadSmsLogs();
+  }
+
   async function loadSmsLogs() {
-    const data = await trpc('admin.getSmsLogs', {});
+    const data = await trpc('admin.notificationLogs', {});
     const list = data || [];
     const tbody = document.getElementById('smsTbody');
-    tbody.innerHTML = list.length ? list.reverse().map(s => `
+    tbody.innerHTML = list.length ? [...list].reverse().map(s => `
       <tr>
-        <td>${s.createdAt ? s.createdAt.slice(0,16).replace('T',' ') : '-'}</td>
-        <td>${s.to || '-'}</td>
+        <td>${s.createdAt ? String(s.createdAt).slice(0,16).replace('T',' ') : '-'}</td>
+        <td>${s.phoneNumber || '-'}</td>
         <td>${s.messageType || '-'}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.message || '-'}</td>
-        <td class="${s.success ? 'sms-log-success' : 'sms-log-fail'}">${s.success ? '✅ 성공' : '❌ 실패'}</td>
-        <td style="color:#ef4444;font-size:13px">${s.error || ''}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.content || '-'}</td>
+        <td class="${s.result==='SUCCESS'?'sms-log-success':s.result==='SKIPPED'?'':'sms-log-fail'}" style="${s.result==='SKIPPED'?'color:#f59e0b;font-weight:600':''}">${s.result==='SUCCESS'?'✅ 성공':s.result==='SKIPPED'?'⏭ 건너뜀':'❌ 실패'}</td>
+        <td style="color:#ef4444;font-size:13px">${s.errorMessage || ''}</td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="6">발송 이력이 없습니다</td></tr>';
   }

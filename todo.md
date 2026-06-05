@@ -126,3 +126,15 @@
 - [x] 웹 관리자 로그인 버그 수정 (dashboard.html, branch.html에서 user.role → user.appRole 수정)
 - [x] admin 계정 dashboard.html 진입 검증 완료
 - [x] ansan 계정 branch.html 진입 검증 완료
+
+## SMS 테스트 기능 강화 (9차)
+- [x] 서버 외부 IP 확인 (138.185.96.120)
+- [x] 배포 오류 수정: web-routes.ts에서 require('express') → import express 사용
+- [x] routers.ts에 sendRepairSmsTest API 추가 (고객+관리자 동시 SMS 시뮬레이션)
+- [x] 앱 관리자 화면(hq-admin.tsx) SMS 탭에 고장접수 시뮬레이션 버튼 추가
+- [x] 앱 SMS 탭에 SOLAPI 연동 상태 + 서버 IP 안내 표시
+- [x] 웹 관리자 대시보드(dashboard.html) SMS 패널에 SOLAPI 상태카드 추가
+- [x] 웹 대시보드에 관리자 번호 테스트 버튼 추가
+- [x] 웹 대시보드에 고장접수 SMS 시뮬레이션 버튼 추가
+- [x] 발송 성공/실패 결과 표시 (고객/관리자 각각 표시)
+- [x] 발송 이력 테이블 수정 (admin.notificationLogs API 사용, 실패 사유 표시)
