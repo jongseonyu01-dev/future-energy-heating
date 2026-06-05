@@ -76,10 +76,10 @@ export default function HomeScreen() {
         <View style={[styles.header, { backgroundColor: "#FF6B35" }]}>
           <View style={styles.headerContent}>
             <View style={styles.logoRow}>
-              <Text style={styles.logoEmoji}>🔥</Text>
+              <Text style={styles.logoEmoji}>🌐</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>퓨처에너지</Text>
-                <Text style={styles.headerSubtitle}>난방케어 서비스</Text>
+                <Text style={styles.headerTitle}>퓨처에너지테크</Text>
+                <Text style={styles.headerSubtitle}>Future Energy Tech</Text>
               </View>
               {/* 로그인/로그아웃 버튼 */}
               {user ? (
@@ -100,7 +100,10 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              <Text style={styles.headerDesc}>24시간 난방 전문 서비스</Text>
+              <View>
+                <Text style={styles.headerDesc}>24시간 난방 전문 서비스</Text>
+                <Text style={[styles.headerDesc, { fontSize: 11, marginTop: 2, opacity: 0.75 }]}>난방 배관청소 · 분배기 수리 · 온도조절기 수리 · 각종밸브 수리</Text>
+              </View>
             )}
           </View>
         </View>
@@ -140,7 +143,7 @@ export default function HomeScreen() {
         <View style={[styles.infoBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.infoTitle, { color: colors.foreground }]}>🏠 서비스 안내</Text>
           <Text style={[styles.infoText, { color: colors.muted }]}>
-            아파트 지역난방 전문 업체로 난방 고장, 분배기 누수, 온도조절기 교체, 배관청소 서비스를 제공합니다.
+            퓨처에너지테크는 아파트 지역난방 전문 업체로 난방 배관청소, 분배기 수리, 온도조절기 수리, 각종밸브 수리, 열량계·유량계 설치 서비스를 제공합니다.
           </Text>
         </View>
       </ScrollView>

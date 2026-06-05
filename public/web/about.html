@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>회사소개 - 퓨처에너지테크</title>
+  <meta name="description" content="퓨처에너지테크는 전국 지사 운영, 24시간 긴급출동, 난방 배관청소 전문 서비스를 제공합니다." />
+  <style>
+    :root {
+      --primary: #1a3a6b;
+      --primary-light: #e8f0fb;
+      --accent: #e8380d;
+      --accent-light: #fff3f0;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --bg: #ffffff;
+      --surface: #f9fafb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: var(--text); background: var(--bg); }
+    a { text-decoration: none; color: inherit; }
+
+    /* 헤더 */
+    header { position: sticky; top: 0; z-index: 100; background: var(--bg); border-bottom: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 64px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-text { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .logo-sub { font-size: 11px; color: var(--muted); }
+    nav { display: flex; gap: 4px; align-items: center; }
+    nav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; color: var(--text); transition: background .15s; }
+    nav a:hover { background: var(--primary-light); color: var(--primary); }
+    nav a.active { color: var(--primary); font-weight: 700; }
+    .nav-cta { background: var(--accent) !important; color: #fff !important; font-weight: 600; }
+    .nav-cta:hover { opacity: 0.9; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); margin: 5px 0; border-radius: 2px; }
+    .mobile-nav { display: none; background: var(--bg); border-top: 1px solid var(--border); padding: 12px 24px; }
+    .mobile-nav a { display: block; padding: 10px 0; font-size: 15px; border-bottom: 1px solid var(--border); }
+    .mobile-nav a:last-child { border-bottom: none; }
+    @media (max-width: 900px) { nav { display: none; } .hamburger { display: block; } .mobile-nav.open { display: block; } }
+
+    /* 히어로 */
+    .page-hero {
+      background: linear-gradient(135deg, var(--primary) 0%, #0f2a55 100%);
+      color: #fff; padding: 64px 24px 48px; text-align: center;
+    }
+    .page-hero h1 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; margin-bottom: 12px; }
+    .page-hero p { font-size: 16px; color: rgba(255,255,255,.8); max-width: 560px; margin: 0 auto; }
+
+    /* 로고 섹션 */
+    .logo-section { padding: 64px 24px; text-align: center; background: var(--surface); }
+    .brand-logo-wrap { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
+    .brand-logo-img { width: 100px; height: 100px; border-radius: 20px; box-shadow: 0 8px 32px rgba(26,58,107,.2); }
+    .brand-name-block { text-align: left; }
+    .brand-name-kr { font-size: 36px; font-weight: 900; color: var(--primary); letter-spacing: -1px; }
+    .brand-name-en { font-size: 18px; font-weight: 600; color: var(--accent); margin-top: 4px; }
+    .brand-tagline { font-size: 15px; color: var(--muted); margin-top: 8px; }
+    .brand-desc { max-width: 700px; margin: 0 auto; font-size: 16px; line-height: 1.8; color: var(--text); }
+
+    /* 섹션 공통 */
+    .section { padding: 64px 24px; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .section-title { font-size: clamp(22px, 3vw, 32px); font-weight: 800; margin-bottom: 8px; color: var(--primary); }
+    .section-sub { font-size: 15px; color: var(--muted); margin-bottom: 40px; }
+    .divider { width: 48px; height: 4px; background: var(--accent); border-radius: 2px; margin: 12px 0 32px; }
+
+    /* 대표 소개 */
+    .ceo-card { background: #fff; border-radius: 20px; padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,.08); border: 1px solid var(--border); display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+    .ceo-avatar { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #2a5298); display: flex; align-items: center; justify-content: center; font-size: 48px; flex-shrink: 0; }
+    .ceo-info h3 { font-size: 24px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+    .ceo-info .ceo-title { font-size: 14px; color: var(--accent); font-weight: 600; margin-bottom: 16px; }
+    .ceo-info p { font-size: 15px; line-height: 1.8; color: var(--text); }
+
+    /* 연락처 */
+    .contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .contact-item { background: var(--surface); border-radius: 16px; padding: 24px; border: 1px solid var(--border); }
+    .contact-item .ci-icon { font-size: 28px; margin-bottom: 12px; }
+    .contact-item .ci-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .contact-item .ci-value { font-size: 16px; font-weight: 700; color: var(--primary); }
+    .contact-item .ci-value a { color: var(--accent); }
+
+    /* 서비스 */
+    .service-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .service-item { background: #fff; border-radius: 16px; padding: 28px 20px; text-align: center; border: 2px solid var(--border); transition: border-color .2s, transform .2s; }
+    .service-item:hover { border-color: var(--primary); transform: translateY(-4px); }
+    .service-item .si-icon { font-size: 36px; margin-bottom: 12px; }
+    .service-item .si-title { font-size: 16px; font-weight: 700; color: var(--primary); }
+
+    /* 특징 */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+    .feature-card { background: #fff; border-radius: 16px; padding: 32px 24px; border: 1px solid var(--border); box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+    .feature-card .fc-icon { font-size: 36px; margin-bottom: 12px; }
+    .feature-card .fc-title { font-size: 17px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+    .feature-card .fc-desc { font-size: 14px; color: var(--muted); line-height: 1.7; }
+
+    /* CTA */
+    .cta-section { background: linear-gradient(135deg, var(--primary) 0%, #0f2a55 100%); color: #fff; padding: 64px 24px; text-align: center; }
+    .cta-section h2 { font-size: clamp(22px, 3vw, 32px); font-weight: 800; margin-bottom: 12px; }
+    .cta-section p { font-size: 16px; color: rgba(255,255,255,.8); margin-bottom: 32px; }
+    .cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-cta-primary { background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 14px 28px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    .btn-cta-primary:hover { opacity: .9; }
+    .btn-cta-secondary { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 12px; padding: 14px 28px; font-size: 16px; font-weight: 600; }
+    .btn-cta-secondary:hover { background: rgba(255,255,255,.25); }
+
+    /* 푸터 */
+    footer { background: #1a1a2e; color: rgba(255,255,255,.7); padding: 48px 24px 24px; }
+    .footer-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 32px; }
+    .footer-brand .logo-text { color: #fff; font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .footer-brand p { font-size: 13px; line-height: 1.8; }
+    .footer-links h4 { color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+    .footer-links a { display: block; font-size: 13px; margin-bottom: 8px; transition: color .15s; }
+    .footer-links a:hover { color: #fff; }
+    .footer-bottom { max-width: 1200px; margin: 0 auto; padding-top: 24px; border-top: 1px solid rgba(255,255,255,.1); display: flex; justify-content: space-between; font-size: 12px; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 768px) { .footer-inner { grid-template-columns: 1fr 1fr; } .ceo-card { flex-direction: column; } }
+    @media (max-width: 480px) { .footer-inner { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo">
+      <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-58W97D3UGLWn9JzTakGt8a.webp" alt="퓨처에너지테크" style="width:40px;height:40px;border-radius:8px;object-fit:cover;" />
+      <div>
+        <div class="logo-text">퓨처에너지테크</div>
+        <div class="logo-sub">Future Energy Tech</div>
+      </div>
+    </a>
+    <nav>
+      <a href="/web/about.html" class="active">회사소개</a>
+      <a href="/web/report.html">난방 고장 접수</a>
+      <a href="/web/pipe-cleaning.html">배관청소 신청</a>
+      <a href="/web/leak-sensor.html">누수센서</a>
+      <a href="/web/branches.html">지사 찾기</a>
+      <a href="/web/reviews.html">고객 후기</a>
+      <a href="/web/faq.html">FAQ</a>
+      <a href="/web/contact.html">고객센터</a>
+      <a href="/web/download.html" class="nav-cta">앱 다운로드</a>
+    </nav>
+    <button class="hamburger" onclick="document.getElementById('mobileNav').classList.toggle('open')" aria-label="메뉴">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="mobile-nav" id="mobileNav">
+    <a href="/web/about.html">🏢 회사소개</a>
+    <a href="/web/report.html">🔧 난방 고장 접수</a>
+    <a href="/web/pipe-cleaning.html">🚿 배관청소 신청</a>
+    <a href="/web/leak-sensor.html">💧 누수센서 서비스</a>
+    <a href="/web/branches.html">📍 지사 찾기</a>
+    <a href="/web/reviews.html">⭐ 고객 후기</a>
+    <a href="/web/faq.html">❓ 자주 묻는 질문</a>
+    <a href="/web/contact.html">📞 고객센터</a>
+    <a href="/web/download.html">📱 앱 다운로드</a>
+    <a href="/web/admin/login.html" style="color:#e8380d;font-weight:700;">🔐 직원 로그인</a>
+  </div>
+</header>
+
+<!-- 히어로 -->
+<section class="page-hero">
+  <h1>🏢 회사소개</h1>
+  <p>퓨처에너지테크는 전국 지사 네트워크를 기반으로 24시간 난방 전문 서비스를 제공합니다</p>
+</section>
+
+<!-- 로고 & 브랜드 -->
+<section class="logo-section">
+  <div class="brand-logo-wrap">
+    <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-KjRgngG4L8kpqAHbUhB3yC.png" alt="퓨처에너지테크 로고" class="brand-logo-img" />
+    <div class="brand-name-block">
+      <div class="brand-name-kr">퓨처에너지테크</div>
+      <div class="brand-name-en">Future Energy Tech</div>
+      <div class="brand-tagline">24시간 난방 전문 서비스 · 전국 지사 운영</div>
+    </div>
+  </div>
+  <p class="brand-desc">
+    퓨처에너지테크는 아파트 지역난방 전문 업체로, 난방 배관청소, 분배기 수리, 온도조절기 수리, 각종 밸브 수리, 열량계·유량계 설치 등 종합 난방 서비스를 제공합니다. 전국 지사 네트워크를 통해 어디서나 빠르고 신뢰할 수 있는 서비스를 경험하세요.
+  </p>
+</section>
+
+<!-- 대표 소개 -->
+<section class="section" style="background:#fff;">
+  <div class="section-inner">
+    <div class="section-title">대표 소개</div>
+    <div class="divider"></div>
+    <div class="ceo-card">
+      <div class="ceo-avatar">👤</div>
+      <div class="ceo-info">
+        <h3>유 종 선</h3>
+        <div class="ceo-title">대표이사 · CEO</div>
+        <p>
+          퓨처에너지테크는 고객의 따뜻한 겨울을 위해 최선을 다합니다.<br />
+          전국 지사 네트워크와 전문 기술 인력을 바탕으로, 난방 문제가 발생했을 때 가장 빠르고 정확하게 해결해 드리겠습니다.<br /><br />
+          고객 만족을 최우선으로 생각하며, 투명한 견적과 책임 있는 사후 서비스로 신뢰받는 기업이 되겠습니다.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 연락처 -->
+<section class="section" style="background:var(--surface);">
+  <div class="section-inner">
+    <div class="section-title">연락처 및 위치</div>
+    <div class="divider"></div>
+    <div class="contact-grid">
+      <div class="contact-item">
+        <div class="ci-icon">📱</div>
+        <div class="ci-label">휴대전화</div>
+        <div class="ci-value"><a href="tel:010-5754-7310">010-5754-7310</a></div>
+      </div>
+      <div class="contact-item">
+        <div class="ci-icon">📞</div>
+        <div class="ci-label">대표전화</div>
+        <div class="ci-value"><a href="tel:031-8042-7310">031-8042-7310</a></div>
+      </div>
+      <div class="contact-item">
+        <div class="ci-icon">📠</div>
+        <div class="ci-label">팩스</div>
+        <div class="ci-value">031-403-7310</div>
+      </div>
+      <div class="contact-item">
+        <div class="ci-icon">✉️</div>
+        <div class="ci-label">이메일</div>
+        <div class="ci-value"><a href="mailto:yerusun@naver.com">yerusun@naver.com</a></div>
+      </div>
+      <div class="contact-item" style="grid-column: span 2;">
+        <div class="ci-icon">📍</div>
+        <div class="ci-label">주소</div>
+        <div class="ci-value">안산시 단원구 원포공원1로 67, 409호</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 주요 서비스 -->
+<section class="section" style="background:#fff;">
+  <div class="section-inner">
+    <div class="section-title">주요 서비스</div>
+    <div class="divider"></div>
+    <div class="service-list">
+      <div class="service-item">
+        <div class="si-icon">🚿</div>
+        <div class="si-title">난방 배관청소</div>
+      </div>
+      <div class="service-item">
+        <div class="si-icon">🔧</div>
+        <div class="si-title">분배기 수리</div>
+      </div>
+      <div class="service-item">
+        <div class="si-icon">🌡️</div>
+        <div class="si-title">온도조절기 수리</div>
+      </div>
+      <div class="service-item">
+        <div class="si-icon">🔩</div>
+        <div class="si-title">각종밸브 수리</div>
+      </div>
+      <div class="service-item">
+        <div class="si-icon">📊</div>
+        <div class="si-title">열량계·유량계 설치</div>
+      </div>
+      <div class="service-item">
+        <div class="si-icon">💧</div>
+        <div class="si-title">누수센서 설치</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 서비스 특징 -->
+<section class="section" style="background:var(--surface);">
+  <div class="section-inner">
+    <div class="section-title">퓨처에너지테크를 선택하는 이유</div>
+    <div class="divider"></div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="fc-icon">⚡</div>
+        <div class="fc-title">빠른 출동</div>
+        <div class="fc-desc">접수 후 평균 2~4시간 이내 기사 배정. 긴급 상황은 최우선 처리합니다.</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🌐</div>
+        <div class="fc-title">전국 지사 네트워크</div>
+        <div class="fc-desc">전국 각 지역에 담당 지사를 운영하여 어디서나 빠른 서비스가 가능합니다.</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">💬</div>
+        <div class="fc-title">투명한 견적</div>
+        <div class="fc-desc">작업 전 견적 확인 후 승인. 추가 비용 없이 약속한 금액만 청구합니다.</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🛡️</div>
+        <div class="fc-title">AS 보증</div>
+        <div class="fc-desc">작업 완료 후 일정 기간 무상 AS 보증. 고객 만족을 최우선으로 합니다.</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">📱</div>
+        <div class="fc-title">앱 연동 서비스</div>
+        <div class="fc-desc">전용 앱으로 접수 현황 확인, 기사 연락, 누수센서 모니터링까지 한 번에.</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🕐</div>
+        <div class="fc-title">24시간 긴급출동</div>
+        <div class="fc-desc">365일 24시간 긴급출동 서비스. 갑작스러운 난방 고장도 즉시 대응합니다.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>지금 바로 서비스를 신청하세요</h2>
+  <p>퓨처에너지테크가 따뜻한 겨울을 만들어 드립니다</p>
+  <div class="cta-buttons">
+    <a href="/web/report.html" class="btn-cta-primary">🔧 난방 고장 접수</a>
+    <a href="/web/pipe-cleaning.html" class="btn-cta-secondary">🚿 배관청소 신청</a>
+    <a href="tel:031-8042-7310" class="btn-cta-secondary">📞 전화 상담</a>
+  </div>
+</section>
+
+<!-- 푸터 -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="logo-text">퓨처에너지테크</div>
+      <p>전국 지사 운영 · 24시간 긴급출동<br />대표: 유종선 &nbsp;|&nbsp; 휴대폰: 010-5754-7310<br />전화: 031-8042-7310 &nbsp;|&nbsp; 팩스: 031-403-7310<br />이메일: yerusun@naver.com<br />주소: 안산시 단원구 원포공원1로 67, 409호</p>
+    </div>
+    <div class="footer-links">
+      <h4>서비스</h4>
+      <a href="/web/report.html">난방 고장 접수</a>
+      <a href="/web/pipe-cleaning.html">배관청소 신청</a>
+      <a href="/web/leak-sensor.html">누수센서 서비스</a>
+      <a href="/web/branches.html">지사 찾기</a>
+    </div>
+    <div class="footer-links">
+      <h4>고객 지원</h4>
+      <a href="/web/faq.html">자주 묻는 질문</a>
+      <a href="/web/contact.html">고객센터</a>
+      <a href="/web/reviews.html">고객 후기</a>
+      <a href="/web/download.html">앱 다운로드</a>
+    </div>
+    <div class="footer-links">
+      <h4>직원 로그인</h4>
+      <a href="/web/admin/login.html">본사 관리자</a>
+      <a href="/web/admin/login.html">지사장</a>
+      <a href="/web/about.html">회사소개</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2025 퓨처에너지테크. All rights reserved.</span>
+    <span>대표: 유종선 · 안산시 단원구 원포공원1로 67, 409호</span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -70,7 +70,7 @@ export default function HQAdminScreen() {
         {isWide ? (
           <View style={s.sidebar}>
             <View style={s.sidebarHeader}>
-              <Text style={s.sidebarTitle}>🔥 퓨처에너지</Text>
+              <Text style={s.sidebarTitle}>퓨처에너지테크</Text>
               <Text style={s.sidebarSub}>본사 관리자</Text>
             </View>
             {TAB_LABELS.map((tab) => (

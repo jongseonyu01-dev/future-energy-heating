@@ -122,7 +122,7 @@ export default function AdminScreen() {
       <View style={[styles.adminHeader, { backgroundColor: "#1A1A1A" }]}>
         <View>
           <Text style={styles.adminHeaderTitle}>⚙️ 관리자</Text>
-          <Text style={styles.adminHeaderSubtitle}>퓨처에너지 난방케어</Text>
+          <Text style={styles.adminHeaderSubtitle}>퓨처에너지테크</Text>
         </View>
         <Pressable
           style={[styles.logoutButton, { borderColor: "rgba(255,255,255,0.3)" }]}
@@ -1654,7 +1654,7 @@ function SettingsTab({ colors }: { colors: any }) {
       </View>
 
       <Text style={[styles.settingsFooter, { color: colors.muted }]}>
-        퓨처에너지 난방케어 관리자 설정
+        퓨처에너지테크 관리자 설정
       </Text>
     </ScrollView>
   );

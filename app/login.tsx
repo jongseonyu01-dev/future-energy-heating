@@ -75,9 +75,10 @@ export default function LoginScreen() {
           {/* 로고 영역 */}
           <View style={s.header}>
             <View style={s.logoBox}>
-              <Text style={s.logoText}>🔥</Text>
+              <Text style={s.logoText}>🌐</Text>
             </View>
-            <Text style={s.title}>퓨처에너지 난방케어</Text>
+            <Text style={s.title}>퓨처에너지테크</Text>
+            <Text style={s.subtitle2}>Future Energy Tech</Text>
             <Text style={s.subtitle}>전국 지사 통합 관리 시스템</Text>
           </View>
 
@@ -133,7 +134,7 @@ export default function LoginScreen() {
 
           <Text style={s.footer}>
             계정 문의: 담당 지사 또는 본사{"\n"}
-            본사 대표번호: 1588-0000
+            본사 대표번호: 031-8042-7310
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -156,7 +157,7 @@ const styles = (colors: ReturnType<typeof useColors>) =>
       width: 80,
       height: 80,
       borderRadius: 20,
-      backgroundColor: "#FF6B35",
+      backgroundColor: "#1A3A6B",
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 16,
@@ -166,12 +167,18 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     },
     title: {
       fontSize: 22,
-      fontWeight: "700",
-      color: colors.foreground,
+      fontWeight: "800",
+      color: "#1A3A6B",
+      marginBottom: 2,
+    },
+    subtitle2: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: "#E8380D",
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: 13,
       color: colors.muted,
     },
     form: {
