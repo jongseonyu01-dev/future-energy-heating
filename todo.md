@@ -74,3 +74,6 @@
 - [x] 난방 고장 접수 화면 이탈/크래시 수정: expo-image-picker를 SDK54 신형 API(mediaTypes 배열)로 교체 + 사진 권한 요청 + try/catch 예외 처리
 - [x] app.config.ts에 expo-image-picker 권한 플러그인(photosPermission) 추가 (네이티브 빌드 권한 누락 크래시 방지)
 - [x] 수정 후 테스트 27개 통과, 웹 미리보기에서 고장접수 진입/증상선택 정상 확인
+- [x] 설치된 APK 크래시 근본 원인 제거: expo-image-picker import를 report.tsx에서 완전 삭제 (네이티브 모듈 미포함 APK에서 모듈 초기화 크래시 방지)
+- [x] report.tsx 전면 재작성: StyleSheet.create 기반 안전한 네이티브 코드, 사진첨부 기능 제거, 모든 기능 유지
+- [x] 전체 앱 expo-image-picker 참조 0건 확인, 테스트 27개 통과

@@ -10,11 +10,9 @@ import {
   Platform,
 } from "react-native";
 import { useState } from "react";
-import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
-import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from "expo-haptics";
 
 const SYMPTOMS = [
@@ -39,7 +37,6 @@ type SymptomId = typeof SYMPTOMS[number]["id"];
 
 export default function ReportScreen() {
   const colors = useColors();
-  const router = useRouter();
 
   const [customerName, setCustomerName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -48,7 +45,6 @@ export default function ReportScreen() {
   const [ho, setHo] = useState("");
   const [symptom, setSymptom] = useState<SymptomId | null>(null);
   const [detailContent, setDetailContent] = useState("");
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [preferredDate, setPreferredDate] = useState("");
   const [preferredTime, setPreferredTime] = useState("");
   const [showTimeSlots, setShowTimeSlots] = useState(false);
@@ -72,7 +68,6 @@ export default function ReportScreen() {
               setHo("");
               setSymptom(null);
               setDetailContent("");
-              setPhotoUrl(null);
               setPreferredDate("");
               setPreferredTime("");
             },
@@ -80,36 +75,10 @@ export default function ReportScreen() {
         ]
       );
     },
-    onError: (error) => {
+    onError: () => {
       Alert.alert("오류", "접수 중 오류가 발생했습니다. 다시 시도해주세요.");
     },
   });
-
-  const handlePickImage = async () => {
-    try {
-      if (Platform.OS !== "web") {
-        const { status } =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert(
-            "권한 필요",
-            "사진을 첨부하려면 사진 접근 권한을 허용해주세요."
-          );
-          return;
-        }
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setPhotoUrl(result.assets[0].uri);
-      }
-    } catch (e) {
-      Alert.alert("오류", "사진을 불러오는 중 문제가 발생했습니다.");
-    }
-  };
 
   const handleSubmit = () => {
     if (!customerName.trim()) {
@@ -146,7 +115,6 @@ export default function ReportScreen() {
       requestType: "난방고장",
       symptom,
       detailContent: detailContent.trim() || undefined,
-      photoUrl: photoUrl || undefined,
       preferredDate: preferredDate.trim() || undefined,
       preferredTime: preferredTime.trim() || undefined,
     });
@@ -278,31 +246,6 @@ export default function ReportScreen() {
               textAlignVertical="top"
             />
           </View>
-
-          {/* 사진 첨부 */}
-          <SectionTitle title="📷 사진 첨부" />
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.photoButton,
-              {
-                backgroundColor: photoUrl ? "#F0FDF4" : colors.surface,
-                borderColor: photoUrl ? "#16A34A" : colors.border,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-            onPress={handlePickImage}
-          >
-            <Text style={styles.photoIcon}>{photoUrl ? "✅" : "📷"}</Text>
-            <Text
-              style={[
-                styles.photoText,
-                { color: photoUrl ? "#16A34A" : colors.muted },
-              ]}
-            >
-              {photoUrl ? "사진이 첨부되었습니다" : "사진을 첨부하세요 (선택사항)"}
-            </Text>
-          </Pressable>
 
           {/* 방문 희망 일정 */}
           <SectionTitle title="📅 방문 희망 일정" />
@@ -543,23 +486,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     minHeight: 80,
-  },
-  photoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    gap: 10,
-    marginBottom: 8,
-  },
-  photoIcon: {
-    fontSize: 24,
-  },
-  photoText: {
-    fontSize: 16,
-    fontWeight: "500",
   },
   timeSelectContainer: {
     marginBottom: 12,
