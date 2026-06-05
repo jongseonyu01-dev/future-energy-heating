@@ -77,3 +77,6 @@
 - [x] 설치된 APK 크래시 근본 원인 제거: expo-image-picker import를 report.tsx에서 완전 삭제 (네이티브 모듈 미포함 APK에서 모듈 초기화 크래시 방지)
 - [x] report.tsx 전면 재작성: StyleSheet.create 기반 안전한 네이티브 코드, 사진첨부 기능 제거, 모든 기능 유지
 - [x] 전체 앱 expo-image-picker 참조 0건 확인, 테스트 27개 통과
+
+## 기능 추가 (5차)
+- [x] 고장접수 화면 방문 희망 날짜 입력을 달력(Calendar) UI로 교체 (외부 라이브러리 없이 순수 RN 구현, 오늘 이전 날짜 비활성화, 선택 날짜 강조, 취소 버튼 포함)
