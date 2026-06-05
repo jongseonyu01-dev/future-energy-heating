@@ -81,3 +81,14 @@
 ## 기능 추가 (5차)
 - [x] 고장접수 화면 방문 희망 날짜 입력을 달력(Calendar) UI로 교체 (외부 라이브러리 없이 순수 RN 구현, 오늘 이전 날짜 비활성화, 선택 날짜 강조, 취소 버튼 포함)
 - [x] 배관청소 신청 화면 방문 희망 날짜도 CalendarPicker UI로 교체
+
+## 전국 지사 확장 (6차)
+- [x] DB 스키마 확장: branches, app_roles, branch_region_mappings, work_reports, notices, training_materials, material_orders 테이블 추가
+- [x] 서버 API 확장: 인증(로그인/계정생성), 지사 CRUD, 지역 자동배정, 기사배정, 작업보고서, 공지, 교육자료, 자재주문 API
+- [x] 로그인 화면 및 AuthContext 권한 관리 (customer/technician/branch_manager/hq_admin)
+- [x] 탭 레이아웃 권한별 동적 분기
+- [x] 현장 기사 화면: 오늘 일정, 작업 목록, 현장 점검표(체크리스트·자재·메모·재방문·완료보고)
+- [x] 지사장 화면: 대시보드, 접수관리(기사배정·일정수정·견적작성), 기사관리
+- [x] 본사 관리자 반응형 대시보드: 전국 접수현황, 지사별 통계, 계정관리, 지역배정맵, 자재주문, 공지작성
+- [x] 누수센서 SMS 확장: 고객+지사장+본사관리자 동시 발송
+- [x] TypeScript 오류 0건, 테스트 27개 통과

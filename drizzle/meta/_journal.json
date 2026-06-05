@@ -15,6 +15,13 @@
       "when": 1780576443690,
       "tag": "0001_cute_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1780630308375,
+      "tag": "0002_real_slyde",
+      "breakpoints": true
     }
   ]
 }

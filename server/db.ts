@@ -520,3 +520,276 @@ export async function getSensorEvents(
     .orderBy(desc(sensorEvents.createdAt))
     .limit(50);
 }
+
+// ─── 앱 권한 관리 ──────────────────────────────────────────────
+import {
+  appRoles,
+  branches,
+  regionMappings,
+  workReports,
+  notices,
+  trainingMaterials,
+  materialOrders,
+  AppRole,
+  InsertAppRole,
+  Branch,
+  InsertBranch,
+  WorkReport,
+  InsertWorkReport,
+  Notice,
+  InsertNotice,
+  TrainingMaterial,
+  InsertTrainingMaterial,
+  MaterialOrder,
+  InsertMaterialOrder,
+} from "../drizzle/schema";
+import { like, isNull, sql } from "drizzle-orm";
+
+// 앱 권한 조회 (userId 기준)
+export async function getAppRole(userId: number): Promise<AppRole | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appRoles).where(eq(appRoles.userId, userId)).limit(1);
+  return rows[0] ?? null;
+}
+
+// 앱 권한 생성/업데이트
+export async function upsertAppRole(data: InsertAppRole): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(appRoles).values(data).onDuplicateKeyUpdate({
+    set: { appRole: data.appRole, loginId: data.loginId, passwordHash: data.passwordHash, phoneNumber: data.phoneNumber, isActive: data.isActive },
+  });
+}
+
+// loginId로 앱 권한 조회 (비밀번호 로그인용)
+export async function getAppRoleByLoginId(loginId: string): Promise<AppRole | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appRoles).where(eq(appRoles.loginId, loginId)).limit(1);
+  return rows[0] ?? null;
+}
+
+// 전체 앱 권한 목록 (본사 관리자용)
+export async function getAllAppRoles(): Promise<AppRole[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(appRoles).orderBy(desc(appRoles.createdAt));
+}
+
+// ─── 지사 관리 ─────────────────────────────────────────────────
+export async function getAllBranches(): Promise<Branch[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(branches).orderBy(branches.name);
+}
+
+export async function getActiveBranches(): Promise<Branch[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(branches).where(eq(branches.isActive, true)).orderBy(branches.name);
+}
+
+export async function getBranchById(id: number): Promise<Branch | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createBranch(data: InsertBranch): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(branches).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+export async function updateBranch(id: number, data: Partial<InsertBranch>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(branches).set(data).where(eq(branches.id, id));
+}
+
+// ─── 지역 자동 배정 ────────────────────────────────────────────
+// 주소 문자열에서 담당 지사를 찾아 반환 (없으면 null = 본사)
+export async function findBranchByAddress(address: string): Promise<Branch | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const mappings = await db
+    .select()
+    .from(regionMappings)
+    .orderBy(desc(regionMappings.priority));
+  for (const mapping of mappings) {
+    if (address.includes(mapping.keyword)) {
+      const branch = await getBranchById(mapping.branchId);
+      if (branch?.isActive) return branch;
+    }
+  }
+  return null;
+}
+
+// 지역 매핑 목록 조회
+export async function getRegionMappings() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(regionMappings).orderBy(desc(regionMappings.priority));
+}
+
+// 지역 매핑 추가
+export async function addRegionMapping(branchId: number, keyword: string, priority: number = 0) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(regionMappings).values({ branchId, keyword, priority });
+}
+
+// 지역 매핑 삭제
+export async function deleteRegionMapping(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(regionMappings).where(eq(regionMappings.id, id));
+}
+
+// ─── 지사별 접수 조회 ──────────────────────────────────────────
+export async function getRepairRequestsByBranch(branchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(repairRequests)
+    .where(eq(repairRequests.branchId, branchId))
+    .orderBy(desc(repairRequests.createdAt));
+}
+
+// 기사별 배정 접수 조회
+export async function getRepairRequestsByTechnician(technicianId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(repairRequests)
+    .where(eq(repairRequests.technicianId, technicianId))
+    .orderBy(desc(repairRequests.createdAt));
+}
+
+// 접수 지사 재배정 (본사 관리자용)
+export async function reassignBranch(requestId: number, branchId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(repairRequests).set({ branchId }).where(eq(repairRequests.id, requestId));
+}
+
+// ─── 기사 지사별 조회 ──────────────────────────────────────────
+export async function getTechniciansByBranch(branchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(technicians)
+    .where(and(eq(technicians.branchId, branchId), eq(technicians.isActive, true)))
+    .orderBy(technicians.name);
+}
+
+// userId로 기사 조회
+export async function getTechnicianByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(technicians).where(eq(technicians.userId, userId)).limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── 작업 보고서 ───────────────────────────────────────────────
+export async function getWorkReportByRequestId(requestId: number): Promise<WorkReport | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(workReports).where(eq(workReports.requestId, requestId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertWorkReport(data: InsertWorkReport): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getWorkReportByRequestId(data.requestId);
+  if (existing) {
+    await db.update(workReports).set(data).where(eq(workReports.id, existing.id));
+    return { id: existing.id };
+  }
+  const result = await db.insert(workReports).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+// ─── 공지사항 ──────────────────────────────────────────────────
+export async function getNotices(branchId?: number): Promise<Notice[]> {
+  const db = await getDb();
+  if (!db) return [];
+  // 전체 공지 + 해당 지사 공지
+  const all = await db.select().from(notices).orderBy(desc(notices.isPinned), desc(notices.createdAt)).limit(50);
+  if (branchId === undefined) return all;
+  return all.filter(n => n.targetBranchId === null || n.targetBranchId === branchId);
+}
+
+export async function createNotice(data: InsertNotice): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(notices).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+// ─── 교육 자료 ─────────────────────────────────────────────────
+export async function getTrainingMaterials(): Promise<TrainingMaterial[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(trainingMaterials).orderBy(desc(trainingMaterials.createdAt));
+}
+
+export async function createTrainingMaterial(data: InsertTrainingMaterial): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(trainingMaterials).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+// ─── 자재 주문 ─────────────────────────────────────────────────
+export async function getMaterialOrders(branchId?: number): Promise<MaterialOrder[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (branchId !== undefined) {
+    return db.select().from(materialOrders).where(eq(materialOrders.branchId, branchId)).orderBy(desc(materialOrders.createdAt));
+  }
+  return db.select().from(materialOrders).orderBy(desc(materialOrders.createdAt));
+}
+
+export async function createMaterialOrder(data: InsertMaterialOrder): Promise<{ id: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(materialOrders).values(data);
+  return { id: (result as any)[0].insertId };
+}
+
+export async function updateMaterialOrderStatus(id: number, status: MaterialOrder["status"], approvedBy?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(materialOrders).set({ status, ...(approvedBy ? { approvedBy } : {}) }).where(eq(materialOrders.id, id));
+}
+
+// ─── 지사별 누수센서 조회 ──────────────────────────────────────
+export async function getSensorsByBranch(branchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(leakSensors).where(eq(leakSensors.branchId, branchId)).orderBy(desc(leakSensors.updatedAt));
+}
+
+// ─── 통계 (지사별 매출/실적) ───────────────────────────────────
+export async function getBranchStats(branchId?: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, completed: 0, pending: 0, revisit: 0 };
+  let query = db.select().from(repairRequests);
+  const all = branchId
+    ? await query.where(eq(repairRequests.branchId, branchId))
+    : await query;
+  return {
+    total: all.length,
+    completed: all.filter(r => r.status === "작업완료").length,
+    pending: all.filter(r => !["작업완료"].includes(r.status)).length,
+    revisit: all.filter(r => r.needsRevisit).length,
+  };
+}
