@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>난방 고장 접수 - 퓨처에너지 난방케어</title>
+  <style>
+    :root { --primary: #e85d04; --primary-dark: #c44d00; --primary-light: #fff3ec; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb; --bg: #ffffff; --surface: #f9fafb; --error: #ef4444; --success: #22c55e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: var(--text); background: var(--surface); }
+    a { text-decoration: none; color: inherit; }
+    header { background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: var(--primary); }
+    .back-btn { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; cursor: pointer; }
+    .back-btn:hover { color: var(--primary); }
+    .page-hero { background: linear-gradient(135deg, #1a1a2e, #0f3460); color: #fff; padding: 40px 24px; text-align: center; }
+    .page-hero h1 { font-size: clamp(22px, 4vw, 36px); font-weight: 800; margin-bottom: 8px; }
+    .page-hero p { color: rgba(255,255,255,.7); font-size: 15px; }
+    .form-container { max-width: 720px; margin: 32px auto; padding: 0 16px 60px; }
+    .form-card { background: var(--bg); border-radius: 20px; padding: 32px; box-shadow: 0 2px 16px rgba(0,0,0,.06); margin-bottom: 20px; }
+    .form-card h2 { font-size: 17px; font-weight: 700; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid var(--primary-light); color: var(--primary); }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    label .req { color: var(--error); margin-left: 2px; }
+    input, select, textarea {
+      width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px;
+      font-size: 15px; font-family: inherit; background: var(--bg); color: var(--text);
+      transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    textarea { resize: vertical; min-height: 100px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+    .symptom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+    .symptom-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; transition: all .15s; }
+    .symptom-item:hover { border-color: var(--primary); background: var(--primary-light); }
+    .symptom-item.selected { border-color: var(--primary); background: var(--primary-light); }
+    .symptom-item input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+    .symptom-item span { font-size: 14px; font-weight: 500; }
+    .time-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+    .time-btn { padding: 10px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; }
+    .time-btn:hover, .time-btn.selected { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 600; }
+    .submit-btn {
+      width: 100%; padding: 16px; background: var(--primary); color: #fff; border: none;
+      border-radius: 14px; font-size: 17px; font-weight: 700; cursor: pointer;
+      transition: background .15s, transform .1s; box-shadow: 0 4px 16px rgba(232,93,4,.35);
+    }
+    .submit-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .submit-btn:disabled { background: #d1d5db; box-shadow: none; cursor: not-allowed; transform: none; }
+    .success-box { display: none; background: #f0fdf4; border: 2px solid var(--success); border-radius: 16px; padding: 32px; text-align: center; }
+    .success-box.show { display: block; }
+    .success-icon { font-size: 56px; margin-bottom: 16px; }
+    .success-box h3 { font-size: 22px; font-weight: 800; color: #15803d; margin-bottom: 8px; }
+    .success-box p { color: #166534; font-size: 15px; line-height: 1.7; }
+    .error-msg { color: var(--error); font-size: 13px; margin-top: 4px; display: none; }
+    .calendar-input { position: relative; }
+    .calendar-input input { cursor: pointer; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/web/index.html" class="logo">🔥 퓨처에너지</a>
+  <a href="/web/index.html" class="back-btn">← 홈으로</a>
+</header>
+
+<div class="page-hero">
+  <h1>🔧 난방 고장 접수</h1>
+  <p>접수 후 담당 기사가 배정되면 문자로 안내해 드립니다</p>
+</div>
+
+<div class="form-container">
+  <div id="successBox" class="success-box">
+    <div class="success-icon">✅</div>
+    <h3>접수가 완료되었습니다!</h3>
+    <p id="successMsg">담당자가 확인 후 연락드리겠습니다.<br />접수 번호: <strong id="receiptNum"></strong></p>
+    <br />
+    <a href="/web/index.html" style="color:var(--primary);font-weight:700;">← 홈으로 돌아가기</a>
+  </div>
+
+  <form id="reportForm">
+    <!-- 고객 정보 -->
+    <div class="form-card">
+      <h2>📋 고객 정보</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>이름 <span class="req">*</span></label>
+          <input type="text" id="customerName" placeholder="홍길동" required />
+        </div>
+        <div class="form-group">
+          <label>휴대폰 번호 <span class="req">*</span></label>
+          <input type="tel" id="customerPhone" placeholder="010-0000-0000" required />
+        </div>
+      </div>
+    </div>
+
+    <!-- 주소 -->
+    <div class="form-card">
+      <h2>📍 주소 정보</h2>
+      <div class="form-group">
+        <label>아파트(단지)명 <span class="req">*</span></label>
+        <input type="text" id="aptName" placeholder="예: 안산 푸르지오" required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>동 <span class="req">*</span></label>
+          <input type="text" id="aptDong" placeholder="예: 101" required />
+        </div>
+        <div class="form-group">
+          <label>호수 <span class="req">*</span></label>
+          <input type="text" id="aptHo" placeholder="예: 1502" required />
+        </div>
+      </div>
+    </div>
+
+    <!-- 증상 선택 -->
+    <div class="form-card">
+      <h2>🩺 증상 선택 (복수 선택 가능)</h2>
+      <div class="symptom-grid" id="symptomGrid">
+        <label class="symptom-item">
+          <input type="checkbox" value="집전체가춥다" onchange="updateSymptom(this)" />
+          <span>🥶 집 전체가 춥다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="방일부만춥다" onchange="updateSymptom(this)" />
+          <span>🚪 방 일부만 춥다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="분배기에서물이샌다" onchange="updateSymptom(this)" />
+          <span>💧 분배기에서 물이 샌다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="온도조절기가작동하지않는다" onchange="updateSymptom(this)" />
+          <span>🌡️ 온도조절기가 작동하지 않는다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="난방비가많이나온다" onchange="updateSymptom(this)" />
+          <span>💸 난방비가 많이 나온다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="배관청소가필요하다" onchange="updateSymptom(this)" />
+          <span>🚿 배관청소가 필요하다</span>
+        </label>
+        <label class="symptom-item">
+          <input type="checkbox" value="기타문의" onchange="updateSymptom(this); toggleEtc(this)" />
+          <span>📝 기타 문의</span>
+        </label>
+      </div>
+      <div id="etcInput" style="display:none;margin-top:14px;">
+        <label>기타 문의 상세 내용</label>
+        <textarea id="etcDetail" placeholder="기타 문의 내용을 자세히 입력해 주세요..." rows="3"></textarea>
+      </div>
+      <div class="error-msg" id="symptomError">증상을 하나 이상 선택해 주세요.</div>
+    </div>
+
+    <!-- 방문 일정 -->
+    <div class="form-card">
+      <h2>📅 방문 희망 일정</h2>
+      <div class="form-group">
+        <label>방문 희망 날짜 <span class="req">*</span></label>
+        <input type="date" id="visitDate" required />
+        <p class="hint">오늘 이후 날짜를 선택해 주세요</p>
+      </div>
+      <div class="form-group">
+        <label>방문 희망 시간</label>
+        <div class="time-grid" id="timeGrid">
+          <div class="time-btn" onclick="selectTime(this, '오전 9시')">오전 9시</div>
+          <div class="time-btn" onclick="selectTime(this, '오전 10시')">오전 10시</div>
+          <div class="time-btn" onclick="selectTime(this, '오전 11시')">오전 11시</div>
+          <div class="time-btn" onclick="selectTime(this, '오후 1시')">오후 1시</div>
+          <div class="time-btn" onclick="selectTime(this, '오후 2시')">오후 2시</div>
+          <div class="time-btn" onclick="selectTime(this, '오후 3시')">오후 3시</div>
+          <div class="time-btn" onclick="selectTime(this, '오후 4시')">오후 4시</div>
+          <div class="time-btn" onclick="selectTime(this, '오후 5시')">오후 5시</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>추가 메모</label>
+        <textarea id="memo" placeholder="기사님께 전달할 내용을 입력해 주세요 (선택사항)" rows="3"></textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">접수하기</button>
+  </form>
+</div>
+
+<script>
+  const API = '/api/trpc';
+  let selectedSymptoms = [];
+  let selectedTime = '';
+
+  // 오늘 날짜 최소값 설정
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('visitDate').min = today;
+
+  function updateSymptom(cb) {
+    const label = cb.closest('.symptom-item');
+    if (cb.checked) {
+      selectedSymptoms.push(cb.value);
+      label.classList.add('selected');
+    } else {
+      selectedSymptoms = selectedSymptoms.filter(s => s !== cb.value);
+      label.classList.remove('selected');
+    }
+  }
+
+  function toggleEtc(cb) {
+    document.getElementById('etcInput').style.display = cb.checked ? 'block' : 'none';
+  }
+
+  function selectTime(btn, time) {
+    document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedTime = time;
+  }
+
+  // 전화번호 자동 하이픈
+  document.getElementById('customerPhone').addEventListener('input', function() {
+    let v = this.value.replace(/\D/g, '');
+    if (v.length <= 3) this.value = v;
+    else if (v.length <= 7) this.value = v.slice(0,3) + '-' + v.slice(3);
+    else this.value = v.slice(0,3) + '-' + v.slice(3,7) + '-' + v.slice(7,11);
+  });
+
+  document.getElementById('reportForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    if (selectedSymptoms.length === 0) {
+      document.getElementById('symptomError').style.display = 'block';
+      return;
+    }
+    document.getElementById('symptomError').style.display = 'none';
+
+    const name = document.getElementById('customerName').value.trim();
+    const phone = document.getElementById('customerPhone').value.trim();
+    const aptName = document.getElementById('aptName').value.trim();
+    const dong = document.getElementById('aptDong').value.trim();
+    const ho = document.getElementById('aptHo').value.trim();
+    const visitDate = document.getElementById('visitDate').value;
+    const memo = document.getElementById('memo').value.trim();
+    const etcDetail = document.getElementById('etcDetail').value.trim();
+
+    const symptomsToSend = [...selectedSymptoms];
+    if (etcDetail) symptomsToSend.push('기타: ' + etcDetail);
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '접수 중...';
+
+    try {
+      const res = await fetch(API + '/repair.create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          json: {
+            customerName: name,
+            customerPhone: phone,
+            aptName,
+            dong,
+            ho,
+            symptoms: symptomsToSend,
+            symptom: symptomsToSend[0] || '기타문의',
+            visitDate,
+            visitTime: selectedTime || '미정',
+            memo,
+            requestType: '난방고장',
+            source: 'web',
+          }
+        })
+      });
+      const data = await res.json();
+      if (data.result?.data?.json?.id) {
+        document.getElementById('reportForm').style.display = 'none';
+        document.getElementById('receiptNum').textContent = data.result.data.json.id;
+        document.getElementById('successBox').classList.add('show');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error(data.error?.message || '접수 실패');
+      }
+    } catch (err) {
+      alert('접수 중 오류가 발생했습니다: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '접수하기';
+    }
+  });
+</script>
+</body>
+</html>

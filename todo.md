@@ -109,3 +109,20 @@
 - [x] 문자 발송 성공 여부·발송 시간 이력 화면 추가
 - [x] SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수 등록
 - [x] 테스트 31개 통과, TypeScript 오류 0건
+
+## 홈페이지 구축 (8차)
+- [x] 고객용 홈페이지 메인 페이지 (반응형, 상단 메뉴, 4개 CTA 버튼)
+- [x] 난방 고장 접수 웹 폼 (앱과 동일 서버 저장, SMS 자동 발송)
+- [x] 배관청소 신청 웹 폼
+- [x] 누수센서 서비스 소개 페이지
+- [x] 지사 찾기 페이지
+- [x] 자주 묻는 질문(FAQ) 페이지
+- [x] 고객센터 페이지
+- [x] 앱 다운로드 페이지 (안드로이드 APK + QR코드)
+- [x] 본사 관리자 웹 대시보드 (전국 접수현황, 지사별 통계, 엑셀 다운로드 등)
+- [x] 지사장 웹 대시보드 (자기 지사 데이터만 조회)
+- [x] 반응형 디자인 (PC/태블릿/모바일)
+- [x] 홈페이지 접수 완료 시 SOLAPI SMS 자동 발송
+- [x] 웹 관리자 로그인 버그 수정 (dashboard.html, branch.html에서 user.role → user.appRole 수정)
+- [x] admin 계정 dashboard.html 진입 검증 완료
+- [x] ansan 계정 branch.html 진입 검증 완료
