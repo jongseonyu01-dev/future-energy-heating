@@ -14,6 +14,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+import { CalendarPicker } from "@/components/calendar-picker";
 
 const TIME_SLOTS = [
   "오전 9시 ~ 11시",
@@ -206,13 +207,17 @@ export default function PipeCleaningScreen() {
           {/* 방문 희망 일정 */}
           <SectionTitle title="📅 방문 희망 일정" />
 
-          <InputField
-            label="방문 희망 날짜"
-            value={preferredDate}
-            onChangeText={setPreferredDate}
-            placeholder="예) 2024-06-10"
-            colors={colors}
-          />
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+              방문 희망 날짜
+            </Text>
+            <CalendarPicker
+              value={preferredDate}
+              onChange={setPreferredDate}
+              placeholder="날짜를 선택하세요"
+              minDate={new Date()}
+            />
+          </View>
 
           <View style={styles.timeSelectContainer}>
             <Text style={[styles.inputLabel, { color: colors.foreground }]}>
