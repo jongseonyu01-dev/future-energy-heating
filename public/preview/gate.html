@@ -21,98 +21,58 @@
     .card {
       background: #fff;
       border-radius: 20px;
-      box-shadow: 0 8px 48px rgba(0,0,0,0.30);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.35);
       padding: 48px 36px;
       max-width: 400px;
       width: 100%;
       text-align: center;
     }
-    .lock-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-    }
-    .brand {
-      font-size: 13px;
-      color: #888;
-      margin-bottom: 4px;
-    }
-    h1 {
-      font-size: 20px;
-      font-weight: 800;
-      color: #1a1a1a;
-      margin-bottom: 8px;
-    }
-    .desc {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
+    .lock-icon { font-size: 52px; margin-bottom: 16px; }
+    .brand { font-size: 13px; color: #888; margin-bottom: 4px; font-weight: 600; }
+    h1 { font-size: 20px; font-weight: 800; color: #1a1a1a; margin-bottom: 8px; }
+    .desc { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.65; }
     .badge {
       display: inline-block;
-      background: #FEF3C7;
-      color: #D97706;
+      background: #FEF3C7; color: #D97706;
       border: 1px solid #FDE68A;
-      border-radius: 20px;
-      padding: 4px 12px;
-      font-size: 12px;
-      font-weight: 700;
-      margin-bottom: 24px;
+      border-radius: 20px; padding: 4px 14px;
+      font-size: 12px; font-weight: 700;
+      margin-bottom: 28px;
     }
     label {
-      display: block;
-      text-align: left;
-      font-size: 13px;
-      font-weight: 700;
-      color: #374151;
-      margin-bottom: 8px;
+      display: block; text-align: left;
+      font-size: 13px; font-weight: 700;
+      color: #374151; margin-bottom: 8px;
     }
     input[type="password"] {
-      width: 100%;
-      padding: 14px 16px;
+      width: 100%; padding: 15px 16px;
       border: 2px solid #E5E7EB;
-      border-radius: 12px;
-      font-size: 16px;
-      color: #1a1a1a;
-      outline: none;
+      border-radius: 12px; font-size: 17px;
+      color: #1a1a1a; outline: none;
       transition: border-color 0.2s;
-      margin-bottom: 16px;
-      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+      letter-spacing: 0.12em;
+      -webkit-text-security: disc;
     }
-    input[type="password"]:focus {
-      border-color: #FF6B35;
-    }
+    input[type="password"]:focus { border-color: #FF6B35; box-shadow: 0 0 0 3px rgba(255,107,53,0.12); }
     .btn {
-      width: 100%;
-      padding: 15px;
+      width: 100%; padding: 16px;
       background: linear-gradient(135deg, #FF6B35, #FF8C42);
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
+      color: #fff; border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
       transition: transform 0.15s, box-shadow 0.15s;
-      box-shadow: 0 4px 16px rgba(255,107,53,0.30);
+      box-shadow: 0 4px 18px rgba(255,107,53,0.32);
     }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255,107,53,0.40); }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(255,107,53,0.42); }
     .btn:active { transform: scale(0.98); }
     .error {
       display: none;
-      background: #FEF2F2;
-      border: 1px solid #FECACA;
-      color: #DC2626;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 13px;
-      font-weight: 600;
+      background: #FEF2F2; border: 1px solid #FECACA;
+      color: #DC2626; border-radius: 10px;
+      padding: 10px 14px; font-size: 13px; font-weight: 600;
       margin-top: 12px;
     }
-    .footer {
-      margin-top: 28px;
-      font-size: 12px;
-      color: #bbb;
-    }
+    .footer { margin-top: 28px; font-size: 12px; color: #bbb; }
   </style>
 </head>
 <body>
@@ -124,10 +84,10 @@
     <div class="badge">🚫 검색엔진 차단 · 비공개</div>
 
     <label for="pw">비밀번호</label>
-    <input type="password" id="pw" placeholder="비밀번호 입력" autofocus
+    <input type="password" id="pw" placeholder="비밀번호를 입력하세요" autofocus
       onkeydown="if(event.key==='Enter') checkPw()">
     <button class="btn" onclick="checkPw()">입장하기</button>
-    <div class="error" id="err">❌ 비밀번호가 올바르지 않습니다.</div>
+    <div class="error" id="err">❌ 비밀번호가 올바르지 않습니다. 다시 입력해 주세요.</div>
 
     <p class="footer">© 2025 퓨처에너지테크 내부용</p>
   </div>
@@ -135,15 +95,19 @@
   <script>
     // 이미 인증된 경우 바로 통과
     if (sessionStorage.getItem('preview_auth') === 'ok') {
-      location.replace('/preview/index.html');
+      var ret = sessionStorage.getItem('preview_return') || '/preview/index.html';
+      sessionStorage.removeItem('preview_return');
+      location.replace(ret);
     }
 
     function checkPw() {
-      const val = document.getElementById('pw').value;
+      var val = document.getElementById('pw').value.trim();
       // 비밀번호: future2025!
       if (val === 'future2025!') {
         sessionStorage.setItem('preview_auth', 'ok');
-        location.replace('/preview/index.html');
+        var ret = sessionStorage.getItem('preview_return') || '/preview/index.html';
+        sessionStorage.removeItem('preview_return');
+        location.replace(ret);
       } else {
         document.getElementById('err').style.display = 'block';
         document.getElementById('pw').value = '';
