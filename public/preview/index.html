@@ -224,9 +224,35 @@
 </header>
 
 <!-- 긴급출동 배너 -->
-<div class="emergency-banner">
-  <a href="tel:031-8042-7310">📞 24시간 긴급출동: 031-8042-7310 &nbsp;|  휴대폰: 010-5754-7310</a>
-  <p>평일 08:00~18:00 정규 서비스 · 24시간 긴급출동 가능</p>
+<div class="emergency-banner" onclick="openEmergencyModal()" style="cursor:pointer;">
+  <div style="font-size:clamp(18px,4vw,28px);font-weight:800;">📞 24시간 긴급출동: 031-8042-7310 &nbsp;|&nbsp; 휴대폰: 010-5754-7310</div>
+  <p>평일 08:00~18:00 정규 서비스 · 24시간 긴급출동 가능 · <strong style="color:#ffe0b2;">눌러서 바로 연결 ▶</strong></p>
+</div>
+
+<!-- 긴급출동 모달 -->
+<div id="emergencyModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border-radius:20px;padding:32px 24px;max-width:420px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;margin-bottom:8px;">🚨</div>
+      <h2 style="font-size:22px;font-weight:800;color:#1a1a2e;">24시간 긴급출동</h2>
+      <p style="font-size:14px;color:#6b7280;margin-top:8px;line-height:1.6;">긴급한 난방 문제나 누수가 발생한 경우<br/>아래 방법을 선택해 주세요.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <a href="tel:031-8042-7310" style="display:flex;align-items:center;gap:14px;background:#ef4444;color:#fff;border-radius:12px;padding:16px 20px;text-decoration:none;font-weight:700;">
+        <span style="font-size:28px;">📞</span>
+        <div><div style="font-size:16px;">대표전화 연결</div><div style="font-size:13px;opacity:.85;">031-8042-7310</div></div>
+      </a>
+      <a href="tel:010-5754-7310" style="display:flex;align-items:center;gap:14px;background:#f97316;color:#fff;border-radius:12px;padding:16px 20px;text-decoration:none;font-weight:700;">
+        <span style="font-size:28px;">📱</span>
+        <div><div style="font-size:16px;">휴대전화 연결</div><div style="font-size:13px;opacity:.85;">010-5754-7310</div></div>
+      </a>
+      <a href="/preview/emergency.html" style="display:flex;align-items:center;gap:14px;background:#1a1a2e;color:#fff;border-radius:12px;padding:16px 20px;text-decoration:none;font-weight:700;">
+        <span style="font-size:28px;">🔧</span>
+        <div><div style="font-size:16px;">긴급출동 접수</div><div style="font-size:13px;opacity:.85;">온라인으로 접수하기</div></div>
+      </a>
+    </div>
+    <button onclick="closeEmergencyModal()" style="margin-top:20px;width:100%;padding:12px;background:#f3f4f6;border:none;border-radius:10px;font-size:15px;font-weight:600;color:#6b7280;cursor:pointer;">닫기</button>
+  </div>
 </div>
 
 <!-- 히어로 -->
@@ -261,14 +287,19 @@
       <div class="service-title">배관청소 신청</div>
       <div class="service-desc">난방 효율 개선을 위한 전문 배관 세척 서비스. 난방비 절감 효과</div>
     </a>
-    <a href="tel:031-8042-7310" class="service-card emergency">
-      <div class="service-icon">🚨</div>
-      <div class="service-title">24시간 긴급출동</div>
-      <div class="service-desc">갑작스러운 난방 고장? 지금 바로 전화하세요. 365일 24시간 출동</div>
+    <a href="/preview/leak-sensor.html" class="service-card">
+      <div class="service-icon">💧</div>
+      <div class="service-title">누수센서 서비스</div>
+      <div class="service-desc">IoT 누수센서로 24시간 실시간 모니터링. 이상 감지 즉시 알림 발송</div>
+    </a>
+    <a href="/preview/heat-status.html" class="service-card">
+      <div class="service-icon">🌡️</div>
+      <div class="service-title">우리 집 난방 상태</div>
+      <div class="service-desc">유량·압력·난방 상태를 한눈에 확인하세요</div>
     </a>
     <a href="/preview/branches.html" class="service-card">
       <div class="service-icon">📍</div>
-      <div class="service-title">내 지역 지사 찾기</div>
+      <div class="service-title">전국 지사 안내</div>
       <div class="service-desc">전국 각 지역 담당 지사를 찾아 직접 연락하거나 방문 예약하세요</div>
     </a>
   </div>
@@ -470,6 +501,20 @@
   function toggleMenu() {
     document.getElementById('mobileNav').classList.toggle('open');
   }
+  function openEmergencyModal() {
+    const m = document.getElementById('emergencyModal');
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+  function closeEmergencyModal() {
+    const m = document.getElementById('emergencyModal');
+    m.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+  // 모달 바깥 클릭 시 닫기
+  document.getElementById('emergencyModal').addEventListener('click', function(e) {
+    if (e.target === this) closeEmergencyModal();
+  });
   function toggleFaq(btn) {
     const answer = btn.nextElementSibling;
     const icon = btn.querySelector('span');

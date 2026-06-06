@@ -238,6 +238,7 @@ export const appRouter = router({
         photoUrl: z.string().optional(),
         preferredDate: z.string().optional(),
         preferredTime: z.string().optional(),
+        isUrgent: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
         // 주소 기반 지사 자동 배정
@@ -301,6 +302,15 @@ export const appRouter = router({
             result: adminSendResult.result,
             errorMessage: adminSendResult.errorMessage,
           });
+        }
+
+        // ③ 긴급 접수인 경우 담당 지사장에게도 긴급 SMS 발송
+        if (input.isUrgent && branch) {
+          const branchInfo = await db.getBranchById(branch.id);
+          if (branchInfo?.phoneNumber && branchInfo.phoneNumber.trim().length >= 9) {
+            const urgentMsg = `[\uae34\uae09\ucd9c\ub3d9] ${input.customerName} \uace0\uac1d\n\ud734\ub300: ${input.phoneNumber}\n${input.apartmentName} ${input.dong}\ub3d9 ${input.ho}\ud638\n\uc99d\uc0c1: ${symptomsForSms.join(", ")}\n\u2605 \uae34\uae09\ucd9c\ub3d9 \uc694\uccad\uc785\ub2c8\ub2e4. \uc989\uc2dc \uc5f0\ub77d \ubc14\ub78d\ub2c8\ub2e4.`;
+            await sendSms(branchInfo.phoneNumber.trim(), urgentMsg);
+          }
         }
 
         return { ...created, branchId: branch?.id ?? null, branchName: branch?.name ?? "본사" };

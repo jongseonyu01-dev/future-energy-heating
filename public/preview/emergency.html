@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>긴급출동 접수 - 퓨처에너지테크</title>
+  <script src="/preview/auth-check.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #e85d04; --primary-dark: #c44d03; --primary-light: #fff3ec;
+      --bg: #fff; --surface: #f8f9fa; --text: #1a1a2e; --muted: #6b7280;
+      --border: #e5e7eb; --success: #22c55e; --error: #ef4444;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface); color: var(--text); min-height: 100vh; }
+    header { background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: var(--primary); text-decoration: none; }
+    .back-btn { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; cursor: pointer; text-decoration: none; }
+    .back-btn:hover { color: var(--primary); }
+    .page-hero { background: linear-gradient(135deg, #7f1d1d, #ef4444); color: #fff; padding: 40px 24px; text-align: center; }
+    .page-hero h1 { font-size: clamp(22px, 4vw, 36px); font-weight: 800; margin-bottom: 8px; }
+    .page-hero p { color: rgba(255,255,255,.85); font-size: 15px; }
+    .urgent-notice { background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; padding: 16px 20px; margin: 20px auto; max-width: 720px; display: flex; align-items: flex-start; gap: 12px; }
+    .urgent-notice .icon { font-size: 24px; flex-shrink: 0; }
+    .urgent-notice p { font-size: 14px; color: #991b1b; line-height: 1.6; }
+    .urgent-notice strong { font-size: 15px; }
+    .phone-quick { display: flex; gap: 10px; max-width: 720px; margin: 0 auto 8px; padding: 0 16px; }
+    .phone-quick a { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px; font-weight: 700; font-size: 15px; text-decoration: none; }
+    .phone-quick .btn-red { background: #ef4444; color: #fff; }
+    .phone-quick .btn-orange { background: #f97316; color: #fff; }
+    .form-container { max-width: 720px; margin: 0 auto; padding: 0 16px 60px; }
+    .form-card { background: var(--bg); border-radius: 20px; padding: 28px; box-shadow: 0 2px 16px rgba(0,0,0,.06); margin-bottom: 16px; }
+    .form-card h2 { font-size: 17px; font-weight: 700; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #fecaca; color: #dc2626; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    label .req { color: var(--error); margin-left: 2px; }
+    input, select, textarea { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: inherit; background: var(--bg); color: var(--text); transition: border-color .15s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #ef4444; }
+    textarea { resize: vertical; min-height: 100px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+    .symptom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .symptom-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; transition: all .15s; }
+    .symptom-item:hover { border-color: #ef4444; background: #fef2f2; }
+    .symptom-item.selected { border-color: #ef4444; background: #fef2f2; }
+    .symptom-item input[type=checkbox] { width: 18px; height: 18px; accent-color: #ef4444; cursor: pointer; flex-shrink: 0; }
+    .symptom-item span { font-size: 14px; font-weight: 500; }
+    .photo-area { border: 2px dashed var(--border); border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: border-color .15s; }
+    .photo-area:hover { border-color: #ef4444; }
+    .photo-area input { display: none; }
+    .photo-area p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .photo-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .photo-preview img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+    .consent-box { background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 12px; max-height: 120px; overflow-y: auto; }
+    .consent-check { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .consent-check input { width: 18px; height: 18px; accent-color: #ef4444; flex-shrink: 0; }
+    .submit-btn { width: 100%; padding: 18px; background: #ef4444; color: #fff; border: none; border-radius: 14px; font-size: 18px; font-weight: 800; cursor: pointer; transition: background .15s, transform .1s; box-shadow: 0 4px 20px rgba(239,68,68,.4); letter-spacing: .5px; }
+    .submit-btn:hover { background: #dc2626; transform: translateY(-1px); }
+    .submit-btn:disabled { background: #d1d5db; box-shadow: none; cursor: not-allowed; transform: none; }
+    .success-box { display: none; background: #fef2f2; border: 2px solid #ef4444; border-radius: 16px; padding: 32px; text-align: center; }
+    .success-box.show { display: block; }
+    .success-icon { font-size: 56px; margin-bottom: 16px; }
+    .success-box h3 { font-size: 22px; font-weight: 800; color: #dc2626; margin-bottom: 8px; }
+    .success-box p { color: #7f1d1d; font-size: 15px; line-height: 1.7; }
+    .error-msg { color: var(--error); font-size: 13px; margin-top: 4px; display: none; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/preview/index.html" class="logo">🔥 퓨처에너지</a>
+  <a href="/preview/index.html" class="back-btn">← 홈으로</a>
+</header>
+
+<div class="page-hero">
+  <h1>🚨 긴급출동 접수</h1>
+  <p>갑작스러운 난방 고장·누수 발생 시 즉시 접수해 주세요</p>
+</div>
+
+<div style="max-width:720px;margin:20px auto 0;padding:0 16px;">
+  <div class="urgent-notice">
+    <div class="icon">⚡</div>
+    <div>
+      <p><strong>즉시 전화 연결을 원하시면 아래 버튼을 눌러 주세요.</strong><br />
+      온라인 접수 후에도 담당자가 최대한 빠르게 연락드립니다.</p>
+    </div>
+  </div>
+</div>
+
+<div class="phone-quick">
+  <a href="tel:031-8042-7310" class="btn-red">📞 대표전화 031-8042-7310</a>
+  <a href="tel:010-5754-7310" class="btn-orange">📱 휴대폰 010-5754-7310</a>
+</div>
+
+<div class="form-container">
+  <div id="successBox" class="success-box">
+    <div class="success-icon">🚨</div>
+    <h3>긴급출동 접수가 완료되었습니다!</h3>
+    <p>담당자가 즉시 확인 후 연락드리겠습니다.<br />접수 번호: <strong id="receiptNum"></strong></p>
+    <br />
+    <a href="/preview/index.html" style="color:#dc2626;font-weight:700;">← 홈으로 돌아가기</a>
+  </div>
+
+  <form id="emergencyForm">
+    <!-- 고객 정보 -->
+    <div class="form-card">
+      <h2>🧑 고객 정보</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>고객명 <span class="req">*</span></label>
+          <input type="text" id="customerName" placeholder="홍길동" required />
+        </div>
+        <div class="form-group">
+          <label>연락처 <span class="req">*</span></label>
+          <input type="tel" id="phoneNumber" placeholder="010-0000-0000" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>주소 (시·구·동) <span class="req">*</span></label>
+        <input type="text" id="address" placeholder="예: 경기도 안산시 단원구 고잔동" required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>아파트명 <span class="req">*</span></label>
+          <input type="text" id="apartmentName" placeholder="예: 고잔 주공아파트" required />
+        </div>
+        <div class="form-group">
+          <label>동·호수 <span class="req">*</span></label>
+          <div class="form-row" style="gap:8px;">
+            <input type="text" id="dong" placeholder="동" required />
+            <input type="text" id="ho" placeholder="호" required />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 증상 선택 -->
+    <div class="form-card">
+      <h2>🔧 증상 선택 (복수 선택 가능)</h2>
+      <div class="symptom-grid">
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="집전체가춥다" />
+          <span>🥶 난방이 안 됨</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="일부방만차가움" />
+          <span>🌡️ 일부 방만 차가움</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="분배기누수" />
+          <span>💧 분배기 누수</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="배관누수" />
+          <span>🚰 배관 누수</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="온도조절기이상" />
+          <span>🎛️ 온도조절기 이상</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="긴급점검필요" />
+          <span>🚨 긴급 점검 필요</span>
+        </label>
+        <label class="symptom-item" onclick="toggleSymptom(this)">
+          <input type="checkbox" value="기타문의" />
+          <span>📝 기타</span>
+        </label>
+      </div>
+      <div id="symptomError" class="error-msg" style="display:none;">증상을 하나 이상 선택해 주세요.</div>
+    </div>
+
+    <!-- 사진 첨부 -->
+    <div class="form-card">
+      <h2>📷 사진 첨부 (선택)</h2>
+      <div class="photo-area" onclick="document.getElementById('photoInput').click()">
+        <div style="font-size:40px;">📷</div>
+        <p>클릭하여 사진을 첨부하세요<br /><span style="font-size:12px;">최대 3장 · JPG, PNG 지원</span></p>
+        <input type="file" id="photoInput" accept="image/*" multiple onchange="previewPhotos(this)" />
+      </div>
+      <div class="photo-preview" id="photoPreview"></div>
+    </div>
+
+    <!-- 요청 내용 -->
+    <div class="form-card">
+      <h2>📝 요청 내용</h2>
+      <div class="form-group">
+        <label>상세 내용</label>
+        <textarea id="detailContent" placeholder="증상이 언제부터 시작되었는지, 어떤 상황인지 자세히 적어 주시면 빠른 처리에 도움이 됩니다." rows="4"></textarea>
+      </div>
+    </div>
+
+    <!-- 개인정보 동의 -->
+    <div class="form-card">
+      <h2>🔒 개인정보 수집 동의</h2>
+      <div class="consent-box">
+        퓨처에너지테크(이하 "회사")는 긴급출동 서비스 제공을 위해 아래와 같이 개인정보를 수집·이용합니다.<br /><br />
+        <strong>수집 항목:</strong> 이름, 연락처, 주소, 증상 정보<br />
+        <strong>수집 목적:</strong> 긴급출동 서비스 제공, 접수 확인 및 기사 배정, 서비스 완료 후 만족도 조사<br />
+        <strong>보유 기간:</strong> 서비스 완료 후 1년<br /><br />
+        위 개인정보 수집·이용에 동의하지 않을 권리가 있으며, 동의 거부 시 서비스 이용이 제한될 수 있습니다.
+      </div>
+      <label class="consent-check">
+        <input type="checkbox" id="consentCheck" />
+        개인정보 수집·이용에 동의합니다 <span class="req">*</span>
+      </label>
+      <div id="consentError" class="error-msg" style="display:none;">개인정보 수집·이용에 동의해 주세요.</div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">🚨 긴급출동 접수하기</button>
+  </form>
+</div>
+
+<script>
+  function getApiBase() {
+    const h = location.hostname;
+    if (/^(\d+)-/.test(h)) {
+      return 'https://' + h.replace(/^(\d+)-/, '3000-');
+    }
+    return '';
+  }
+
+  function toggleSymptom(label) {
+    label.classList.toggle('selected');
+  }
+
+  function previewPhotos(input) {
+    const preview = document.getElementById('photoPreview');
+    preview.innerHTML = '';
+    const files = Array.from(input.files).slice(0, 3);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = document.createElement('img');
+        img.src = e.target.result;
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById('emergencyForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // 유효성 검사
+    const symptoms = Array.from(document.querySelectorAll('.symptom-item input:checked')).map(cb => cb.value);
+    if (symptoms.length === 0) {
+      document.getElementById('symptomError').style.display = 'block';
+      return;
+    }
+    document.getElementById('symptomError').style.display = 'none';
+
+    if (!document.getElementById('consentCheck').checked) {
+      document.getElementById('consentError').style.display = 'block';
+      return;
+    }
+    document.getElementById('consentError').style.display = 'none';
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '접수 중...';
+
+    try {
+      const apiBase = getApiBase();
+      const body = {
+        "0": {
+          json: {
+            customerName: document.getElementById('customerName').value.trim(),
+            phoneNumber: document.getElementById('phoneNumber').value.trim(),
+            apartmentName: document.getElementById('apartmentName').value.trim(),
+            dong: document.getElementById('dong').value.trim(),
+            ho: document.getElementById('ho').value.trim(),
+            requestType: "난방고장",
+            symptom: symptoms[0],
+            symptoms: symptoms,
+            detailContent: document.getElementById('detailContent').value.trim() || undefined,
+            isUrgent: true,
+          }
+        }
+      };
+
+      const res = await fetch(apiBase + '/api/trpc/repair.create?batch=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      const result = Array.isArray(data) ? data[0] : data;
+
+      if (result?.result?.data?.json?.requestNumber) {
+        document.getElementById('emergencyForm').style.display = 'none';
+        document.getElementById('successBox').classList.add('show');
+        document.getElementById('receiptNum').textContent = result.result.data.json.requestNumber;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error('접수 실패');
+      }
+    } catch (err) {
+      alert('접수 중 오류가 발생했습니다. 전화로 연락해 주세요.\n📞 031-8042-7310');
+      btn.disabled = false;
+      btn.textContent = '🚨 긴급출동 접수하기';
+    }
+  });
+</script>
+</body>
+</html>

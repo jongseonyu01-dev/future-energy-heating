@@ -144,6 +144,8 @@ export const repairRequests = mysqlTable("repair_requests", {
   // 작업 완료 정보
   completedAt: timestamp("completedAt"),
   completionMemo: text("completionMemo"),
+  // 긴급출동 여부
+  isUrgent: boolean("isUrgent").default(false).notNull(),
   // 재방문 여부
   needsRevisit: boolean("needsRevisit").default(false).notNull(),
   revisitReason: text("revisitReason"),
