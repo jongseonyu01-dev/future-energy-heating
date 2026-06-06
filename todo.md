@@ -205,3 +205,11 @@
 - [x] 출발 시 고객 SMS 자동 발송 (SOLAPI, 데모 모드 지원)
 - [x] 테스트 기사 계정 (worker1 / worker1234) 및 시험 방문 건 생성 (ID:60001)
 - [x] 전체 흐름 API 테스트: 세션 시작→위치 업데이트→세션 조회→종료→활성 0개 확인 완료
+
+## 앱 크래시 긴급 수정 (18-1차)
+- [x] 크래시 원인 분석: expo-task-manager v56.0.17 (SDK 56용) 설치됨 → SDK 54 호환 v13.0.0으로 다운그레이드
+- [x] location-tracking.ts 안전 재작성: 지연 로드 (동적 import), 앱 시작 시 자동 실행 완전 제거
+- [x] tech-schedule.tsx: 앱 시작 시 포그라운드 인터벌 자동 시작 제거, 위치 권한 요청 없이 상태만 복구
+- [x] app.config.ts: isAndroidForegroundServiceEnabled 제거 (스타트업 크래시 원인)
+- [x] 위치 권한 거부 시 앱 종료 없이 안내 메시지만 표시
+- [x] TypeScript 오류 0개, 전체 흐름 API 테스트 통과

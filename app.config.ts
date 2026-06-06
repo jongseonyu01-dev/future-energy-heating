@@ -89,10 +89,9 @@ const config: ExpoConfig = {
     [
       "expo-location",
       {
-        "locationAlwaysAndWhenInUsePermission": "퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
+        "locationAlwaysAndWhenInUsePermission": "퍼치에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
         "isIosBackgroundLocationEnabled": true,
-        "isAndroidBackgroundLocationEnabled": true,
-        "isAndroidForegroundServiceEnabled": true
+        "isAndroidBackgroundLocationEnabled": true
       }
     ],
     [

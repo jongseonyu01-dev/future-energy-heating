@@ -63,16 +63,25 @@ export default function TechScheduleScreen() {
     { enabled: !!trackingRequestId, refetchInterval: 10000 }
   );
 
-  // 앱 시작 시 이미 추적 중인지 확인
+  // 앱 시작 시 이전에 추적 중이던 세션 복구 (안전 모드: 위치 권한 요청 없이 상태만 복구)
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const active = await isTrackingActive();
-      const token = await getActiveTrackingToken();
-      if (active && token) {
-        setTrackingToken(token);
-        startForegroundInterval(token);
+      try {
+        const active = await isTrackingActive();
+        const token = await getActiveTrackingToken();
+        if (!cancelled && active && token) {
+          // 위치 권한 요청 없이 상태만 복구 (인터벌은 시작하지 않음)
+          setTrackingToken(token);
+          // 포그라운드 인터벌은 출발 버튼 클릭 시에만 시작
+          // 앱 재시작 후에는 기사가 직접 재출발 버튼을 눌러야 함
+        }
+      } catch (e) {
+        // AsyncStorage 오류 무시 - 앱 크래시 방지
+        console.warn('[TechSchedule] 추적 상태 복구 실패 (무시):', e);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백)
