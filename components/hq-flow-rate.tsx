@@ -21,6 +21,12 @@ const FLOW_STATUS_BG: Record<string, string> = {
   "경고": "#FEF2F2",
 };
 
+const INSPECTION_COLOR: Record<string, string> = {
+  "미처리": "#9CA3AF",
+  "처리중": "#3B82F6",
+  "처리완료": "#22C55E",
+};
+
 interface FlowRateSetting {
   id: number;
   sensorId: string;
@@ -40,6 +46,9 @@ interface FlowRateSetting {
   lastStatus?: string | null;
   alertStartedAt?: string | Date | null;
   alertSentAt?: string | Date | null;
+  customerId?: string | null;
+  inspectionStatus?: string | null;
+  inspectionMemo?: string | null;
 }
 
 export function HQFlowRate({ colors }: { colors: any }) {
@@ -61,17 +70,24 @@ export function HQFlowRate({ colors }: { colors: any }) {
     onSuccess: () => { utils.flowRate.listSettings.invalidate(); setAddModal(false); resetAddForm(); },
     onError: (e) => Alert.alert("오류", e.message),
   });
+  const inspectionMutation = trpc.flowRate.updateInspection.useMutation({
+    onSuccess: () => { utils.flowRate.listSettings.invalidate(); setInspectionModal(null); },
+    onError: (e) => Alert.alert("오류", e.message),
+  });
 
   const [editModal, setEditModal] = useState<FlowRateSetting | null>(null);
   const [addModal, setAddModal] = useState(false);
   const [demoModal, setDemoModal] = useState<FlowRateSetting | null>(null);
+  const [inspectionModal, setInspectionModal] = useState<FlowRateSetting | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("전체");
 
   // 편집 폼 상태
   const [editBase, setEditBase] = useState("");
   const [editWarn, setEditWarn] = useState("");
   const [editCaution, setEditCaution] = useState("");
   const [editAlertMin, setEditAlertMin] = useState("");
+  const [editCustomerId, setEditCustomerId] = useState("");
 
   // 추가 폼 상태
   const [addSensorId, setAddSensorId] = useState("");
@@ -82,13 +98,19 @@ export function HQFlowRate({ colors }: { colors: any }) {
   const [addWarn, setAddWarn] = useState("30");
   const [addCaution, setAddCaution] = useState("15");
   const [addAlertMin, setAddAlertMin] = useState("10");
+  const [addCustomerId, setAddCustomerId] = useState("");
 
   // 데모 유량 값
   const [demoFlow, setDemoFlow] = useState("");
 
+  // 점검 처리 상태
+  const [inspStatus, setInspStatus] = useState<"미처리" | "처리중" | "처리완료">("처리중");
+  const [inspMemo, setInspMemo] = useState("");
+
   const resetAddForm = () => {
     setAddSensorId(""); setAddAptName(""); setAddBuilding(""); setAddRoom("");
     setAddBase("5.50"); setAddWarn("30"); setAddCaution("15"); setAddAlertMin("10");
+    setAddCustomerId("");
   };
 
   const openEdit = (s: FlowRateSetting) => {
@@ -96,7 +118,14 @@ export function HQFlowRate({ colors }: { colors: any }) {
     setEditWarn(String(s.warningRangePercent));
     setEditCaution(String(s.cautionRangePercent));
     setEditAlertMin(String(s.alertDurationMinutes));
+    setEditCustomerId(s.customerId ?? "");
     setEditModal(s);
+  };
+
+  const openInspection = (s: FlowRateSetting) => {
+    setInspStatus((s.inspectionStatus as any) ?? "처리중");
+    setInspMemo(s.inspectionMemo ?? "");
+    setInspectionModal(s);
   };
 
   const onRefresh = useCallback(async () => {
@@ -115,7 +144,14 @@ export function HQFlowRate({ colors }: { colors: any }) {
     if (isNaN(warn) || warn <= 0 || warn > 100) return Alert.alert("오류", "경고 범위는 1~100% 사이여야 합니다.");
     if (isNaN(caution) || caution <= 0 || caution >= warn) return Alert.alert("오류", "주의 범위는 경고 범위보다 작아야 합니다.");
     if (isNaN(alertMin) || alertMin <= 0) return Alert.alert("오류", "알림 지속 시간은 1분 이상이어야 합니다.");
-    updateMutation.mutate({ id: editModal.id, baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin });
+    updateMutation.mutate({
+      id: editModal.id,
+      baseFlowRateLpm: base,
+      warningRangePercent: warn,
+      cautionRangePercent: caution,
+      alertDurationMinutes: alertMin,
+      ...(editCustomerId.trim() && { customerId: editCustomerId.trim() }),
+    });
   };
 
   const handleDelete = (s: FlowRateSetting) => {
@@ -153,6 +189,15 @@ export function HQFlowRate({ colors }: { colors: any }) {
     setDemoFlow("");
   };
 
+  const handleSaveInspection = () => {
+    if (!inspectionModal) return;
+    inspectionMutation.mutate({
+      id: inspectionModal.id,
+      inspectionStatus: inspStatus,
+      inspectionMemo: inspMemo.trim() || undefined,
+    });
+  };
+
   const formatTime = (t: string | Date | null | undefined) => {
     if (!t) return "-";
     const d = new Date(t);
@@ -164,9 +209,21 @@ export function HQFlowRate({ colors }: { colors: any }) {
     const cur = parseFloat(current);
     const bas = parseFloat(base);
     if (isNaN(cur) || isNaN(bas) || bas === 0) return null;
-    const pct = ((cur - bas) / bas) * 100;
-    return pct;
+    return ((cur - bas) / bas) * 100;
   };
+
+  // 통신 상태 계산
+  const getCommStatus = (lastMeasuredAt: string | Date | null | undefined) => {
+    if (!lastMeasuredAt) return { label: "미연결", color: "#9CA3AF" };
+    const minutes = (Date.now() - new Date(lastMeasuredAt).getTime()) / 60000;
+    if (minutes < 30) return { label: "정상", color: "#22C55E" };
+    if (minutes < 120) return { label: "지연", color: "#F59E0B" };
+    return { label: "단절", color: "#EF4444" };
+  };
+
+  const filteredSettings = filterStatus === "전체"
+    ? settings
+    : settings.filter(s => (s.lastStatus ?? "정상") === filterStatus);
 
   return (
     <ScrollView
@@ -191,16 +248,25 @@ export function HQFlowRate({ colors }: { colors: any }) {
           {["정상", "주의", "경고"].map(status => {
             const count = settings.filter(s => (s.lastStatus ?? "정상") === status).length;
             return (
-              <View key={status} style={{ flex: 1, minWidth: 80, backgroundColor: FLOW_STATUS_BG[status], borderRadius: 12, padding: 12, alignItems: "center", borderWidth: 1, borderColor: FLOW_STATUS_COLOR[status] + "40" }}>
-                <Text style={{ fontSize: 22, fontWeight: "800", color: FLOW_STATUS_COLOR[status] }}>{count}</Text>
-                <Text style={{ fontSize: 12, color: FLOW_STATUS_COLOR[status], fontWeight: "600" }}>{status}</Text>
-              </View>
+              <TouchableOpacity
+                key={status}
+                style={{ flex: 1, minWidth: 70, backgroundColor: filterStatus === status ? FLOW_STATUS_COLOR[status] : FLOW_STATUS_BG[status], borderRadius: 12, padding: 12, alignItems: "center", borderWidth: 1.5, borderColor: FLOW_STATUS_COLOR[status] }}
+                onPress={() => setFilterStatus(filterStatus === status ? "전체" : status)}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 22, fontWeight: "800", color: filterStatus === status ? "#fff" : FLOW_STATUS_COLOR[status] }}>{count}</Text>
+                <Text style={{ fontSize: 12, color: filterStatus === status ? "#fff" : FLOW_STATUS_COLOR[status], fontWeight: "600" }}>{status}</Text>
+              </TouchableOpacity>
             );
           })}
-          <View style={{ flex: 1, minWidth: 80, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
-            <Text style={{ fontSize: 22, fontWeight: "800", color: colors.foreground }}>{settings.length}</Text>
-            <Text style={{ fontSize: 12, color: colors.muted, fontWeight: "600" }}>전체</Text>
-          </View>
+          <TouchableOpacity
+            style={{ flex: 1, minWidth: 70, backgroundColor: filterStatus === "전체" ? "#FF6B35" : colors.surface, borderRadius: 12, padding: 12, alignItems: "center", borderWidth: 1.5, borderColor: "#FF6B35" }}
+            onPress={() => setFilterStatus("전체")}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 22, fontWeight: "800", color: filterStatus === "전체" ? "#fff" : colors.foreground }}>{settings.length}</Text>
+            <Text style={{ fontSize: 12, color: filterStatus === "전체" ? "#fff" : colors.muted, fontWeight: "600" }}>전체</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -208,30 +274,47 @@ export function HQFlowRate({ colors }: { colors: any }) {
       {isLoading && <ActivityIndicator color="#FF6B35" style={{ marginTop: 32 }} />}
 
       {/* 세대 목록 */}
-      {!isLoading && settings.length === 0 && (
+      {!isLoading && filteredSettings.length === 0 && (
         <View style={{ alignItems: "center", padding: 40, gap: 12 }}>
           <Text style={{ fontSize: 40 }}>🌡️</Text>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>등록된 세대가 없습니다</Text>
-          <Text style={{ fontSize: 13, color: colors.muted, textAlign: "center" }}>ESP32 센서 웹훅이 수신되면 자동으로 등록되거나{"\n"}위 '세대 추가' 버튼으로 직접 등록할 수 있습니다.</Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
+            {filterStatus === "전체" ? "등록된 세대가 없습니다" : `${filterStatus} 상태 세대가 없습니다`}
+          </Text>
+          <Text style={{ fontSize: 13, color: colors.muted, textAlign: "center" }}>
+            ESP32 센서 웹훅이 수신되면 자동으로 등록되거나{"\n"}위 '세대 추가' 버튼으로 직접 등록할 수 있습니다.
+          </Text>
         </View>
       )}
 
-      {settings.map((s) => {
+      {filteredSettings.map((s) => {
         const status = (s.lastStatus ?? "정상") as string;
         const statusColor = FLOW_STATUS_COLOR[status] ?? "#6B7280";
         const statusBg = FLOW_STATUS_BG[status] ?? "#F9FAFB";
         const deviation = getDeviation(s.lastFlowRateLpm, s.baseFlowRateLpm);
+        const comm = getCommStatus(s.lastMeasuredAt);
+        const inspStatus = s.inspectionStatus ?? "미처리";
+        const inspColor = INSPECTION_COLOR[inspStatus] ?? "#9CA3AF";
 
         return (
           <View key={s.id} style={{ backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1.5, borderColor: statusColor + "60", overflow: "hidden" }}>
             {/* 상단 헤더 */}
-            <View style={{ backgroundColor: statusBg, flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, paddingBottom: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "800", color: colors.foreground }}>{s.apartmentName} {s.buildingNumber}동 {s.roomNumber}호</Text>
-                <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>센서 ID: {s.sensorId}</Text>
+            <View style={{ backgroundColor: statusBg, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 12, paddingBottom: 10 }}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: colors.foreground }}>
+                  {s.apartmentName} {s.buildingNumber}동 {s.roomNumber}호
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.muted }}>센서 ID: {s.sensorId}</Text>
+                {s.customerId && (
+                  <Text style={{ fontSize: 11, color: colors.muted }}>고객 전화: {s.customerId}</Text>
+                )}
               </View>
-              <View style={{ backgroundColor: statusColor, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>{status}</Text>
+              <View style={{ gap: 4, alignItems: "flex-end" }}>
+                <View style={{ backgroundColor: statusColor, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>{status}</Text>
+                </View>
+                <View style={{ backgroundColor: inspColor + "20", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: inspColor + "60" }}>
+                  <Text style={{ color: inspColor, fontSize: 11, fontWeight: "600" }}>점검: {inspStatus}</Text>
+                </View>
               </View>
             </View>
 
@@ -256,14 +339,25 @@ export function HQFlowRate({ colors }: { colors: any }) {
                 <DataCell label="마지막 측정" value={formatTime(s.lastMeasuredAt)} colors={colors} />
               </View>
               <View style={{ flexDirection: "row", gap: 8 }}>
-                <DataCell label="경고 범위" value={`±${s.warningRangePercent}%`} colors={colors} />
-                <DataCell label="주의 범위" value={`±${s.cautionRangePercent}%`} colors={colors} />
+                <DataCell label="통신 상태" value={comm.label} valueColor={comm.color} colors={colors} />
+                <DataCell label="경고/주의 범위" value={`±${s.warningRangePercent}% / ±${s.cautionRangePercent}%`} colors={colors} />
               </View>
+
+              {/* 이탈 추적 */}
               {s.alertStartedAt && status !== "정상" && (
                 <View style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, borderWidth: 1, borderColor: "#FCA5A5" }}>
                   <Text style={{ fontSize: 12, color: "#DC2626", fontWeight: "600" }}>
-                    ⚠️ 이탈 시작: {formatTime(s.alertStartedAt)} {s.alertSentAt ? `| 알림 발송: ${formatTime(s.alertSentAt)}` : "| 알림 대기 중"}
+                    ⚠️ 이탈 시작: {formatTime(s.alertStartedAt)}
+                    {s.alertSentAt ? ` | 알림 발송: ${formatTime(s.alertSentAt)}` : " | 알림 대기 중"}
                   </Text>
+                </View>
+              )}
+
+              {/* 점검 메모 */}
+              {s.inspectionMemo && (
+                <View style={{ backgroundColor: colors.background, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.border }}>
+                  <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 2 }}>처리 메모</Text>
+                  <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 18 }}>{s.inspectionMemo}</Text>
                 </View>
               )}
             </View>
@@ -279,10 +373,17 @@ export function HQFlowRate({ colors }: { colors: any }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, padding: 10, alignItems: "center", borderRightWidth: 1, borderColor: colors.border }}
+                onPress={() => openInspection(s)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "700", color: inspColor }}>🔧 점검 처리</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 10, alignItems: "center", borderRightWidth: 1, borderColor: colors.border }}
                 onPress={() => { setDemoModal(s); setDemoFlow(s.lastFlowRateLpm ?? s.baseFlowRateLpm); }}
                 activeOpacity={0.7}
               >
-                <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B5CF6" }}>🎮 데모 테스트</Text>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B5CF6" }}>🎮 데모</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, padding: 10, alignItems: "center" }}
@@ -299,23 +400,73 @@ export function HQFlowRate({ colors }: { colors: any }) {
       {/* 편집 모달 */}
       <Modal visible={!!editModal} transparent animationType="slide" onRequestClose={() => setEditModal(null)}>
         <View style={modalStyles.overlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}>
+            <View style={[modalStyles.sheet, { backgroundColor: colors.surface }]}>
+              <Text style={[modalStyles.title, { color: colors.foreground }]}>기준 유량 및 경고 범위 수정</Text>
+              {editModal && (
+                <Text style={{ fontSize: 13, color: colors.muted, marginBottom: 16 }}>
+                  {editModal.apartmentName} {editModal.buildingNumber}동 {editModal.roomNumber}호
+                </Text>
+              )}
+              <ModalField label="기준 유량 (LPM)" value={editBase} onChangeText={setEditBase} keyboardType="decimal-pad" placeholder="예: 5.50" colors={colors} />
+              <ModalField label="경고 범위 (%)" value={editWarn} onChangeText={setEditWarn} keyboardType="number-pad" placeholder="예: 30" colors={colors} hint="기준 유량 대비 이탈 시 경고 발생 (기본 30%)" />
+              <ModalField label="주의 범위 (%)" value={editCaution} onChangeText={setEditCaution} keyboardType="number-pad" placeholder="예: 15" colors={colors} hint="기준 유량 대비 이탈 시 주의 발생 (기본 15%)" />
+              <ModalField label="알림 지속 시간 (분)" value={editAlertMin} onChangeText={setEditAlertMin} keyboardType="number-pad" placeholder="예: 10" colors={colors} hint="이탈 상태가 이 시간 이상 지속되면 SMS 발송" />
+              <ModalField label="고객 전화번호 (선택)" value={editCustomerId} onChangeText={setEditCustomerId} keyboardType="phone-pad" placeholder="예: 01012345678" colors={colors} hint="고객이 앱에서 전화번호로 조회할 때 사용" />
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                <TouchableOpacity style={[modalStyles.btn, { backgroundColor: colors.border, flex: 1 }]} onPress={() => setEditModal(null)}>
+                  <Text style={{ color: colors.foreground, fontWeight: "700" }}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[modalStyles.btn, { backgroundColor: "#FF6B35", flex: 2 }]} onPress={handleSaveEdit} activeOpacity={0.8}>
+                  {updateMutation.isPending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "700" }}>저장</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* 점검 처리 모달 */}
+      <Modal visible={!!inspectionModal} transparent animationType="slide" onRequestClose={() => setInspectionModal(null)}>
+        <View style={modalStyles.overlay}>
           <View style={[modalStyles.sheet, { backgroundColor: colors.surface }]}>
-            <Text style={[modalStyles.title, { color: colors.foreground }]}>기준 유량 및 경고 범위 수정</Text>
-            {editModal && (
+            <Text style={[modalStyles.title, { color: colors.foreground }]}>🔧 점검 처리 상태 변경</Text>
+            {inspectionModal && (
               <Text style={{ fontSize: 13, color: colors.muted, marginBottom: 16 }}>
-                {editModal.apartmentName} {editModal.buildingNumber}동 {editModal.roomNumber}호
+                {inspectionModal.apartmentName} {inspectionModal.buildingNumber}동 {inspectionModal.roomNumber}호
               </Text>
             )}
-            <ModalField label="기준 유량 (LPM)" value={editBase} onChangeText={setEditBase} keyboardType="decimal-pad" placeholder="예: 5.50" colors={colors} />
-            <ModalField label="경고 범위 (%)" value={editWarn} onChangeText={setEditWarn} keyboardType="number-pad" placeholder="예: 30" colors={colors} hint="기준 유량 대비 이탈 시 경고 발생 (기본 30%)" />
-            <ModalField label="주의 범위 (%)" value={editCaution} onChangeText={setEditCaution} keyboardType="number-pad" placeholder="예: 15" colors={colors} hint="기준 유량 대비 이탈 시 주의 발생 (기본 15%)" />
-            <ModalField label="알림 지속 시간 (분)" value={editAlertMin} onChangeText={setEditAlertMin} keyboardType="number-pad" placeholder="예: 10" colors={colors} hint="이탈 상태가 이 시간 이상 지속되면 SMS 발송" />
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-              <TouchableOpacity style={[modalStyles.btn, { backgroundColor: colors.border, flex: 1 }]} onPress={() => setEditModal(null)}>
+            {/* 상태 선택 */}
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, marginBottom: 8 }}>처리 상태</Text>
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+              {(["미처리", "처리중", "처리완료"] as const).map(st => (
+                <TouchableOpacity
+                  key={st}
+                  style={{ flex: 1, borderRadius: 10, padding: 10, alignItems: "center", backgroundColor: inspStatus === st ? INSPECTION_COLOR[st] : colors.background, borderWidth: 1.5, borderColor: INSPECTION_COLOR[st] }}
+                  onPress={() => setInspStatus(st)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: inspStatus === st ? "#fff" : INSPECTION_COLOR[st] }}>{st}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {/* 메모 */}
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, marginBottom: 6 }}>처리 메모 (선택)</Text>
+            <TextInput
+              value={inspMemo}
+              onChangeText={setInspMemo}
+              placeholder="처리 내용, 담당자, 방문 일정 등을 입력하세요"
+              multiline
+              numberOfLines={3}
+              style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, fontSize: 14, color: colors.foreground, backgroundColor: colors.background, minHeight: 80, textAlignVertical: "top", marginBottom: 16 }}
+              placeholderTextColor={colors.muted}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity style={[modalStyles.btn, { backgroundColor: colors.border, flex: 1 }]} onPress={() => setInspectionModal(null)}>
                 <Text style={{ color: colors.foreground, fontWeight: "700" }}>취소</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[modalStyles.btn, { backgroundColor: "#FF6B35", flex: 2 }]} onPress={handleSaveEdit} activeOpacity={0.8}>
-                {updateMutation.isPending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "700" }}>저장</Text>}
+              <TouchableOpacity style={[modalStyles.btn, { backgroundColor: "#3B82F6", flex: 2 }]} onPress={handleSaveInspection} activeOpacity={0.8}>
+                {inspectionMutation.isPending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "700" }}>저장</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -336,6 +487,7 @@ export function HQFlowRate({ colors }: { colors: any }) {
               <ModalField label="경고 범위 (%)" value={addWarn} onChangeText={setAddWarn} keyboardType="number-pad" placeholder="30" colors={colors} />
               <ModalField label="주의 범위 (%)" value={addCaution} onChangeText={setAddCaution} keyboardType="number-pad" placeholder="15" colors={colors} />
               <ModalField label="알림 지속 시간 (분)" value={addAlertMin} onChangeText={setAddAlertMin} keyboardType="number-pad" placeholder="10" colors={colors} />
+              <ModalField label="고객 전화번호 (선택)" value={addCustomerId} onChangeText={setAddCustomerId} keyboardType="phone-pad" placeholder="예: 01012345678" colors={colors} hint="고객 앱 연동에 사용" />
               <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                 <TouchableOpacity style={[modalStyles.btn, { backgroundColor: colors.border, flex: 1 }]} onPress={() => { setAddModal(false); resetAddForm(); }}>
                   <Text style={{ color: colors.foreground, fontWeight: "700" }}>취소</Text>
@@ -423,11 +575,13 @@ export function HQFlowRate({ colors }: { colors: any }) {
   );
 }
 
-function DataCell({ label, value, sub, subColor, colors }: { label: string; value: string; sub?: string; subColor?: string; colors: any }) {
+function DataCell({ label, value, sub, subColor, valueColor, colors }: {
+  label: string; value: string; sub?: string; subColor?: string; valueColor?: string; colors: any;
+}) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border }}>
       <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 2 }}>{label}</Text>
-      <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>{value}</Text>
+      <Text style={{ fontSize: 14, fontWeight: "700", color: valueColor ?? colors.foreground }}>{value}</Text>
       {sub && <Text style={{ fontSize: 11, fontWeight: "600", color: subColor ?? colors.muted, marginTop: 1 }}>{sub}</Text>}
     </View>
   );

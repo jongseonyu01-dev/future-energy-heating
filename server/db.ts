@@ -832,7 +832,7 @@ export async function upsertFlowRateSetting(data: InsertFlowRateSetting): Promis
 
 export async function updateFlowRateSetting(
   id: number,
-  data: Partial<Pick<FlowRateSetting, "baseFlowRateLpm" | "warningRangePercent" | "cautionRangePercent" | "alertDurationMinutes" | "apartmentName" | "buildingNumber" | "roomNumber" | "branchId">>
+  data: Partial<Pick<FlowRateSetting, "baseFlowRateLpm" | "warningRangePercent" | "cautionRangePercent" | "alertDurationMinutes" | "apartmentName" | "buildingNumber" | "roomNumber" | "branchId" | "customerId" | "inspectionStatus" | "inspectionMemo">>
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;

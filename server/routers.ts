@@ -852,6 +852,49 @@ export const appRouter = router({
         return db.getRecentFlowRateLogs(input.limit);
       }),
 
+    // 고객 전화번호 기반 유량 데이터 조회
+    getByCustomerPhone: publicProcedure
+      .input(z.object({ phone: z.string().min(1) }))
+      .query(async ({ input }) => {
+        // 전화번호로 고객 접수 이력에서 customerId 또는 sensorId 매핑
+        const settings = await db.getAllFlowRateSettings();
+        // customerId 필드가 전화번호와 일치하는 항목 반환
+        const matched = settings.filter((s: any) => s.customerId === input.phone);
+        return matched;
+      }),
+
+    // 점검 처리 상태 업데이트
+    updateInspection: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        inspectionStatus: z.enum(["미처리", "처리중", "처리완료"]),
+        inspectionMemo: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateFlowRateSetting(input.id, {
+          inspectionStatus: input.inspectionStatus,
+          inspectionMemo: input.inspectionMemo ?? null,
+        });
+        return { success: true };
+      }),
+
+    // 고객 점검 요청
+    requestInspection: publicProcedure
+      .input(z.object({
+        sensorId: z.string().min(1),
+        customerPhone: z.string().optional(),
+        message: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const setting = await db.getFlowRateSettingBySensorId(input.sensorId);
+        if (!setting) throw new Error("센서 정보를 찾을 수 없습니다.");
+        await db.updateFlowRateSetting(setting.id, {
+          inspectionStatus: "처리중",
+          inspectionMemo: `고객 점검 요청${input.message ? ': ' + input.message : ''} (${new Date().toLocaleString('ko-KR')})`,
+        });
+        return { success: true };
+      }),
+
     demoUpdate: publicProcedure
       .input(z.object({
         sensorId: z.string().min(1),

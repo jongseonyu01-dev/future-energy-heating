@@ -26,6 +26,7 @@ const customerMenuItems = [
   { id: "reservation", title: "방문 예약 확인", subtitle: "예약 일정·기사 정보 확인", icon: "📅", route: "/reservation", color: "#8B5CF6", bg: "#F5F3FF" },
   { id: "result", title: "점검 결과 확인", subtitle: "작업 내용·처리 결과 조회", icon: "📋", route: "/inspection-result", color: "#16A34A", bg: "#F0FDF4" },
   { id: "leak", title: "우리 집 누수센서", subtitle: "누수·배터리·통신 상태 확인", icon: "💧", route: "/leak-sensor", color: "#0284C7", bg: "#EFF6FF" },
+  { id: "heat", title: "우리 집 난방 상태", subtitle: "유량·압력·난방 상태 확인", icon: "🌡️", route: "/heat-status", color: "#FF6B35", bg: "#FFF7F3" },
 ];
 
 // ─── 기사 메뉴 ──────────────────────────────────────────────────

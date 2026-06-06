@@ -317,6 +317,11 @@ export const flowRateSettings = mysqlTable("flow_rate_settings", {
   // 경고 추적 (10분 이상 이탈 감지용)
   alertStartedAt: timestamp("alertStartedAt"),   // 이탈 시작 시각
   alertSentAt: timestamp("alertSentAt"),          // 마지막 SMS 발송 시각
+  // 고객 연결 (전화번호)
+  customerId: varchar("customerId", { length: 20 }),
+  // 점검 처리 상태
+  inspectionStatus: mysqlEnum("inspectionStatus", ["미처리", "처리중", "처리완료"]).default("미처리"),
+  inspectionMemo: text("inspectionMemo"),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
