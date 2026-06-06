@@ -893,3 +893,123 @@ export async function getAppRolesByRole(role: "hq_admin" | "branch_manager" | "t
   if (!db) return [];
   return db.select().from(appRoles).where(and(eq(appRoles.appRole, role), eq(appRoles.isActive, true)));
 }
+
+// ─── 위치 추적 세션 ────────────────────────────────────────────────────────
+import { locationSessions, locationConsents, LocationSession, InsertLocationSession } from "../drizzle/schema";
+
+export async function createLocationSession(data: InsertLocationSession): Promise<LocationSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  await db.insert(locationSessions).values(data);
+  const rows = await db.select().from(locationSessions)
+    .where(eq(locationSessions.trackingToken, data.trackingToken))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getLocationSessionByToken(token: string): Promise<LocationSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(locationSessions)
+    .where(eq(locationSessions.trackingToken, token))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getLocationSessionByRequestId(requestId: number): Promise<LocationSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(locationSessions)
+    .where(and(eq(locationSessions.requestId, requestId), eq(locationSessions.status, "이동중")))
+    .orderBy(desc(locationSessions.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getActiveLocationSessions(): Promise<LocationSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(locationSessions)
+    .where(eq(locationSessions.status, "이동중"))
+    .orderBy(desc(locationSessions.departedAt));
+}
+
+export async function getActiveLocationSessionsByBranch(branchId: number): Promise<LocationSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(locationSessions)
+    .where(and(eq(locationSessions.status, "이동중"), eq(locationSessions.branchId, branchId)))
+    .orderBy(desc(locationSessions.departedAt));
+}
+
+export async function updateLocationSessionPosition(
+  token: string,
+  lat: string,
+  lng: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(locationSessions).set({
+    currentLat: lat,
+    currentLng: lng,
+    currentUpdatedAt: new Date(),
+  } as Record<string, unknown>).where(eq(locationSessions.trackingToken, token));
+}
+
+export async function stopLocationSession(
+  token: string,
+  reason: "도착완료" | "업무취소" | "만료"
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  const updateData: Record<string, unknown> = { status: reason };
+  if (reason === "도착완료") updateData.arrivedAt = now;
+  if (reason === "업무취소") updateData.cancelledAt = now;
+  await db.update(locationSessions).set(updateData).where(eq(locationSessions.trackingToken, token));
+}
+
+export async function markLocationSessionSmsSent(token: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(locationSessions).set({ smsSentAt: new Date() } as Record<string, unknown>)
+    .where(eq(locationSessions.trackingToken, token));
+}
+
+// 만료된 세션 자동 처리 (4시간 초과)
+export async function expireOldLocationSessions(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  // 이동중 상태이면서 expiresAt이 지난 세션
+  const expiredRows = await db.select().from(locationSessions)
+    .where(eq(locationSessions.status, "이동중"));
+  for (const row of expiredRows) {
+    if (row.expiresAt && new Date(row.expiresAt) < now) {
+      await db.update(locationSessions).set({ status: "만료" } as Record<string, unknown>)
+        .where(eq(locationSessions.id, row.id));
+    }
+  }
+}
+
+// ─── 위치 추적 동의 ────────────────────────────────────────────────────────
+export async function getLocationConsent(technicianId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(locationConsents)
+    .where(and(eq(locationConsents.technicianId, technicianId), eq(locationConsents.isActive, true)))
+    .orderBy(desc(locationConsents.consentedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createLocationConsent(technicianId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(locationConsents).values({
+    technicianId,
+    consentedAt: new Date(),
+    consentVersion: "1.0",
+    isActive: true,
+  });
+}

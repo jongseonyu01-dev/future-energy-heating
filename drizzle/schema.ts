@@ -347,6 +347,58 @@ export const flowRateLogs = mysqlTable("flow_rate_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── 기사 위치 추적 세션 테이블 ─────────────────────────────────
+export const locationSessions = mysqlTable("location_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  // 방문 건 연결
+  requestId: int("requestId").notNull(),          // repair_requests.id
+  // 기사 정보
+  technicianId: int("technicianId").notNull(),    // technicians.id
+  technicianName: varchar("technicianName", { length: 50 }),
+  technicianPhone: varchar("technicianPhone", { length: 20 }),
+  // 고객 정보 (위치 확인 페이지 표시용)
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  customerAddress: varchar("customerAddress", { length: 200 }),
+  customerLat: decimal("customerLat", { precision: 10, scale: 7 }),
+  customerLng: decimal("customerLng", { precision: 10, scale: 7 }),
+  // 지사 정보
+  branchId: int("branchId"),
+  branchName: varchar("branchName", { length: 100 }),
+  // 고객용 전용 링크 토큰 (UUID)
+  trackingToken: varchar("trackingToken", { length: 64 }).notNull().unique(),
+  // 현재 위치 (마지막 업데이트)
+  currentLat: decimal("currentLat", { precision: 10, scale: 7 }),
+  currentLng: decimal("currentLng", { precision: 10, scale: 7 }),
+  currentUpdatedAt: timestamp("currentUpdatedAt"),
+  // 세션 상태
+  status: mysqlEnum("status", [
+    "이동중",    // 출발 후 이동 중
+    "도착완료",  // 기사가 도착 처리
+    "업무취소",  // 기사가 취소 처리
+    "만료",      // 시간 초과 자동 만료
+  ]).notNull().default("이동중"),
+  // 출발 시각 / 도착 시각
+  departedAt: timestamp("departedAt").defaultNow().notNull(),
+  arrivedAt: timestamp("arrivedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  // 링크 만료 시각 (출발 후 4시간)
+  expiresAt: timestamp("expiresAt").notNull(),
+  // SMS 발송 여부
+  smsSentAt: timestamp("smsSentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 위치 추적 동의 기록 테이블 ──────────────────────────────────
+export const locationConsents = mysqlTable("location_consents", {
+  id: int("id").autoincrement().primaryKey(),
+  technicianId: int("technicianId").notNull(),
+  consentedAt: timestamp("consentedAt").defaultNow().notNull(),
+  consentVersion: varchar("consentVersion", { length: 10 }).notNull().default("1.0"),
+  isActive: boolean("isActive").default(true).notNull(),
+});
+
 // ─── 타입 내보내기 ───────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -380,3 +432,7 @@ export type FlowRateSetting = typeof flowRateSettings.$inferSelect;
 export type InsertFlowRateSetting = typeof flowRateSettings.$inferInsert;
 export type FlowRateLog = typeof flowRateLogs.$inferSelect;
 export type InsertFlowRateLog = typeof flowRateLogs.$inferInsert;
+export type LocationSession = typeof locationSessions.$inferSelect;
+export type InsertLocationSession = typeof locationSessions.$inferInsert;
+export type LocationConsent = typeof locationConsents.$inferSelect;
+export type InsertLocationConsent = typeof locationConsents.$inferInsert;

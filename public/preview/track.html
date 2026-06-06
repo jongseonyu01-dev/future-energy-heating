@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>기사 위치 확인 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif; background: #f8f9fa; min-height: 100vh; }
+
+    /* 헤더 */
+    .header {
+      background: linear-gradient(135deg, #FF6B35, #e55a25);
+      color: white;
+      padding: 20px 16px 16px;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 12px rgba(255,107,53,0.3);
+    }
+    .header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .header-logo { font-size: 20px; }
+    .header-company { font-size: 13px; opacity: 0.85; }
+    .header-title { font-size: 20px; font-weight: 800; }
+
+    /* 상태 카드 */
+    .status-card {
+      margin: 16px;
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .status-icon { font-size: 36px; }
+    .status-info { flex: 1; }
+    .status-label { font-size: 12px; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .status-value { font-size: 20px; font-weight: 800; color: #111; margin-top: 2px; }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #FFF3E0; color: #FF6B35;
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 13px; font-weight: 700;
+    }
+    .status-badge.arrived { background: #DCFCE7; color: #16A34A; }
+    .status-badge.cancelled { background: #FEE2E2; color: #DC2626; }
+    .status-badge.expired { background: #F3F4F6; color: #6B7280; }
+
+    .pulse-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #FF6B35;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
+    }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+    .info-item { background: #F9FAFB; border-radius: 12px; padding: 12px; }
+    .info-item-label { font-size: 11px; color: #9CA3AF; font-weight: 600; margin-bottom: 4px; }
+    .info-item-value { font-size: 14px; font-weight: 700; color: #374151; }
+
+    /* 지도 영역 */
+    .map-container {
+      margin: 0 16px 16px;
+      background: white;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .map-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #F3F4F6;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .map-header-title { font-size: 15px; font-weight: 700; color: #111; }
+    .map-header-sub { font-size: 12px; color: #9CA3AF; margin-left: auto; }
+
+    #map {
+      width: 100%; height: 320px;
+      background: #e8f4f8;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .map-placeholder {
+      text-align: center; color: #6B7280;
+    }
+    .map-placeholder-icon { font-size: 48px; margin-bottom: 8px; }
+    .map-placeholder-text { font-size: 14px; }
+
+    /* 기사 정보 */
+    .tech-card {
+      margin: 0 16px 16px;
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .tech-card-title { font-size: 14px; font-weight: 700; color: #6B7280; margin-bottom: 14px; }
+    .tech-info { display: flex; align-items: center; gap: 14px; }
+    .tech-avatar {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: linear-gradient(135deg, #FF6B35, #e55a25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: white; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .tech-name { font-size: 18px; font-weight: 800; color: #111; }
+    .tech-company { font-size: 13px; color: #6B7280; margin-top: 2px; }
+    .call-btn {
+      margin-left: auto;
+      background: #3B82F6; color: white;
+      border: none; border-radius: 12px;
+      padding: 10px 16px; font-size: 14px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+      text-decoration: none;
+    }
+    .call-btn:hover { background: #2563EB; }
+
+    /* 도착 완료 / 만료 화면 */
+    .ended-card {
+      margin: 16px;
+      background: white;
+      border-radius: 20px;
+      padding: 32px 20px;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .ended-icon { font-size: 56px; margin-bottom: 12px; }
+    .ended-title { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 8px; }
+    .ended-desc { font-size: 14px; color: #6B7280; line-height: 1.6; }
+
+    /* 로딩 */
+    .loading {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 60vh; gap: 16px;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #F3F4F6;
+      border-top-color: #FF6B35;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 15px; color: #6B7280; font-weight: 600; }
+
+    /* 에러 */
+    .error-card {
+      margin: 32px 16px;
+      background: white;
+      border-radius: 20px;
+      padding: 32px 20px;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .error-icon { font-size: 48px; margin-bottom: 12px; }
+    .error-title { font-size: 18px; font-weight: 800; color: #EF4444; margin-bottom: 8px; }
+    .error-desc { font-size: 14px; color: #6B7280; line-height: 1.6; }
+
+    /* 업데이트 시간 */
+    .update-time {
+      text-align: center; font-size: 12px; color: #9CA3AF;
+      padding: 8px 16px 16px;
+    }
+
+    /* 푸터 */
+    .footer {
+      text-align: center; padding: 20px 16px;
+      font-size: 12px; color: #9CA3AF;
+      border-top: 1px solid #F3F4F6;
+      margin-top: 8px;
+    }
+    .footer a { color: #FF6B35; text-decoration: none; }
+
+    /* 네이버 지도 마커 */
+    .naver-marker {
+      background: #FF6B35; color: white;
+      border-radius: 50%; width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800;
+      box-shadow: 0 2px 8px rgba(255,107,53,0.5);
+      border: 3px solid white;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <span class="header-logo">🔥</span>
+    <span class="header-company">퓨처에너지테크</span>
+  </div>
+  <div class="header-title">기사 위치 확인</div>
+</div>
+
+<div id="app">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">위치 정보를 불러오는 중...</div>
+  </div>
+</div>
+
+<script>
+const BASE_URL = window.location.origin;
+const token = window.location.pathname.split('/track/')[1];
+let refreshInterval = null;
+let naverMap = null;
+let techMarker = null;
+let destMarker = null;
+let mapInitialized = false;
+
+// ─── 시간 포맷 ─────────────────────────────────────────────────────────────
+function formatTime(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+function formatElapsed(dateStr) {
+  if (!dateStr) return '';
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (diff < 1) return '방금 출발';
+  if (diff < 60) return `출발 후 ${diff}분`;
+  return `출발 후 ${Math.floor(diff/60)}시간 ${diff%60}분`;
+}
+function formatLastUpdate(dateStr) {
+  if (!dateStr) return '위치 정보 없음';
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diff < 10) return '방금 업데이트';
+  if (diff < 60) return `${diff}초 전 업데이트`;
+  return `${Math.floor(diff/60)}분 전 업데이트`;
+}
+
+// ─── 네이버 지도 초기화 ────────────────────────────────────────────────────
+function initNaverMap(techLat, techLng, destLat, destLng) {
+  if (typeof naver === 'undefined') return false;
+  const mapEl = document.getElementById('map');
+  if (!mapEl) return false;
+
+  const centerLat = techLat || destLat || 37.5665;
+  const centerLng = techLng || destLng || 126.9780;
+
+  if (!mapInitialized) {
+    naverMap = new naver.maps.Map('map', {
+      center: new naver.maps.LatLng(centerLat, centerLng),
+      zoom: 14,
+      mapTypeId: naver.maps.MapTypeId.NORMAL,
+    });
+    mapInitialized = true;
+  }
+
+  // 기사 마커
+  if (techLat && techLng) {
+    const techPos = new naver.maps.LatLng(techLat, techLng);
+    if (techMarker) {
+      techMarker.setPosition(techPos);
+    } else {
+      techMarker = new naver.maps.Marker({
+        position: techPos,
+        map: naverMap,
+        title: '기사 현재 위치',
+        icon: {
+          content: '<div style="background:#FF6B35;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🚗</div>',
+          anchor: new naver.maps.Point(20, 20),
+        },
+      });
+    }
+    naverMap.setCenter(techPos);
+  }
+
+  // 목적지 마커
+  if (destLat && destLng) {
+    const destPos = new naver.maps.LatLng(destLat, destLng);
+    if (!destMarker) {
+      destMarker = new naver.maps.Marker({
+        position: destPos,
+        map: naverMap,
+        title: '고객 주소',
+        icon: {
+          content: '<div style="background:#3B82F6;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🏠</div>',
+          anchor: new naver.maps.Point(20, 20),
+        },
+      });
+    }
+    // 두 마커가 모두 있으면 범위 맞춤
+    if (techLat && techLng) {
+      const bounds = new naver.maps.LatLngBounds(
+        new naver.maps.LatLng(Math.min(techLat, destLat) - 0.002, Math.min(techLng, destLng) - 0.002),
+        new naver.maps.LatLng(Math.max(techLat, destLat) + 0.002, Math.max(techLng, destLng) + 0.002)
+      );
+      naverMap.fitBounds(bounds);
+    }
+  }
+  return true;
+}
+
+// ─── 거리 계산 (Haversine) ─────────────────────────────────────────────────
+function calcDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function estimateArrival(techLat, techLng, destLat, destLng) {
+  if (!techLat || !techLng || !destLat || !destLng) return null;
+  const dist = calcDistance(techLat, techLng, destLat, destLng);
+  const avgSpeedKmh = 30; // 도심 평균 속도
+  const minutes = Math.ceil((dist / avgSpeedKmh) * 60);
+  if (minutes < 1) return '곧 도착';
+  if (minutes < 60) return `약 ${minutes}분 후 도착 예정`;
+  return `약 ${Math.floor(minutes/60)}시간 ${minutes%60}분 후 도착 예정`;
+}
+
+// ─── 화면 렌더링 ───────────────────────────────────────────────────────────
+function render(data) {
+  const app = document.getElementById('app');
+  const techLat = data.currentLat ? parseFloat(data.currentLat) : null;
+  const techLng = data.currentLng ? parseFloat(data.currentLng) : null;
+  const destLat = data.customerLat ? parseFloat(data.customerLat) : null;
+  const destLng = data.customerLng ? parseFloat(data.customerLng) : null;
+  const eta = estimateArrival(techLat, techLng, destLat, destLng);
+
+  if (data.status === '도착완료') {
+    app.innerHTML = `
+      <div class="ended-card">
+        <div class="ended-icon">✅</div>
+        <div class="ended-title">기사가 도착했습니다!</div>
+        <div class="ended-desc">담당 기사(${data.technicianName || '기사'})가 도착하여<br>위치 공유가 종료되었습니다.<br><br>도착 시각: ${formatTime(data.arrivedAt)}</div>
+      </div>
+      <div class="footer">
+        퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
+      </div>`;
+    if (refreshInterval) clearInterval(refreshInterval);
+    return;
+  }
+
+  if (data.status === '업무취소' || data.status === '만료') {
+    app.innerHTML = `
+      <div class="ended-card">
+        <div class="ended-icon">${data.status === '만료' ? '⏰' : '❌'}</div>
+        <div class="ended-title">${data.status === '만료' ? '위치 공유 링크 만료' : '방문이 취소되었습니다'}</div>
+        <div class="ended-desc">${data.status === '만료' ? '위치 공유 링크가 만료되었습니다.<br>문의사항은 고객센터로 연락해 주세요.' : '담당 기사의 방문이 취소되었습니다.<br>불편을 드려 죄송합니다. 고객센터로 연락해 주세요.'}</div>
+      </div>
+      <div class="footer">
+        퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
+      </div>`;
+    if (refreshInterval) clearInterval(refreshInterval);
+    return;
+  }
+
+  // 이동 중
+  const techName = data.technicianName || '담당 기사';
+  const techPhone = data.technicianPhone || '';
+  const hasLocation = techLat && techLng;
+
+  app.innerHTML = `
+    <div class="status-card">
+      <div class="status-row">
+        <div class="status-icon">🚗</div>
+        <div class="status-info">
+          <div class="status-label">현재 상태</div>
+          <div class="status-value">이동 중</div>
+        </div>
+        <div class="status-badge">
+          <div class="pulse-dot"></div>
+          실시간
+        </div>
+      </div>
+      ${eta ? `<div style="background:#FFF3E0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;color:#FF6B35;text-align:center;margin-bottom:8px">⏱ ${eta}</div>` : ''}
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-item-label">출발 시각</div>
+          <div class="info-item-value">${formatTime(data.departedAt)}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-item-label">경과 시간</div>
+          <div class="info-item-value">${formatElapsed(data.departedAt)}</div>
+        </div>
+        ${data.customerAddress ? `
+        <div class="info-item" style="grid-column:1/-1">
+          <div class="info-item-label">방문 주소</div>
+          <div class="info-item-value">${data.customerAddress}</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <div class="map-container">
+      <div class="map-header">
+        <span>📍</span>
+        <span class="map-header-title">기사 현재 위치</span>
+        <span class="map-header-sub">${hasLocation ? '실시간 업데이트' : '위치 수신 대기 중'}</span>
+      </div>
+      <div id="map">
+        ${!hasLocation ? `
+        <div class="map-placeholder">
+          <div class="map-placeholder-icon">📍</div>
+          <div class="map-placeholder-text">위치 정보를 수신하는 중입니다...</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <div class="tech-card">
+      <div class="tech-card-title">담당 기사 정보</div>
+      <div class="tech-info">
+        <div class="tech-avatar">${(techName[0] || '기').toUpperCase()}</div>
+        <div>
+          <div class="tech-name">${techName}</div>
+          <div class="tech-company">퓨처에너지테크</div>
+        </div>
+        ${techPhone ? `<a class="call-btn" href="tel:${techPhone.replace(/[^0-9]/g,'')}">📞 전화</a>` : ''}
+      </div>
+    </div>
+
+    <div class="update-time" id="update-time">
+      ${data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음'}
+    </div>
+
+    <div class="footer">
+      퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
+    </div>`;
+
+  // 지도 초기화 (네이버 지도 API 로드 후)
+  if (hasLocation) {
+    setTimeout(() => {
+      initNaverMap(techLat, techLng, destLat, destLng);
+    }, 100);
+  }
+}
+
+// ─── 데이터 로드 ───────────────────────────────────────────────────────────
+async function loadSession() {
+  if (!token) {
+    document.getElementById('app').innerHTML = `
+      <div class="error-card">
+        <div class="error-icon">🔗</div>
+        <div class="error-title">잘못된 링크</div>
+        <div class="error-desc">유효하지 않은 위치 확인 링크입니다.</div>
+      </div>`;
+    return;
+  }
+  try {
+    const res = await fetch(`${BASE_URL}/api/location/session/${token}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      document.getElementById('app').innerHTML = `
+        <div class="error-card">
+          <div class="error-icon">⏰</div>
+          <div class="error-title">링크 만료 또는 오류</div>
+          <div class="error-desc">${err.error || '위치 정보를 불러올 수 없습니다.'}<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>
+        </div>`;
+      if (refreshInterval) clearInterval(refreshInterval);
+      return;
+    }
+    const data = await res.json();
+    render(data);
+
+    // 이동 중이면 10초마다 자동 갱신
+    if (data.status === '이동중') {
+      if (!refreshInterval) {
+        refreshInterval = setInterval(loadSession, 10000);
+      }
+    } else {
+      if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+    }
+  } catch (e) {
+    console.error('위치 정보 로드 실패:', e);
+  }
+}
+
+// ─── 네이버 지도 API 로드 ──────────────────────────────────────────────────
+// 네이버 지도 API 키가 없으면 지도 없이 동작
+function loadNaverMapApi() {
+  const clientId = window.NAVER_MAP_CLIENT_ID || '';
+  if (!clientId) return; // API 키 없으면 지도 생략
+  const script = document.createElement('script');
+  script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
+  script.onload = () => {
+    // 지도 API 로드 완료 후 현재 데이터로 지도 재초기화
+    loadSession();
+  };
+  document.head.appendChild(script);
+}
+
+// 초기 로드
+loadSession();
+loadNaverMapApi();
+</script>
+</body>
+</html>

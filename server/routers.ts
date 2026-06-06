@@ -13,6 +13,7 @@ import {
   friendlySmsError,
 } from "./notification";
 import { dispatchLeakSms } from "./leak-sms";
+import { buildTechnicianDepartedMessage } from "./notification";
 
 // 증상 enum
 const symptomValues = [
@@ -943,6 +944,114 @@ export const appRouter = router({
         return { success: true, status, flowRateLpm: input.flowRateLpm };
       }),
   }),
-});
+  // ─── 위치 추적 ───────────────────────────────────────────────────────────
+  location: router({
+    // 동의 여부 확인
+    getConsent: publicProcedure
+      .input(z.object({ technicianId: z.number() }))
+      .query(async ({ input }) => {
+        const consent = await db.getLocationConsent(input.technicianId);
+        return { hasConsented: !!consent };
+      }),
 
+    // 동의 저장
+    saveConsent: publicProcedure
+      .input(z.object({ technicianId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.createLocationConsent(input.technicianId);
+        return { success: true };
+      }),
+
+    // 위치 세션 시작 (기사가 "고객 집으로 출발" 누를 때)
+    startTracking: publicProcedure
+      .input(z.object({
+        requestId: z.number(),
+        technicianId: z.number(),
+        technicianName: z.string(),
+        technicianPhone: z.string().optional(),
+        customerName: z.string(),
+        customerPhone: z.string(),
+        customerAddress: z.string(),
+        customerLat: z.number().optional(),
+        customerLng: z.number().optional(),
+        branchId: z.number().optional(),
+        branchName: z.string().optional(),
+        demoMode: z.boolean().optional(), // 데모 모드: SMS 발송 안 함
+      }))
+      .mutation(async ({ input }) => {
+        // 이미 이동중인 세션이 있으면 종료
+        const existing = await db.getLocationSessionByRequestId(input.requestId);
+        if (existing) {
+          await db.stopLocationSession(existing.trackingToken, "업무취소");
+        }
+        // UUID 토큰 생성
+        const token = crypto.randomUUID();
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000); // 4시간 후 만료
+        const session = await db.createLocationSession({
+          requestId: input.requestId,
+          technicianId: input.technicianId,
+          technicianName: input.technicianName,
+          technicianPhone: input.technicianPhone ?? null,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerAddress: input.customerAddress,
+          customerLat: input.customerLat !== undefined ? String(input.customerLat) : null,
+          customerLng: input.customerLng !== undefined ? String(input.customerLng) : null,
+          branchId: input.branchId ?? null,
+          branchName: input.branchName ?? null,
+          trackingToken: token,
+          status: "이동중",
+          departedAt: now,
+          expiresAt,
+        });
+        if (!session) throw new Error("세션 생성 실패");
+        // 고객용 전용 링크 생성
+        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const trackingUrl = `${baseUrl}/track/${token}`;
+        // 고객 SMS 발송 (데모 모드가 아닌 경우)
+        let smsSent = false;
+        if (!input.demoMode) {
+          try {
+            const msg = buildTechnicianDepartedMessage(
+              input.customerName,
+              input.technicianName,
+              trackingUrl
+            );
+            const result = await sendSms(input.customerPhone, msg);
+            if (result.result === "SUCCESS") {
+              smsSent = true;
+              await db.markLocationSessionSmsSent(token);
+            }
+          } catch (smsErr) {
+            console.error("[위치추적] SMS 발송 오류:", smsErr);
+          }
+        }
+        return { success: true, token, trackingUrl, smsSent };
+      }),
+
+    // 현재 방문 건의 위치 세션 조회
+    getSessionByRequest: publicProcedure
+      .input(z.object({ requestId: z.number() }))
+      .query(async ({ input }) => {
+        const session = await db.getLocationSessionByRequestId(input.requestId);
+        return session;
+      }),
+
+    // 이동 중 전체 목록 (관리자용)
+    getActiveSessions: publicProcedure
+      .query(async () => {
+        await db.expireOldLocationSessions();
+        return db.getActiveLocationSessions();
+      }),
+
+    // 지사별 이동 중 목록 (지사장용)
+    getActiveSessionsByBranch: publicProcedure
+      .input(z.object({ branchId: z.number() }))
+      .query(async ({ input }) => {
+        await db.expireOldLocationSessions();
+        return db.getActiveLocationSessionsByBranch(input.branchId);
+      }),
+  }),
+});
 export type AppRouter = typeof appRouter;

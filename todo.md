@@ -191,3 +191,17 @@
 - [x] 관리자 앱 유량 관리 탭 상세 항목 보강 (점검 처리 여부, 처리 메모, 담당 지사)
 - [x] DB: flowRateSettings에 inspectionStatus, inspectionMemo 컨럼 추가
 - [x] 기존 누수센서/고객 접수/방문 예약/관리자/문자 알림 기능 유지 확인
+
+## 기사 실시간 위치 공유 기능 (18차)
+- [x] 백그라운드 GPS 기술 검토 및 가능 여부 분석
+- [x] DB 스키마 추가: location_sessions, location_consents 테이블
+- [x] 백엔드 API: 위치 세션 생성/업데이트/종료, 고객 전용 링크 생성, 만료 처리
+- [x] tRPC: location.startTracking / getConsent / saveConsent / getSessionByRequest / getActiveSessions / getActiveSessionsByBranch
+- [x] REST API: /api/location/update, /api/location/stop, /api/location/active, /api/location/session/:token, /track/:token
+- [x] 기사용 앱 화면: 출발/도착/취소 버튼, 위치 동의 모달, 위치 전송 로직 (30초 간격)
+- [x] 고객용 위치 확인 웹 페이지 (track.html): 지도, 기사 위치 마커, 예상 도착, 만료 처리
+- [x] 관리자 대시보드: 이동 중 기사 현황 패널 추가
+- [x] 지사장 대시보드: 소속 기사 이동 현황 패널 추가
+- [x] 출발 시 고객 SMS 자동 발송 (SOLAPI, 데모 모드 지원)
+- [x] 테스트 기사 계정 (worker1 / worker1234) 및 시험 방문 건 생성 (ID:60001)
+- [x] 전체 흐름 API 테스트: 세션 시작→위치 업데이트→세션 조회→종료→활성 0개 확인 완료

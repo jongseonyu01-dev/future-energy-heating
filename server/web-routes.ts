@@ -15,7 +15,19 @@ import {
   getAppRolesByRole,
   getBranchById,
 } from "./db";
-import { sendSms, buildFlowRateAlertMessage } from "./notification";
+import { sendSms, buildFlowRateAlertMessage, buildTechnicianDepartedMessage } from "./notification";
+import {
+  createLocationSession,
+  getLocationSessionByToken,
+  updateLocationSessionPosition,
+  stopLocationSession,
+  markLocationSessionSmsSent,
+  getActiveLocationSessions,
+  getActiveLocationSessionsByBranch,
+  expireOldLocationSessions,
+  getLocationConsent,
+  createLocationConsent,
+} from "./db";
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
@@ -69,6 +81,113 @@ export function registerWebRoutes(app: Express) {
         `attachment; filename*=UTF-8''${encodeURIComponent("접수현황_" + new Date().toISOString().slice(0, 10))}.csv`
       );
       res.send(bom + csvRows.join("\n"));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── 위치 추적 API ──────────────────────────────────────────────
+
+  // 고객용 위치 확인 페이지 (토큰 기반)
+  app.get("/track/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    const trackingPagePath = path.join(PUBLIC_DIR, "preview", "track.html");
+    if (fs.existsSync(trackingPagePath)) {
+      res.sendFile(trackingPagePath);
+    } else {
+      res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
+    }
+  });
+
+  // 위치 세션 정보 조회 (고객용 - 토큰으로 조회)
+  app.get("/api/location/session/:token", async (req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const session = await getLocationSessionByToken(req.params.token);
+      if (!session) {
+        return res.status(404).json({ error: "세션을 찾을 수 없거나 만료되었습니다." });
+      }
+      // 고객에게는 최소한의 정보만 노출 (출발지/전체 이력 제외)
+      res.json({
+        status: session.status,
+        technicianName: session.technicianName,
+        technicianPhone: session.technicianPhone,
+        customerAddress: session.customerAddress,
+        customerLat: session.customerLat,
+        customerLng: session.customerLng,
+        currentLat: session.currentLat,
+        currentLng: session.currentLng,
+        currentUpdatedAt: session.currentUpdatedAt,
+        departedAt: session.departedAt,
+        arrivedAt: session.arrivedAt,
+        expiresAt: session.expiresAt,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 위치 업데이트 (기사 앱 → 서버, 30초 간격)
+  app.post("/api/location/update", async (req: Request, res: Response) => {
+    try {
+      const { token, lat, lng } = req.body;
+      if (!token || lat === undefined || lng === undefined) {
+        return res.status(400).json({ error: "token, lat, lng 필수" });
+      }
+      const session = await getLocationSessionByToken(token);
+      if (!session) {
+        return res.status(404).json({ error: "세션 없음" });
+      }
+      if (session.status !== "이동중") {
+        return res.status(400).json({ error: "이미 종료된 세션입니다.", status: session.status });
+      }
+      // 만료 확인
+      if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+        await stopLocationSession(token, "만료");
+        return res.status(400).json({ error: "세션이 만료되었습니다.", status: "만료" });
+      }
+      await updateLocationSessionPosition(token, String(lat), String(lng));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 위치 세션 종료 (기사 앱 → 도착/취소)
+  app.post("/api/location/stop", async (req: Request, res: Response) => {
+    try {
+      const { token, reason } = req.body;
+      if (!token || !reason) {
+        return res.status(400).json({ error: "token, reason 필수" });
+      }
+      if (!["도착완료", "업무취소"].includes(reason)) {
+        return res.status(400).json({ error: "reason은 도착완료 또는 업무취소" });
+      }
+      await stopLocationSession(token, reason as "도착완료" | "업무취소");
+      res.json({ success: true, status: reason });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자용 - 이동 중 기사 전체 목록
+  app.get("/api/location/active", async (_req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const sessions = await getActiveLocationSessions();
+      res.json({ sessions });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 지사장용 - 소속 지사 이동 중 기사 목록
+  app.get("/api/location/active/branch/:branchId", async (req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const branchId = parseInt(req.params.branchId);
+      const sessions = await getActiveLocationSessionsByBranch(branchId);
+      res.json({ sessions });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

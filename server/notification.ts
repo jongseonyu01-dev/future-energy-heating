@@ -254,3 +254,18 @@ export function buildLeakAlertMessage(
   const dongPart = dong && dong !== "-" ? `${dong}동 ` : "";
   return `[퓨처에너지테크]\n누수 감지 알림입니다.\n${apartmentName} ${dongPart}${ho}호의 ${installLocation}에서 누수가 감지되었습니다.\n즉시 확인하거나 고객센터로 연락해 주세요. 031-8042-7310`;
 }
+
+/**
+ * 기사 출발 알림 SMS 메시지 생성 (고객용)
+ */
+export function buildTechnicianDepartedMessage(
+  customerName: string,
+  technicianName: string,
+  trackingUrl: string
+): string {
+  return `[퓨처에너지테크]
+${customerName}님, 담당 기사(${technicianName})가 고객님 댁으로 출발했습니다.
+아래 링크에서 현재 위치와 예상 도착 시간을 확인할 수 있습니다.
+기사 위치 확인: ${trackingUrl}
+문의: 031-8042-7310`;
+}
