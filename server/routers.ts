@@ -785,6 +785,111 @@ export const appRouter = router({
       .input(z.object({ sensorUid: z.string() }))
       .query(async ({ input }) => db.getSensorEvents(input.sensorUid)),
   }),
+
+  // ─── 유량 관리 ──────────────────────────────────────────────────
+  flowRate: router({
+    listSettings: publicProcedure.query(async () => db.getAllFlowRateSettings()),
+
+    addSetting: publicProcedure
+      .input(z.object({
+        sensorId: z.string().min(1),
+        branchId: z.number().nullable().optional(),
+        apartmentName: z.string().min(1),
+        buildingNumber: z.string().min(1),
+        roomNumber: z.string().min(1),
+        baseFlowRateLpm: z.number().positive(),
+        warningRangePercent: z.number().min(1).max(100).default(30),
+        cautionRangePercent: z.number().min(1).max(100).default(15),
+        alertDurationMinutes: z.number().min(1).default(10),
+      }))
+      .mutation(async ({ input }) => {
+        await db.upsertFlowRateSetting({
+          sensorId: input.sensorId,
+          branchId: input.branchId ?? null,
+          apartmentName: input.apartmentName,
+          buildingNumber: input.buildingNumber,
+          roomNumber: input.roomNumber,
+          baseFlowRateLpm: String(input.baseFlowRateLpm.toFixed(2)),
+          warningRangePercent: input.warningRangePercent,
+          cautionRangePercent: input.cautionRangePercent,
+          alertDurationMinutes: input.alertDurationMinutes,
+        });
+        return { success: true };
+      }),
+
+    updateSetting: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        baseFlowRateLpm: z.number().positive().optional(),
+        warningRangePercent: z.number().min(1).max(100).optional(),
+        cautionRangePercent: z.number().min(1).max(100).optional(),
+        alertDurationMinutes: z.number().min(1).optional(),
+        apartmentName: z.string().optional(),
+        buildingNumber: z.string().optional(),
+        roomNumber: z.string().optional(),
+        branchId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, baseFlowRateLpm, ...rest } = input;
+        await db.updateFlowRateSetting(id, {
+          ...(baseFlowRateLpm !== undefined && { baseFlowRateLpm: String(baseFlowRateLpm.toFixed(2)) }),
+          ...rest,
+        });
+        return { success: true };
+      }),
+
+    deleteSetting: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteFlowRateSetting(input.id);
+        return { success: true };
+      }),
+
+    getLogs: publicProcedure
+      .input(z.object({ sensorId: z.string().optional(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        if (input.sensorId) return db.getFlowRateLogs(input.sensorId, input.limit);
+        return db.getRecentFlowRateLogs(input.limit);
+      }),
+
+    demoUpdate: publicProcedure
+      .input(z.object({
+        sensorId: z.string().min(1),
+        flowRateLpm: z.number().min(0),
+      }))
+      .mutation(async ({ input }) => {
+        const setting = await db.getFlowRateSettingBySensorId(input.sensorId);
+        if (!setting) throw new Error("센서 설정을 찾을 수 없습니다.");
+        const base = parseFloat(String(setting.baseFlowRateLpm));
+        const diffPct = Math.abs((input.flowRateLpm - base) / base) * 100;
+        let status: "정상" | "주의" | "경고" = "정상";
+        if (diffPct >= setting.warningRangePercent) status = "경고";
+        else if (diffPct >= setting.cautionRangePercent) status = "주의";
+        const now = new Date();
+        await db.createFlowRateLog({
+          sensorId: input.sensorId,
+          branchId: setting.branchId ?? null,
+          apartmentName: setting.apartmentName,
+          buildingNumber: setting.buildingNumber,
+          roomNumber: setting.roomNumber,
+          flowRateLpm: String(input.flowRateLpm.toFixed(2)),
+          measuredAt: now,
+          status,
+          source: "DEMO",
+        });
+        let alertStartedAt = setting.alertStartedAt ? new Date(setting.alertStartedAt) : null;
+        if (status === "정상") alertStartedAt = null;
+        else if (!alertStartedAt) alertStartedAt = now;
+        await db.updateFlowRateLastData(input.sensorId, {
+          lastFlowRateLpm: String(input.flowRateLpm.toFixed(2)),
+          lastMeasuredAt: now,
+          lastStatus: status,
+          alertStartedAt,
+          alertSentAt: setting.alertSentAt ? new Date(setting.alertSentAt) : null,
+        });
+        return { success: true, status, flowRateLpm: input.flowRateLpm };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

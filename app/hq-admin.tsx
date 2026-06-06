@@ -13,8 +13,9 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { HQFlowRate } from "@/components/hq-flow-rate";
 
-type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "notices" | "materials" | "sms";
+type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "flowrate" | "notices" | "materials" | "sms";
 
 const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "📊" },
@@ -22,6 +23,7 @@ const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
   { id: "branches", label: "지사 관리", icon: "🏢" },
   { id: "accounts", label: "계정 관리", icon: "👤" },
   { id: "sensors", label: "누수센서", icon: "💧" },
+  { id: "flowrate", label: "유량 관리", icon: "🌡️" },
   { id: "notices", label: "공지 작성", icon: "📢" },
   { id: "materials", label: "자재 주문", icon: "📦" },
   { id: "sms", label: "SMS 설정", icon: "📱" },
@@ -108,6 +110,7 @@ export default function HQAdminScreen() {
           {activeTab === "branches" && <HQBranches colors={colors} />}
           {activeTab === "accounts" && <HQAccounts colors={colors} />}
           {activeTab === "sensors" && <HQSensors colors={colors} />}
+          {activeTab === "flowrate" && <HQFlowRate colors={colors} />}
           {activeTab === "notices" && <HQNotices colors={colors} userId={user.userId} />}
           {activeTab === "materials" && <HQMaterials colors={colors} />}
           {activeTab === "sms" && <HQSmsSettings colors={colors} />}

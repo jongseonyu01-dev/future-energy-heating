@@ -223,6 +223,26 @@ export function buildStatusChangeMessage(
 }
 
 /**
+ * 유량 이탈 경고 SMS 메시지 생성 (본사 관리자 + 담당 지사장)
+ */
+export function buildFlowRateAlertMessage(params: {
+  apartmentName: string;
+  buildingNumber: string;
+  roomNumber: string;
+  sensorId: string;
+  currentFlowRate: number;
+  baseFlowRate: number;
+  status: "주의" | "경고";
+  durationMinutes: number;
+}): string {
+  const diff = params.currentFlowRate - params.baseFlowRate;
+  const diffSign = diff >= 0 ? "+" : "";
+  const diffPercent = ((Math.abs(diff) / params.baseFlowRate) * 100).toFixed(1);
+  return `[퓨처에너지테크]
+유량 ${params.status} 알림\n${params.apartmentName} ${params.buildingNumber} ${params.roomNumber}\n기준 유량: ${params.baseFlowRate.toFixed(2)} LPM\n현재 유량: ${params.currentFlowRate.toFixed(2)} LPM (${diffSign}${diff.toFixed(2)}, ${diffPercent}% 이탈)\n${params.durationMinutes}분 이상 지속 중\n즉시 확인 바랍니다. 031-8042-7310`;
+}
+
+/**
  * 누수 감지 알림 메시지 생성 (고객/관리자 공통)
  */
 export function buildLeakAlertMessage(

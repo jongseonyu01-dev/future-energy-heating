@@ -292,6 +292,54 @@ export const materialOrders = mysqlTable("material_orders", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── 세대별 유량 설정 테이블 ─────────────────────────────────────
+export const flowRateSettings = mysqlTable("flow_rate_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorId: varchar("sensorId", { length: 64 }).notNull().unique(), // ESP32 sensorId
+  // 지사 배정
+  branchId: int("branchId"),
+  // 세대 정보
+  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
+  buildingNumber: varchar("buildingNumber", { length: 20 }).notNull(), // 동
+  roomNumber: varchar("roomNumber", { length: 20 }).notNull(),          // 호
+  // 기준 유량 설정
+  baseFlowRateLpm: decimal("baseFlowRateLpm", { precision: 6, scale: 2 }).notNull().default("5.50"),
+  warningRangePercent: int("warningRangePercent").notNull().default(30), // 기준 대비 ±30% 초과 시 경고
+  cautionRangePercent: int("cautionRangePercent").notNull().default(15), // 기준 대비 ±15% 초과 시 주의
+  alertDurationMinutes: int("alertDurationMinutes").notNull().default(10), // 10분 이상 지속 시 SMS
+  // 마지막 측정 데이터 (캐시)
+  lastFlowRateLpm: decimal("lastFlowRateLpm", { precision: 6, scale: 2 }),
+  lastSupplyPressure: decimal("lastSupplyPressure", { precision: 6, scale: 3 }),
+  lastReturnPressure: decimal("lastReturnPressure", { precision: 6, scale: 3 }),
+  lastDifferentialPressure: decimal("lastDifferentialPressure", { precision: 6, scale: 3 }),
+  lastMeasuredAt: timestamp("lastMeasuredAt"),
+  lastStatus: mysqlEnum("lastStatus", ["정상", "주의", "경고"]).default("정상"),
+  // 경고 추적 (10분 이상 이탈 감지용)
+  alertStartedAt: timestamp("alertStartedAt"),   // 이탈 시작 시각
+  alertSentAt: timestamp("alertSentAt"),          // 마지막 SMS 발송 시각
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 유량 측정 로그 테이블 ──────────────────────────────────────
+export const flowRateLogs = mysqlTable("flow_rate_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorId: varchar("sensorId", { length: 64 }).notNull(),
+  branchId: int("branchId"),
+  apartmentName: varchar("apartmentName", { length: 100 }),
+  buildingNumber: varchar("buildingNumber", { length: 20 }),
+  roomNumber: varchar("roomNumber", { length: 20 }),
+  flowRateLpm: decimal("flowRateLpm", { precision: 6, scale: 2 }).notNull(),
+  supplyPressure: decimal("supplyPressure", { precision: 6, scale: 3 }),
+  returnPressure: decimal("returnPressure", { precision: 6, scale: 3 }),
+  differentialPressure: decimal("differentialPressure", { precision: 6, scale: 3 }),
+  measuredAt: timestamp("measuredAt").defaultNow().notNull(),
+  status: mysqlEnum("status", ["정상", "주의", "경고"]).notNull().default("정상"),
+  source: mysqlEnum("source", ["WEBHOOK", "DEMO"]).notNull().default("WEBHOOK"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── 타입 내보내기 ───────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -321,3 +369,7 @@ export type TrainingMaterial = typeof trainingMaterials.$inferSelect;
 export type InsertTrainingMaterial = typeof trainingMaterials.$inferInsert;
 export type MaterialOrder = typeof materialOrders.$inferSelect;
 export type InsertMaterialOrder = typeof materialOrders.$inferInsert;
+export type FlowRateSetting = typeof flowRateSettings.$inferSelect;
+export type InsertFlowRateSetting = typeof flowRateSettings.$inferInsert;
+export type FlowRateLog = typeof flowRateLogs.$inferSelect;
+export type InsertFlowRateLog = typeof flowRateLogs.$inferInsert;

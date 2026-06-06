@@ -120,6 +120,7 @@
     <div class="nav-item" onclick="showPanel('sales')"><span class="icon">💰</span> 지사별 매출</div>
     <div class="nav-section">기타</div>
     <div class="nav-item" onclick="showPanel('sensors')"><span class="icon">📡</span> 누수센서 관제</div>
+    <div class="nav-item" onclick="showPanel('flowrate')"><span class="icon">🌡️</span> 난방 유량 관제</div>
     <div class="nav-item" onclick="showPanel('sms')"><span class="icon">💬</span> 문자 발송 이력</div>
     <div class="nav-item" onclick="showPanel('materials')"><span class="icon">📦</span> 자재 주문</div>
     <div class="nav-item" onclick="showPanel('complaints')"><span class="icon">⚠️</span> 고객 불만</div>
@@ -362,6 +363,75 @@
       </div>
     </div>
 
+    <!-- 난방 유량 관제 -->
+    <div class="panel" id="panel-flowrate">
+      <!-- 요약 통계 -->
+      <div class="stats-grid" id="flowrateStats">
+        <div class="stat-card"><div class="stat-label">전체 세대</div><div class="stat-value" id="fr-total">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#22c55e">정상</div><div class="stat-value" id="fr-normal" style="color:#22c55e">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#f59e0b">주의</div><div class="stat-value" id="fr-caution" style="color:#f59e0b">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#ef4444">경고</div><div class="stat-value" id="fr-warning" style="color:#ef4444">-</div></div>
+      </div>
+      <!-- ESP32 웹훁 안내 -->
+      <div class="section-card" style="background:#f0f9ff;border:1.5px solid #bae6fd;">
+        <h3 style="color:#0369a1">📱 ESP32 웹훁 엔드포인트</h3>
+        <div style="font-size:13px;color:#0369a1;font-family:monospace;background:#e0f2fe;padding:12px;border-radius:8px;word-break:break-all">
+          POST <span id="webhookUrl">https://서버주소/api/webhook/flow-rate</span>
+        </div>
+        <div style="font-size:12px;color:#6b7280;margin-top:8px">인증: Authorization: Bearer <code>FLOW_RATE_WEBHOOK_SECRET</code> 헤더 필요</div>
+      </div>
+      <!-- 세대 목록 -->
+      <div class="section-card">
+        <h3>🌡️ 세대별 유량 현황 <span class="badge" id="frSettingsCount">0세대</span></h3>
+        <div class="inline-form" style="margin-bottom:12px">
+          <select id="frFilterStatus" onchange="loadFlowRate()">
+            <option value="">전체 상태</option>
+            <option value="정상">정상</option>
+            <option value="주의">주의</option>
+            <option value="경고">경고</option>
+          </select>
+          <input type="text" id="frSearch" placeholder="아파트명 / 동 / 호 검색" style="min-width:180px" oninput="renderFlowRateTable()" />
+          <button onclick="loadFlowRate()" style="background:var(--primary);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">🔄 새로고침</button>
+          <button onclick="openAddFlowRateModal()" style="background:#22c55e;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">+ 세대 등록</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="flowrateTable">
+            <thead><tr>
+              <th>아파트명</th><th>동/호</th><th>센서 ID</th>
+              <th>기준 유량</th><th>현재 유량</th><th>이탈률</th>
+              <th>공급측 압력</th><th>환수측 압력</th><th>차압</th>
+              <th>마지막 측정</th><th>상태</th><th>관리</th>
+            </tr></thead>
+            <tbody id="flowrateTbody"><tr class="loading-row"><td colspan="12">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 데모 테스트 -->
+      <div class="section-card">
+        <h3>🎞️ 데모 테스트 패널</h3>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px">ESP32 센서 없이 유량 값을 임의로 변경하여 상태 변화와 알림 로직을 테스트할 수 있습니다.</p>
+        <div class="inline-form">
+          <select id="demoSensorSelect" style="min-width:200px">
+            <option value="">세대 선택...</option>
+          </select>
+          <input type="number" id="demoFlowValue" placeholder="유량 (LPM)" step="0.01" min="0" style="width:120px" />
+          <button onclick="runFlowRateDemo()" style="background:#8b5cf6;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">🎮 데모 적용</button>
+        </div>
+        <div id="demoQuickBtns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+        <div id="demoResult" style="margin-top:10px;font-size:13px;color:#6b7280"></div>
+      </div>
+      <!-- 유량 로그 -->
+      <div class="section-card">
+        <h3>📊 유량 측정 로그 <span class="badge">최근 50건</span></h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>시간</th><th>아파트명</th><th>동/호</th><th>센서 ID</th><th>유량 (LPM)</th><th>상태</th><th>출체</th></tr></thead>
+            <tbody id="flowrateLogTbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- 고객 불만 -->
     <div class="panel" id="panel-complaints">
       <div class="section-card">
@@ -410,7 +480,7 @@
     document.querySelectorAll('.nav-item').forEach(n => {
       if (n.getAttribute('onclick')?.includes("'" + name + "'")) n.classList.add('active');
     });
-    const titles = { overview:'전체 현황', requests:'전국 접수 현황', assign:'기사 배정 현황', branches:'지사 목록', regions:'담당 지역 설정', stats:'월별 통계', sales:'지사별 매출', sensors:'누수센서 관제', sms:'문자 발송 이력', materials:'자재 주문', complaints:'고객 불만' };
+    const titles = { overview:'전체 현황', requests:'전국 접수 현황', assign:'기사 배정 현황', branches:'지사 목록', regions:'담당 지역 설정', stats:'월별 통계', sales:'지사별 매출', sensors:'누수센서 관제', flowrate:'난방 유량 관제', sms:'문자 발송 이력', materials:'자재 주문', complaints:'고객 불만' };
     document.getElementById('pageTitle').textContent = titles[name] || name;
     currentPanel = name;
     loadCurrentPanel();
@@ -424,6 +494,7 @@
     else if (currentPanel === 'stats') loadStats();
     else if (currentPanel === 'sms') { loadSmsStatus(); loadSmsLogs(); }
     else if (currentPanel === 'sensors') loadSensors();
+    else if (currentPanel === 'flowrate') loadFlowRate();
     else if (currentPanel === 'sales') loadSales();
     else if (currentPanel === 'assign') loadAssign();
     else if (currentPanel === 'regions') loadRegions();
@@ -891,6 +962,212 @@
         el.appendChild(opt);
       }
     });
+  }
+
+  // ─── 난방 유량 관제 함수 ─────────────────────────────────────────────────────────────────────────────────
+  let flowRateData = [];
+
+  async function loadFlowRate() {
+    // 웹훁 URL 표시
+    document.getElementById('webhookUrl').textContent = window.location.origin + '/api/webhook/flow-rate';
+
+    const [settings, logs] = await Promise.all([
+      fetch('/api/flow-rate/settings').then(r => r.json()).catch(() => []),
+      fetch('/api/flow-rate/logs?limit=50').then(r => r.json()).catch(() => []),
+    ]);
+
+    flowRateData = settings || [];
+
+    // 요약 통계
+    const total = flowRateData.length;
+    const normal = flowRateData.filter(s => (s.lastStatus || '정상') === '정상').length;
+    const caution = flowRateData.filter(s => s.lastStatus === '주의').length;
+    const warning = flowRateData.filter(s => s.lastStatus === '경고').length;
+    document.getElementById('fr-total').textContent = total;
+    document.getElementById('fr-normal').textContent = normal;
+    document.getElementById('fr-caution').textContent = caution;
+    document.getElementById('fr-warning').textContent = warning;
+    document.getElementById('frSettingsCount').textContent = total + '세대';
+
+    // 데모 센서 선택보스 업데이트
+    const sel = document.getElementById('demoSensorSelect');
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">세대 선택...</option>';
+    flowRateData.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.sensorId;
+      opt.textContent = s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 (' + parseFloat(s.baseFlowRateLpm).toFixed(2) + ' LPM)';
+      opt.dataset.base = s.baseFlowRateLpm;
+      opt.dataset.warn = s.warningRangePercent;
+      opt.dataset.caution = s.cautionRangePercent;
+      sel.appendChild(opt);
+    });
+    if (prevVal) sel.value = prevVal;
+    updateDemoQuickBtns();
+
+    // 세대 테이블 렌더링
+    renderFlowRateTable();
+
+    // 로그 테이블
+    const logTbody = document.getElementById('flowrateLogTbody');
+    const logList = logs || [];
+    logTbody.innerHTML = logList.length ? logList.map(l => `
+      <tr>
+        <td>${l.measuredAt ? new Date(l.measuredAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+        <td>${l.apartmentName || '-'}</td>
+        <td>${l.buildingNumber || '-'}동 ${l.roomNumber || '-'}호</td>
+        <td style="font-size:12px;color:#6b7280">${l.sensorId || '-'}</td>
+        <td style="font-weight:700">${l.flowRateLpm ? parseFloat(l.flowRateLpm).toFixed(2) + ' LPM' : '-'}</td>
+        <td><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${
+          l.status==='경고'?'#fee2e2':l.status==='주의'?'#fef3c7':'#dcfce7'
+        };color:${
+          l.status==='경고'?'#991b1b':l.status==='주의'?'#92400e':'#166534'
+        }">${l.status || '정상'}</span></td>
+        <td style="font-size:12px;color:#6b7280">${l.source || 'ESP32'}</td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="7">로그 데이터가 없습니다</td></tr>';
+  }
+
+  function renderFlowRateTable() {
+    const filterStatus = document.getElementById('frFilterStatus').value;
+    const search = (document.getElementById('frSearch').value || '').toLowerCase();
+    let list = flowRateData.filter(s => {
+      if (filterStatus && (s.lastStatus || '정상') !== filterStatus) return false;
+      if (search && !((s.apartmentName||'').toLowerCase().includes(search) || (s.buildingNumber||'').includes(search) || (s.roomNumber||'').includes(search))) return false;
+      return true;
+    });
+    const tbody = document.getElementById('flowrateTbody');
+    tbody.innerHTML = list.length ? list.map(s => {
+      const status = s.lastStatus || '정상';
+      const statusBg = status==='경고'?'#fee2e2':status==='주의'?'#fef3c7':'#dcfce7';
+      const statusColor = status==='경고'?'#991b1b':status==='주의'?'#92400e':'#166534';
+      const base = parseFloat(s.baseFlowRateLpm);
+      const cur = s.lastFlowRateLpm ? parseFloat(s.lastFlowRateLpm) : null;
+      const devPct = cur !== null && base > 0 ? ((cur - base) / base * 100) : null;
+      const devStr = devPct !== null ? (devPct >= 0 ? '+' : '') + devPct.toFixed(1) + '%' : '-';
+      const devColor = devPct !== null ? (Math.abs(devPct) >= s.warningRangePercent ? '#ef4444' : Math.abs(devPct) >= s.cautionRangePercent ? '#f59e0b' : '#22c55e') : '#6b7280';
+      return `<tr>
+        <td style="font-weight:600">${s.apartmentName || '-'}</td>
+        <td>${s.buildingNumber || '-'}동 ${s.roomNumber || '-'}호</td>
+        <td style="font-size:12px;color:#6b7280">${s.sensorId}</td>
+        <td style="font-weight:700">${base.toFixed(2)} LPM</td>
+        <td style="font-weight:700">${cur !== null ? cur.toFixed(2) + ' LPM' : '-'}</td>
+        <td style="color:${devColor};font-weight:700">${devStr}</td>
+        <td>${s.lastSupplyPressure ? parseFloat(s.lastSupplyPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td>${s.lastReturnPressure ? parseFloat(s.lastReturnPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td>${s.lastDifferentialPressure ? parseFloat(s.lastDifferentialPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td style="font-size:12px">${s.lastMeasuredAt ? new Date(s.lastMeasuredAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+        <td><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${statusBg};color:${statusColor}">${status}</span></td>
+        <td>
+          <button class="action-btn" style="background:#dbeafe;color:#1e40af;margin-right:4px" onclick="openEditFlowRateModal(${s.id})">수정</button>
+          <button class="action-btn" style="background:#fee2e2;color:#991b1b" onclick="deleteFlowRate(${s.id})">삭제</button>
+        </td>
+      </tr>`;
+    }).join('') : '<tr class="loading-row"><td colspan="12">등록된 세대가 없습니다</td></tr>';
+  }
+
+  function updateDemoQuickBtns() {
+    const sel = document.getElementById('demoSensorSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const container = document.getElementById('demoQuickBtns');
+    if (!opt || !opt.value) { container.innerHTML = ''; return; }
+    const base = parseFloat(opt.dataset.base || '5');
+    const warn = parseFloat(opt.dataset.warn || '30');
+    const caution = parseFloat(opt.dataset.caution || '15');
+    const btns = [
+      { label: '정상 (기준)', pct: 0 },
+      { label: '+' + caution + '% 주의', pct: caution },
+      { label: '+' + warn + '% 경고', pct: warn },
+      { label: '-' + caution + '% 주의', pct: -caution },
+      { label: '-' + warn + '% 경고', pct: -warn },
+    ];
+    container.innerHTML = btns.map(b => {
+      const val = (base * (1 + b.pct / 100)).toFixed(2);
+      return `<button onclick="document.getElementById('demoFlowValue').value='${val}'" style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">${b.label}<br><span style="color:#6b7280">${val} LPM</span></button>`;
+    }).join('');
+  }
+
+  document.getElementById('demoSensorSelect').addEventListener('change', updateDemoQuickBtns);
+
+  async function runFlowRateDemo() {
+    const sensorId = document.getElementById('demoSensorSelect').value;
+    const flow = parseFloat(document.getElementById('demoFlowValue').value);
+    if (!sensorId) { alert('세대를 선택해 주세요.'); return; }
+    if (isNaN(flow) || flow < 0) { alert('유효한 유량 값을 입력해 주세요.'); return; }
+    const res = document.getElementById('demoResult');
+    res.textContent = '적용 중...';
+    try {
+      const r = await fetch('/api/trpc/flowRate.demoUpdate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: { sensorId, flowRateLpm: flow } }),
+      });
+      const data = await r.json();
+      const result = data?.result?.data?.json || data;
+      const status = result?.status || '알 수 없음';
+      const statusColor = status==='경고'?'#ef4444':status==='주의'?'#f59e0b':'#22c55e';
+      res.innerHTML = `✅ 적용 완료: <strong style="color:${statusColor}">${status}</strong> (${flow.toFixed(2)} LPM)`;
+      await loadFlowRate();
+    } catch(e) {
+      res.textContent = '❌ 오류: ' + e.message;
+    }
+  }
+
+  async function openAddFlowRateModal() {
+    const sensorId = prompt('센서 ID를 입력하세요:');
+    if (!sensorId) return;
+    const aptName = prompt('아파트명:');
+    if (!aptName) return;
+    const building = prompt('동 (예: 101):');
+    if (!building) return;
+    const room = prompt('호수 (예: 1201):');
+    if (!room) return;
+    const base = parseFloat(prompt('기준 유량 (LPM, 예: 5.50):', '5.50') || '5.50');
+    if (isNaN(base) || base <= 0) { alert('유효하지 않은 기준 유량입니다.'); return; }
+    const warn = parseInt(prompt('경고 범위 (%, 예: 30):', '30') || '30');
+    const caution = parseInt(prompt('주의 범위 (%, 예: 15):', '15') || '15');
+    const alertMin = parseInt(prompt('알림 지속 시간 (분, 예: 10):', '10') || '10');
+    try {
+      const r = await fetch('/api/flow-rate/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sensorId, apartmentName: aptName, buildingNumber: building, roomNumber: room, baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert('세대가 등록되었습니다.');
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
+  }
+
+  async function openEditFlowRateModal(id) {
+    const s = flowRateData.find(x => x.id === id);
+    if (!s) return;
+    const base = parseFloat(prompt('기준 유량 (LPM):', parseFloat(s.baseFlowRateLpm).toFixed(2)) || '0');
+    if (isNaN(base) || base <= 0) { alert('유효하지 않은 값입니다.'); return; }
+    const warn = parseInt(prompt('경고 범위 (%):', s.warningRangePercent) || '0');
+    const caution = parseInt(prompt('주의 범위 (%):', s.cautionRangePercent) || '0');
+    const alertMin = parseInt(prompt('알림 지속 시간 (분):', s.alertDurationMinutes) || '0');
+    try {
+      const r = await fetch('/api/flow-rate/settings/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert('수정되었습니다.');
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
+  }
+
+  async function deleteFlowRate(id) {
+    const s = flowRateData.find(x => x.id === id);
+    if (!s) return;
+    if (!confirm(s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 설정을 삭제하시겠습니까?')) return;
+    try {
+      const r = await fetch('/api/flow-rate/settings/' + id, { method: 'DELETE' });
+      if (!r.ok) throw new Error(await r.text());
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
   }
 
   checkAuth();

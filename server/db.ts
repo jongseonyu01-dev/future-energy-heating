@@ -12,6 +12,11 @@ import {
   Technician,
   InsertTechnician,
   InsertNotificationLog,
+  flowRateSettings,
+  flowRateLogs,
+  FlowRateSetting,
+  InsertFlowRateSetting,
+  InsertFlowRateLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -792,4 +797,99 @@ export async function getBranchStats(branchId?: number) {
     pending: all.filter(r => !["작업완료"].includes(r.status)).length,
     revisit: all.filter(r => r.needsRevisit).length,
   };
+}
+
+// ─── 세대별 유량 설정 CRUD ────────────────────────────────────────────────
+export async function getAllFlowRateSettings(): Promise<FlowRateSetting[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(flowRateSettings).orderBy(flowRateSettings.apartmentName, flowRateSettings.buildingNumber, flowRateSettings.roomNumber);
+}
+
+export async function getFlowRateSettingBySensorId(sensorId: string): Promise<FlowRateSetting | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(flowRateSettings).where(eq(flowRateSettings.sensorId, sensorId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertFlowRateSetting(data: InsertFlowRateSetting): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(flowRateSettings).values(data).onDuplicateKeyUpdate({
+    set: {
+      branchId: data.branchId,
+      apartmentName: data.apartmentName,
+      buildingNumber: data.buildingNumber,
+      roomNumber: data.roomNumber,
+      baseFlowRateLpm: data.baseFlowRateLpm,
+      warningRangePercent: data.warningRangePercent,
+      cautionRangePercent: data.cautionRangePercent,
+      alertDurationMinutes: data.alertDurationMinutes,
+    },
+  });
+}
+
+export async function updateFlowRateSetting(
+  id: number,
+  data: Partial<Pick<FlowRateSetting, "baseFlowRateLpm" | "warningRangePercent" | "cautionRangePercent" | "alertDurationMinutes" | "apartmentName" | "buildingNumber" | "roomNumber" | "branchId">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(flowRateSettings).set(data as Record<string, unknown>).where(eq(flowRateSettings.id, id));
+}
+
+export async function updateFlowRateLastData(
+  sensorId: string,
+  data: {
+    lastFlowRateLpm: string;
+    lastSupplyPressure?: string | null;
+    lastReturnPressure?: string | null;
+    lastDifferentialPressure?: string | null;
+    lastMeasuredAt: Date;
+    lastStatus: "정상" | "주의" | "경고";
+    alertStartedAt?: Date | null;
+    alertSentAt?: Date | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(flowRateSettings).set(data as Record<string, unknown>).where(eq(flowRateSettings.sensorId, sensorId));
+}
+
+export async function deleteFlowRateSetting(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(flowRateSettings).where(eq(flowRateSettings.id, id));
+}
+
+// ─── 유량 로그 ────────────────────────────────────────────────────────────
+export async function createFlowRateLog(data: InsertFlowRateLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(flowRateLogs).values(data);
+}
+
+export async function getFlowRateLogs(sensorId: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(flowRateLogs)
+    .where(eq(flowRateLogs.sensorId, sensorId))
+    .orderBy(desc(flowRateLogs.measuredAt))
+    .limit(limit);
+}
+
+export async function getRecentFlowRateLogs(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(flowRateLogs)
+    .orderBy(desc(flowRateLogs.measuredAt))
+    .limit(limit);
+}
+
+// 역할별 앱 권한 목록 조회 (SMS 발송 대상자 조회용)
+export async function getAppRolesByRole(role: "hq_admin" | "branch_manager" | "technician" | "customer"): Promise<AppRole[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(appRoles).where(and(eq(appRoles.appRole, role), eq(appRoles.isActive, true)));
 }

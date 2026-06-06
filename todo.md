@@ -166,3 +166,18 @@
 - [x] icon-symbol.tsx에 phone.circle.fill 아이콘 추가
 - [x] _layout.tsx에 고객센터 탭 추가 (고객/비로그인 전용)
 - [x] HTML 파일(faq, contact, download, index) 임시 전화번호 교체
+
+## 세대별 난방 유량 관리 (16차)
+- [x] DB 스키마 추가: flowRateSettings 테이블 (세대별 기준 유량 설정)
+- [x] DB 스키마 추가: flowRateLogs 테이블 (유량 측정 이력)
+- [x] DB 마이그레이션 실행 (pnpm db:push)
+- [x] ESP32 웹훁 API 추가 (POST /api/webhook/flow-rate)
+- [x] 기준 유량 이탈 감지 로직 (10분 이상 지속 시 SMS 알림)
+- [x] 본사 관리자+담당 지사장 SOLAPI SMS 알림 함수
+- [x] tRPC API 추가: 유량 설정 CRUD, 유량 로그 조회
+- [x] 본사 관리자 앱(hq-admin.tsx) 유량 관리 탭 추가
+- [x] 세대별 기준 유량/경고 범위 수정 UI
+- [x] 현재 유량/압력/차압/상태 실시간 표시
+- [x] 데모 테스트 버튼 (임의 유량값 전송)
+- [x] 웹 관리자 대시보드(dashboard.html) 유량 관제 패널 추가
+- [x] 기존 누수센서 기능 유지 확인
