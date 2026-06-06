@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /preview/
+Disallow: /preview/admin/
+
+# 공개 홈페이지는 허용
+Allow: /web/
+
+Sitemap: https://futureheat-htdx5kse.manus.space/sitemap.xml

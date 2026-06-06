@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="/preview/auth-check.js"></script>
+  <script src="/preview/maintenance.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>자주 묻는 질문 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: #1f2937; background: #f9fafb; }
+    a { text-decoration: none; color: inherit; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { font-size: 18px; font-weight: 700; color: #e85d04; }
+    .back-btn { color: #6b7280; font-size: 14px; }
+    .hero { background: linear-gradient(135deg, #1a1a2e, #0f3460); color: #fff; padding: 48px 24px; text-align: center; }
+    .hero h1 { font-size: clamp(24px, 4vw, 40px); font-weight: 800; margin-bottom: 10px; }
+    .hero p { color: rgba(255,255,255,.75); font-size: 16px; }
+    .container { max-width: 800px; margin: 40px auto; padding: 0 16px 60px; }
+    .category-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+    .cat-btn { padding: 8px 18px; border: 1.5px solid #e5e7eb; border-radius: 20px; font-size: 14px; cursor: pointer; background: #fff; transition: all .15s; }
+    .cat-btn.active, .cat-btn:hover { background: #e85d04; color: #fff; border-color: #e85d04; }
+    .faq-item { background: #fff; border-radius: 14px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .faq-q { padding: 18px 20px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .faq-q:hover { background: #fff3ec; }
+    .faq-q .icon { font-size: 18px; transition: transform .2s; }
+    .faq-item.open .faq-q .icon { transform: rotate(180deg); }
+    .faq-a { display: none; padding: 0 20px 18px; font-size: 14px; color: #4b5563; line-height: 1.8; border-top: 1px solid #f3f4f6; }
+    .faq-item.open .faq-a { display: block; }
+    .contact-cta { background: linear-gradient(135deg, #e85d04, #c44d00); color: #fff; border-radius: 20px; padding: 32px; text-align: center; margin-top: 40px; }
+    .contact-cta h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .contact-cta p { font-size: 15px; opacity: .85; margin-bottom: 20px; }
+    .cta-btn { display: inline-block; background: #fff; color: #e85d04; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 15px; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/preview/index.html" class="logo">🔥 퓨처에너지테크</a>
+  <a href="/preview/index.html" class="back-btn">← 홈으로</a>
+</header>
+<div class="hero">
+  <h1>❓ 자주 묻는 질문</h1>
+  <p>궁금한 점을 빠르게 해결하세요</p>
+</div>
+<div class="container">
+  <div class="category-tabs">
+    <button class="cat-btn active" onclick="filterFaq('all', this)">전체</button>
+    <button class="cat-btn" onclick="filterFaq('repair', this)">난방 고장</button>
+    <button class="cat-btn" onclick="filterFaq('cleaning', this)">배관청소</button>
+    <button class="cat-btn" onclick="filterFaq('sensor', this)">누수센서</button>
+    <button class="cat-btn" onclick="filterFaq('cost', this)">비용/결제</button>
+    <button class="cat-btn" onclick="filterFaq('service', this)">서비스 일반</button>
+  </div>
+
+  <div id="faqList">
+    <div class="faq-item" data-cat="repair">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>🔧 난방이 전혀 안 되는데 어떻게 해야 하나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">먼저 보일러 전원과 온도 설정을 확인해 주세요. 보일러 에러 코드가 표시된다면 코드를 메모하고 접수해 주시면 빠른 진단이 가능합니다. 긴급 출동이 필요한 경우 24시간 고객센터(031-8042-7310)로 연락해 주세요.</div>
+    </div>
+    <div class="faq-item" data-cat="repair">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>🌡️ 일부 방만 춥고 다른 방은 따뜻한 이유가 뭔가요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">분배기 밸브 불균형, 배관 내 공기 유입, 또는 특정 구역 배관 막힘이 원인일 수 있습니다. 배관청소와 분배기 밸브 조정으로 대부분 해결됩니다. 고장 접수를 하시면 전문 기사가 방문하여 정확한 진단을 해드립니다.</div>
+    </div>
+    <div class="faq-item" data-cat="repair">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>💧 분배기에서 물이 새는데 어떻게 해야 하나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">분배기 누수는 즉시 보일러를 끄고 분배기 밸브를 잠근 후 고장 접수를 해주세요. 누수를 방치하면 아랫집 피해로 이어질 수 있으므로 빠른 조치가 필요합니다. 긴급 출동 서비스를 이용하시면 당일 방문이 가능합니다.</div>
+    </div>
+    <div class="faq-item" data-cat="cleaning">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>🚿 배관청소는 얼마나 자주 해야 하나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">일반적으로 3~5년에 한 번 권장드립니다. 난방 효율이 눈에 띄게 떨어지거나, 난방비가 갑자기 증가하거나, 특정 방이 잘 안 따뜻해지는 경우에는 주기와 관계없이 청소를 권장합니다.</div>
+    </div>
+    <div class="faq-item" data-cat="cleaning">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>⏱️ 배관청소 작업 시간은 얼마나 걸리나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">일반 아파트(84㎡ 기준) 기준으로 약 2~3시간 소요됩니다. 배관 오염 정도나 세대 규모에 따라 달라질 수 있으며, 작업 전 기사가 정확한 소요 시간을 안내해 드립니다.</div>
+    </div>
+    <div class="faq-item" data-cat="sensor">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>📡 누수센서는 어떻게 작동하나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">누수센서는 분배기 주변이나 배관 취약 부위에 설치하여 수분을 감지합니다. 누수 감지 시 즉시 고객님 휴대폰과 담당 지사로 알림이 발송됩니다. 배터리 부족이나 통신 이상도 별도로 알려드립니다.</div>
+    </div>
+    <div class="faq-item" data-cat="sensor">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>🔋 누수센서 배터리는 얼마나 가나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">일반적으로 1~2년 사용 가능하며, 배터리 잔량이 20% 이하로 떨어지면 자동으로 알림이 발송됩니다. 배터리 교체는 간단하게 직접 하실 수 있으며, 필요 시 기사가 방문하여 교체해 드립니다.</div>
+    </div>
+    <div class="faq-item" data-cat="cost">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>💰 출장비가 따로 있나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">기본 점검 출장비는 무료입니다. 부품 교체나 추가 작업이 필요한 경우 사전에 견적을 안내해 드리고, 고객님의 승인 후 진행합니다. 야간·공휴일 긴급 출동의 경우 별도 요금이 발생할 수 있습니다.</div>
+    </div>
+    <div class="faq-item" data-cat="cost">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>💳 결제는 어떻게 하나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">현금, 카드, 계좌이체 모두 가능합니다. 작업 완료 후 현장에서 결제하시면 됩니다. 세금계산서 및 현금영수증 발행도 가능합니다.</div>
+    </div>
+    <div class="faq-item" data-cat="service">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>📱 앱을 설치해야만 서비스를 이용할 수 있나요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">아닙니다. 홈페이지에서도 모든 접수와 신청이 가능합니다. 다만 앱을 설치하시면 실시간 작업 현황 확인, 누수센서 알림, 방문 일정 변경 등 더 편리한 기능을 이용하실 수 있습니다.</div>
+    </div>
+    <div class="faq-item" data-cat="service">
+      <div class="faq-q" onclick="toggleFaq(this)"><span>🗺️ 서비스 지역이 어디인가요?</span><span class="icon">▼</span></div>
+      <div class="faq-a">현재 안산, 수원, 화성, 시흥 등 경기 서남부 지역을 중심으로 서비스하고 있으며, 전국 지사를 확대 중입니다. 지사 찾기 메뉴에서 담당 지사를 확인하거나, 고객센터로 문의해 주세요.</div>
+    </div>
+  </div>
+
+  <div class="contact-cta">
+    <h3>원하는 답변을 찾지 못하셨나요?</h3>
+    <p>고객센터로 문의하시면 친절하게 안내해 드립니다</p>
+    <a href="/preview/contact.html" class="cta-btn">고객센터 문의하기 →</a>
+  </div>
+</div>
+
+<script>
+  function toggleFaq(el) {
+    el.closest('.faq-item').classList.toggle('open');
+  }
+  function filterFaq(cat, btn) {
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.faq-item').forEach(item => {
+      item.style.display = (cat === 'all' || item.dataset.cat === cat) ? 'block' : 'none';
+    });
+  }
+</script>
+</body>
+</html>

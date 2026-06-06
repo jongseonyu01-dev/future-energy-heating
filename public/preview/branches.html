@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="/preview/auth-check.js"></script>
+  <script src="/preview/maintenance.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>전국 지사 안내 | 퓨처에너지테크</title>
+  <meta name="description" content="퓨처에너지테크 전국 지사 안내. 부천지사, 호남지사 위치 및 연락처를 확인하세요." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #0284C7;
+      --primary-dark: #0369A1;
+      --accent: #E84B2F;
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #1E293B;
+      --muted: #64748B;
+      --radius: 16px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── 헤더 ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo img { height: 36px; }
+    .logo-text { display: flex; flex-direction: column; }
+    .logo-name { font-size: 18px; font-weight: 800; color: var(--primary); line-height: 1.2; }
+    .logo-en { font-size: 11px; color: var(--muted); }
+    nav { display: flex; gap: 4px; flex-wrap: wrap; }
+    nav a { padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: var(--muted); font-weight: 500; transition: background .15s, color .15s; white-space: nowrap; }
+    nav a:hover, nav a.active { background: #EFF6FF; color: var(--primary); }
+    .nav-cta { background: var(--accent) !important; color: #fff !important; font-weight: 700 !important; }
+    .nav-cta:hover { background: #c73d23 !important; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); margin: 5px 0; border-radius: 2px; }
+    @media (max-width: 768px) {
+      nav { display: none; position: absolute; top: 64px; left: 0; right: 0; background: var(--surface); border-bottom: 1px solid var(--border); flex-direction: column; padding: 12px 20px; gap: 4px; z-index: 99; }
+      nav.open { display: flex; }
+      .hamburger { display: block; }
+    }
+
+    /* ── 페이지 히어로 ── */
+    .page-hero { background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); color: #fff; padding: 48px 20px; text-align: center; }
+    .page-hero h1 { font-size: clamp(24px, 4vw, 36px); font-weight: 800; margin-bottom: 8px; }
+    .page-hero p { font-size: 16px; opacity: .85; }
+
+    /* ── 메인 컨테이너 ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px 60px; }
+
+    /* ── 지도 섹션 ── */
+    .map-section { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 32px; margin-bottom: 40px; }
+    .section-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
+    .map-wrapper { position: relative; max-width: 560px; margin: 0 auto; }
+    .map-wrapper svg { width: 100%; height: auto; display: block; }
+
+    /* 마커 스타일 */
+    .branch-marker { cursor: pointer; }
+    .branch-marker:hover .marker-circle { transform: scale(1.1); }
+    .marker-pulse { animation: pulse 2.5s ease-in-out infinite; transform-origin: center; }
+    @keyframes pulse {
+      0%, 100% { opacity: .5; r: 18; }
+      50% { opacity: .15; r: 24; }
+    }
+
+    /* 팝업 오버레이 */
+    .popup-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+    .popup-overlay.open { display: flex; }
+    .popup-card { background: var(--surface); border-radius: var(--radius); padding: 28px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); position: relative; animation: slideUp .25s ease; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .popup-close { position: absolute; top: 16px; right: 16px; background: #F1F5F9; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: var(--text); }
+    .popup-close:hover { background: #E2E8F0; }
+    .popup-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+    .popup-badge.bucheon { background: #DBEAFE; color: #1D4ED8; }
+    .popup-badge.honam { background: #D1FAE5; color: #065F46; }
+    .popup-name { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 16px; line-height: 1.3; }
+    .popup-info { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+    .popup-info-row { display: flex; gap: 10px; align-items: flex-start; }
+    .popup-info-icon { font-size: 18px; width: 24px; flex-shrink: 0; margin-top: 1px; }
+    .popup-info-label { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+    .popup-info-value { font-size: 14px; color: var(--text); font-weight: 500; line-height: 1.5; }
+    .popup-call-btn { display: block; width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; text-decoration: none; text-align: center; transition: opacity .15s; }
+    .popup-call-btn:hover { opacity: .88; }
+    .popup-call-btn.bucheon { background: #1D4ED8; }
+    .popup-call-btn.honam { background: #059669; }
+
+    /* ── 지사 목록 카드 ── */
+    .branches-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+    @media (max-width: 640px) { .branches-grid { grid-template-columns: 1fr; } }
+    .branch-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; transition: box-shadow .2s, transform .2s; }
+    .branch-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,.1); transform: translateY(-2px); }
+    .branch-card-header { padding: 20px 20px 0; display: flex; align-items: center; gap: 12px; }
+    .branch-card-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+    .branch-card-icon.bucheon { background: #DBEAFE; }
+    .branch-card-icon.honam { background: #D1FAE5; }
+    .branch-card-meta { flex: 1; }
+    .branch-card-region { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+    .branch-card-region.bucheon { color: #1D4ED8; }
+    .branch-card-region.honam { color: #059669; }
+    .branch-card-name { font-size: 17px; font-weight: 800; color: var(--text); line-height: 1.3; }
+    .branch-card-body { padding: 16px 20px; }
+    .branch-card-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+    .branch-card-row:last-child { margin-bottom: 0; }
+    .branch-card-row-icon { font-size: 16px; width: 20px; flex-shrink: 0; margin-top: 1px; }
+    .branch-card-row-text { font-size: 14px; color: var(--muted); line-height: 1.5; }
+    .branch-card-actions { padding: 0 20px 20px; display: flex; gap: 10px; }
+    .btn-call { flex: 1; padding: 11px; border-radius: 10px; border: none; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; text-decoration: none; text-align: center; transition: opacity .15s; }
+    .btn-call:hover { opacity: .88; }
+    .btn-call.bucheon { background: #1D4ED8; }
+    .btn-call.honam { background: #059669; }
+    .btn-map { flex: 1; padding: 11px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; text-align: center; transition: background .15s; }
+    .btn-map:hover { background: #F1F5F9; }
+
+    /* ── 안내 박스 ── */
+    .info-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 12px; padding: 20px; margin-bottom: 32px; display: flex; gap: 14px; align-items: flex-start; }
+    .info-box-icon { font-size: 28px; flex-shrink: 0; }
+    .info-box-title { font-size: 15px; font-weight: 700; color: #1E40AF; margin-bottom: 4px; }
+    .info-box-text { font-size: 14px; color: #3B82F6; line-height: 1.6; }
+
+    /* ── 본사 연락처 박스 ── */
+    .hq-box { background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); border-radius: var(--radius); padding: 28px; color: #fff; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+    .hq-box-left h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .hq-box-left p { font-size: 14px; opacity: .85; line-height: 1.6; }
+    .hq-box-right { display: flex; gap: 10px; flex-wrap: wrap; }
+    .hq-btn { padding: 12px 20px; border-radius: 10px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; text-align: center; transition: opacity .15s; white-space: nowrap; }
+    .hq-btn:hover { opacity: .88; }
+    .hq-btn-main { background: #fff; color: #0284C7; }
+    .hq-btn-mobile { background: rgba(255,255,255,.2); color: #fff; border: 1.5px solid rgba(255,255,255,.4); }
+
+    /* ── 푸터 ── */
+    footer { background: #1E293B; color: #94A3B8; padding: 40px 20px; text-align: center; }
+    footer .footer-inner { max-width: 1100px; margin: 0 auto; }
+    footer .footer-logo { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    footer p { font-size: 13px; line-height: 1.9; }
+    footer a { color: #94A3B8; text-decoration: none; }
+    footer a:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<header>
+  <div class="header-inner">
+    <a href="/preview/" class="logo">
+      <img src="/preview/assets/logo.png" alt="퓨처에너지테크 로고" onerror="this.style.display='none'" />
+      <div class="logo-text">
+        <span class="logo-name">퓨처에너지테크</span>
+        <span class="logo-en">Future Energy Tech</span>
+      </div>
+    </a>
+    <button class="hamburger" onclick="document.getElementById('mainNav').classList.toggle('open')" aria-label="메뉴">
+      <span></span><span></span><span></span>
+    </button>
+    <nav id="mainNav">
+      <a href="/preview/about.html">회사소개</a>
+      <a href="/preview/report.html" class="nav-cta">고장접수</a>
+      <a href="/preview/pipe-cleaning.html">배관청소</a>
+      <a href="/preview/leak-sensor.html">누수센서</a>
+      <a href="/preview/branches.html" class="active">전국 지사</a>
+      <a href="/preview/reviews.html">고객후기</a>
+      <a href="/preview/faq.html">FAQ</a>
+      <a href="/preview/contact.html">고객센터</a>
+      <a href="/preview/download.html">앱 다운로드</a>
+    </nav>
+  </div>
+</header>
+
+<!-- 히어로 -->
+<div class="page-hero">
+  <h1>🗺️ 전국 지사 안내</h1>
+  <p>퓨처에너지테크 전국 지사를 확인하고 가까운 지사에 문의하세요</p>
+</div>
+
+<!-- 팝업 오버레이 -->
+<div class="popup-overlay" id="popupOverlay" onclick="closePopupOnBg(event)">
+  <div class="popup-card" id="popupCard">
+    <button class="popup-close" onclick="closePopup()">✕</button>
+    <div id="popupContent"></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 안내 박스 -->
+  <div class="info-box">
+    <div class="info-box-icon">💡</div>
+    <div>
+      <div class="info-box-title">지도에서 지사 위치를 확인하세요</div>
+      <div class="info-box-text">지도 위의 마커를 클릭하면 해당 지사 정보와 연락처를 확인할 수 있습니다. 지사 확장 예정 지역은 순차적으로 추가됩니다.</div>
+    </div>
+  </div>
+
+  <!-- 지도 섹션 -->
+  <div class="map-section">
+    <div class="section-title">📍 지사 위치 지도</div>
+    <div class="map-wrapper">
+      <!--
+        대한민국 간략 SVG 지도
+        부천지사: 경기도 부천시 (x≈168, y≈162)
+        호남지사: 광주광역시 인근 (x≈138, y≈300)
+      -->
+      <svg viewBox="0 0 400 530" xmlns="http://www.w3.org/2000/svg" style="background: linear-gradient(180deg,#EFF6FF 0%,#DBEAFE 100%); border-radius:16px; border:1px solid #BFDBFE;">
+        <defs>
+          <filter id="mapShadow">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.12"/>
+          </filter>
+        </defs>
+
+        <!-- 한반도 본토 간략 경로 -->
+        <path d="
+          M 158 32
+          C 170 26, 195 24, 215 28
+          C 240 33, 268 44, 288 58
+          C 308 72, 322 96, 325 122
+          C 328 148, 318 166, 332 188
+          C 344 208, 348 232, 340 256
+          C 332 278, 316 294, 304 316
+          C 292 338, 278 356, 260 374
+          C 242 392, 222 408, 204 426
+          C 190 440, 178 454, 166 462
+          C 154 470, 142 462, 132 448
+          C 120 432, 108 412, 98 390
+          C 88 368, 82 342, 80 314
+          C 78 286, 82 258, 88 230
+          C 94 202, 100 174, 106 148
+          C 112 122, 118 96, 128 72
+          C 136 52, 148 36, 158 32 Z
+        " fill="#BFDBFE" stroke="#93C5FD" stroke-width="1.5" filter="url(#mapShadow)"/>
+
+        <!-- 제주도 -->
+        <ellipse cx="178" cy="498" rx="32" ry="15" fill="#BFDBFE" stroke="#93C5FD" stroke-width="1.2"/>
+        <text x="178" y="502" text-anchor="middle" font-size="9" fill="#3B82F6" font-weight="600">제주도</text>
+
+        <!-- 지역 레이블 -->
+        <text x="215" y="82" text-anchor="middle" font-size="9" fill="#60A5FA" font-weight="500">강원도</text>
+        <text x="200" y="148" text-anchor="middle" font-size="9" fill="#60A5FA" font-weight="500">경기도</text>
+        <text x="232" y="200" text-anchor="middle" font-size="9" fill="#60A5FA" font-weight="500">충청도</text>
+        <text x="272" y="268" text-anchor="middle" font-size="9" fill="#60A5FA" font-weight="500">경상도</text>
+        <text x="128" y="268" text-anchor="middle" font-size="9" fill="#60A5FA" font-weight="500">전라도</text>
+
+        <!-- 서울 점 -->
+        <circle cx="188" cy="148" r="3.5" fill="#94A3B8" opacity="0.7"/>
+        <text x="200" y="151" font-size="8.5" fill="#64748B">서울</text>
+
+        <!-- ★ 부천지사 마커 (경기도 부천시 위치) -->
+        <g class="branch-marker" onclick="openPopup('bucheon')" style="cursor:pointer;">
+          <!-- 펄스 원 -->
+          <circle cx="168" cy="162" r="18" fill="#3B82F6" class="marker-pulse" opacity="0.4"/>
+          <!-- 핀 원 -->
+          <circle cx="168" cy="156" r="15" fill="#1D4ED8" stroke="white" stroke-width="2.5"/>
+          <!-- 핀 꼬리 -->
+          <polygon points="168,176 161,160 175,160" fill="#1D4ED8"/>
+          <!-- 아이콘 -->
+          <text x="168" y="161" text-anchor="middle" dominant-baseline="middle" font-size="14">🏢</text>
+          <!-- 라벨 배경 -->
+          <rect x="138" y="180" width="60" height="19" rx="5" fill="white" stroke="#1D4ED8" stroke-width="1.2"/>
+          <text x="168" y="193" text-anchor="middle" font-size="10" fill="#1D4ED8" font-weight="700">부천지사</text>
+        </g>
+
+        <!-- ★ 호남지사 마커 (광주광역시 인근) -->
+        <g class="branch-marker" onclick="openPopup('honam')" style="cursor:pointer;">
+          <!-- 펄스 원 -->
+          <circle cx="138" cy="300" r="18" fill="#10B981" class="marker-pulse" opacity="0.4" style="animation-delay:1s"/>
+          <!-- 핀 원 -->
+          <circle cx="138" cy="294" r="15" fill="#059669" stroke="white" stroke-width="2.5"/>
+          <!-- 핀 꼬리 -->
+          <polygon points="138,314 131,298 145,298" fill="#059669"/>
+          <!-- 아이콘 -->
+          <text x="138" y="299" text-anchor="middle" dominant-baseline="middle" font-size="14">🏢</text>
+          <!-- 라벨 배경 -->
+          <rect x="108" y="318" width="60" height="19" rx="5" fill="white" stroke="#059669" stroke-width="1.2"/>
+          <text x="138" y="331" text-anchor="middle" font-size="10" fill="#059669" font-weight="700">호남지사</text>
+        </g>
+
+        <!-- 범례 -->
+        <rect x="8" y="8" width="116" height="54" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1" opacity="0.95"/>
+        <circle cx="24" cy="25" r="7" fill="#1D4ED8"/>
+        <text x="36" y="29" font-size="10" fill="#1E293B" font-weight="600">부천지사</text>
+        <circle cx="24" cy="47" r="7" fill="#059669"/>
+        <text x="36" y="51" font-size="10" fill="#1E293B" font-weight="600">호남지사</text>
+      </svg>
+    </div>
+    <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:14px;">📌 마커를 클릭하면 지사 상세 정보를 확인할 수 있습니다</p>
+  </div>
+
+  <!-- 지사 목록 -->
+  <div class="section-title">🏢 지사 목록</div>
+  <div class="branches-grid">
+
+    <!-- 부천지사 -->
+    <div class="branch-card">
+      <div class="branch-card-header">
+        <div class="branch-card-icon bucheon">🏢</div>
+        <div class="branch-card-meta">
+          <div class="branch-card-region bucheon">경기 서부권</div>
+          <div class="branch-card-name">퓨처에너지테크 부천지사</div>
+        </div>
+      </div>
+      <div class="branch-card-body">
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">📍</div>
+          <div class="branch-card-row-text">부천시 및 인근 지역<br/><span style="color:#94A3B8; font-size:12px;">상세 주소 추가 예정</span></div>
+        </div>
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">🗺️</div>
+          <div class="branch-card-row-text">부천시, 인천 일부, 서울 서부 등</div>
+        </div>
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">📞</div>
+          <div class="branch-card-row-text" style="font-weight:600; color:var(--text);">010-5380-8317</div>
+        </div>
+      </div>
+      <div class="branch-card-actions">
+        <a href="tel:01053808317" class="btn-call bucheon">📞 전화하기</a>
+        <button class="btn-map" onclick="openPopup('bucheon')">🗺️ 위치 보기</button>
+      </div>
+    </div>
+
+    <!-- 호남지사 -->
+    <div class="branch-card">
+      <div class="branch-card-header">
+        <div class="branch-card-icon honam">🏢</div>
+        <div class="branch-card-meta">
+          <div class="branch-card-region honam">호남권</div>
+          <div class="branch-card-name">퓨처에너지테크 호남지사</div>
+        </div>
+      </div>
+      <div class="branch-card-body">
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">📍</div>
+          <div class="branch-card-row-text">광주광역시 및 호남권<br/><span style="color:#94A3B8; font-size:12px;">상세 주소 추가 예정</span></div>
+        </div>
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">🗺️</div>
+          <div class="branch-card-row-text">광주광역시, 전라남도, 전북특별자치도</div>
+        </div>
+        <div class="branch-card-row">
+          <div class="branch-card-row-icon">📞</div>
+          <div class="branch-card-row-text" style="font-weight:600; color:var(--text);">010-3241-5533</div>
+        </div>
+      </div>
+      <div class="branch-card-actions">
+        <a href="tel:01032415533" class="btn-call honam">📞 전화하기</a>
+        <button class="btn-map" onclick="openPopup('honam')">🗺️ 위치 보기</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 본사 연락처 -->
+  <div class="hq-box">
+    <div class="hq-box-left">
+      <h3>📞 본사 직접 문의</h3>
+      <p>담당 지사가 없는 지역은 본사로 문의해 주세요.<br/>전국 어디서나 상담 가능합니다.</p>
+    </div>
+    <div class="hq-box-right">
+      <a href="tel:031-8042-7310" class="hq-btn hq-btn-main">📞 031-8042-7310</a>
+      <a href="tel:010-5754-7310" class="hq-btn hq-btn-mobile">📱 010-5754-7310</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- 푸터 -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">퓨처에너지테크 · Future Energy Tech</div>
+    <p>
+      대표: 유종선 &nbsp;|&nbsp; 대표전화: <a href="tel:031-8042-7310">031-8042-7310</a> &nbsp;|&nbsp; 휴대전화: <a href="tel:010-5754-7310">010-5754-7310</a><br/>
+      팩스: 031-403-7310 &nbsp;|&nbsp; 이메일: <a href="mailto:yerusun@naver.com">yerusun@naver.com</a><br/>
+      주소: 안산시 단원구 원포공원1로 67, 409호<br/><br/>
+      <a href="/preview/">홈</a> &nbsp;|&nbsp;
+      <a href="/preview/about.html">회사소개</a> &nbsp;|&nbsp;
+      <a href="/preview/report.html">고장접수</a> &nbsp;|&nbsp;
+      <a href="/preview/branches.html">전국 지사</a> &nbsp;|&nbsp;
+      <a href="/preview/contact.html">고객센터</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  // ── 지사 데이터 (향후 API 연동 가능한 구조) ──
+  const BRANCHES = {
+    bucheon: {
+      id: 'bucheon',
+      name: '퓨처에너지테크 부천지사',
+      badgeText: '경기 서부권',
+      areaDetail: '부천시, 인천 일부, 서울 서부 등',
+      address: '상세 주소 추가 예정',
+      phone: '010-5380-8317',
+      tel: 'tel:01053808317',
+      colorClass: 'bucheon',
+    },
+    honam: {
+      id: 'honam',
+      name: '퓨처에너지테크 호남지사',
+      badgeText: '호남권',
+      areaDetail: '광주광역시, 전라남도, 전북특별자치도 등 호남권 전역',
+      address: '상세 주소 추가 예정',
+      phone: '010-3241-5533',
+      tel: 'tel:01032415533',
+      colorClass: 'honam',
+    }
+  };
+
+  function openPopup(branchId) {
+    const b = BRANCHES[branchId];
+    if (!b) return;
+    document.getElementById('popupContent').innerHTML = `
+      <span class="popup-badge ${b.colorClass}">${b.badgeText}</span>
+      <div class="popup-name">${b.name}</div>
+      <div class="popup-info">
+        <div class="popup-info-row">
+          <div class="popup-info-icon">📍</div>
+          <div>
+            <div class="popup-info-label">담당 지역</div>
+            <div class="popup-info-value">${b.areaDetail}</div>
+          </div>
+        </div>
+        <div class="popup-info-row">
+          <div class="popup-info-icon">🏠</div>
+          <div>
+            <div class="popup-info-label">주소</div>
+            <div class="popup-info-value">${b.address}</div>
+          </div>
+        </div>
+        <div class="popup-info-row">
+          <div class="popup-info-icon">📞</div>
+          <div>
+            <div class="popup-info-label">연락처</div>
+            <div class="popup-info-value" style="font-size:16px; font-weight:700;">${b.phone}</div>
+          </div>
+        </div>
+      </div>
+      <a href="${b.tel}" class="popup-call-btn ${b.colorClass}">📞 전화 상담하기</a>
+    `;
+    document.getElementById('popupOverlay').classList.add('open');
+  }
+
+  function closePopupOnBg(e) {
+    if (e.target === document.getElementById('popupOverlay')) closePopup();
+  }
+
+  function closePopup() {
+    document.getElementById('popupOverlay').classList.remove('open');
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePopup();
+  });
+</script>
+</body>
+</html>

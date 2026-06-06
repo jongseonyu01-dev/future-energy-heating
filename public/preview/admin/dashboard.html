@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>본사 관리자 대시보드 - 퓨처에너지테크</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --primary: #e85d04; --sidebar-bg: #0f172a; --sidebar-text: rgba(255,255,255,.75); --sidebar-active: #e85d04; --bg: #f1f5f9; --card: #fff; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+    /* Sidebar */
+    .sidebar { width: 240px; background: var(--sidebar-bg); color: var(--sidebar-text); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 200; transition: transform .25s; }
+    .sidebar-logo { padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .sidebar-logo .name { font-size: 16px; font-weight: 700; color: #fff; }
+    .sidebar-logo .sub { font-size: 12px; color: rgba(255,255,255,.5); margin-top: 2px; }
+    .sidebar-user { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 13px; }
+    .sidebar-user .badge { display: inline-block; background: var(--primary); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+    nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+    .nav-section { padding: 8px 20px 4px; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.35); text-transform: uppercase; letter-spacing: .05em; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: 14px; cursor: pointer; transition: all .15s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+    .nav-item.active { background: rgba(232,93,4,.15); color: var(--primary); border-left-color: var(--primary); font-weight: 600; }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+    .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.1); }
+    .logout-btn { width: 100%; padding: 10px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.7); border: none; border-radius: 8px; font-size: 13px; cursor: pointer; }
+    .logout-btn:hover { background: rgba(255,255,255,.15); }
+    /* Main */
+    .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 28px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .topbar h1 { font-size: 18px; font-weight: 700; }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+    .refresh-btn { padding: 7px 14px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--card); font-size: 13px; cursor: pointer; }
+    .refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .content { padding: 28px; flex: 1; }
+    /* Cards */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 1px 6px rgba(0,0,0,.05); }
+    .stat-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 800; }
+    .stat-change { font-size: 12px; margin-top: 4px; }
+    .stat-change.up { color: #22c55e; }
+    .stat-change.down { color: #ef4444; }
+    .section-card { background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 1px 6px rgba(0,0,0,.05); margin-bottom: 20px; }
+    .section-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .section-card h3 .badge { font-size: 12px; background: #f3f4f6; color: var(--muted); padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th { padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid var(--border); }
+    .data-table td { padding: 12px; border-bottom: 1px solid #f3f4f6; }
+    .data-table tr:hover td { background: #f9fafb; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-assigned { background: #dbeafe; color: #1e40af; }
+    .status-completed { background: #dcfce7; color: #166534; }
+    .status-cancelled { background: #fee2e2; color: #991b1b; }
+    /* Charts */
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 1px 6px rgba(0,0,0,.05); }
+    .chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    /* Tabs */
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { padding: 8px 18px; border: 1.5px solid var(--border); border-radius: 20px; font-size: 14px; cursor: pointer; background: var(--card); transition: all .15s; }
+    .tab-btn.active, .tab-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    /* Panel */
+    .panel { display: none; }
+    .panel.active { display: block; }
+    /* Excel btn */
+    .excel-btn { padding: 8px 16px; background: #22c55e; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .excel-btn:hover { background: #16a34a; }
+    /* Form inline */
+    .inline-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .inline-form input, .inline-form select { padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; }
+    .inline-form button { padding: 8px 16px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    /* Mobile sidebar toggle */
+    .sidebar-toggle { display: none; background: none; border: none; font-size: 22px; cursor: pointer; }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; }
+      .sidebar-toggle { display: block; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 150; }
+    .overlay.show { display: block; }
+    .loading-row td { text-align: center; color: var(--muted); padding: 32px; }
+    .action-btn { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-assign { background: #dbeafe; color: #1e40af; }
+    .btn-complete { background: #dcfce7; color: #166534; }
+    .sms-log-success { color: #22c55e; font-weight: 600; }
+    .sms-log-fail { color: #ef4444; font-weight: 600; }
+  </style>
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-58W97D3UGLWn9JzTakGt8a.webp" alt="퓨처에너지테크" style="width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:8px;" />
+    <div class="name">퓨처에너지테크</div>
+    <div class="sub">본사 관리자 시스템</div>
+  </div>
+  <div class="sidebar-user">
+    <div class="badge">본사 관리자</div>
+    <div id="sidebarUsername" style="color:#fff;font-weight:600;font-size:14px">관리자</div>
+  </div>
+  <nav>
+    <div class="nav-section">대시보드</div>
+    <div class="nav-item active" onclick="showPanel('overview')"><span class="icon">📊</span> 전체 현황</div>
+    <div class="nav-section">접수 관리</div>
+    <div class="nav-item" onclick="showPanel('requests')"><span class="icon">📋</span> 전국 접수 현황</div>
+    <div class="nav-item" onclick="showPanel('assign')"><span class="icon">👷</span> 기사 배정 현황</div>
+    <div class="nav-section">지사 관리</div>
+    <div class="nav-item" onclick="showPanel('branches')"><span class="icon">🏢</span> 지사 목록</div>
+    <div class="nav-item" onclick="showPanel('regions')"><span class="icon">🗺️</span> 담당 지역 설정</div>
+    <div class="nav-section">통계</div>
+    <div class="nav-item" onclick="showPanel('stats')"><span class="icon">📈</span> 월별 통계</div>
+    <div class="nav-item" onclick="showPanel('sales')"><span class="icon">💰</span> 지사별 매출</div>
+    <div class="nav-section">기타</div>
+    <div class="nav-item" onclick="showPanel('sensors')"><span class="icon">📡</span> 누수센서 관제</div>
+    <div class="nav-item" onclick="showPanel('flowrate')"><span class="icon">🌡️</span> 난방 유량 관제</div>
+    <div class="nav-item" onclick="showPanel('sms')"><span class="icon">💬</span> 문자 발송 이력</div>
+    <div class="nav-item" onclick="showPanel('materials')"><span class="icon">📦</span> 자재 주문</div>
+    <div class="nav-item" onclick="showPanel('complaints')"><span class="icon">⚠️</span> 고객 불만</div>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="logout-btn" onclick="doLogout()">🚪 로그아웃</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+      <h1 id="pageTitle">전체 현황</h1>
+    </div>
+    <div class="topbar-actions">
+      <button class="refresh-btn" onclick="loadCurrentPanel()">🔄 새로고침</button>
+      <a href="/preview/index.html" style="font-size:13px;color:#6b7280">홈페이지 →</a>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 전체 현황 -->
+    <div class="panel active" id="panel-overview">
+      <div class="stats-grid" id="overviewStats">
+        <div class="stat-card"><div class="stat-label">오늘 신규 접수</div><div class="stat-value" id="stat-today">-</div></div>
+        <div class="stat-card"><div class="stat-label">처리 대기</div><div class="stat-value" id="stat-pending">-</div></div>
+        <div class="stat-card"><div class="stat-label">작업 진행 중</div><div class="stat-value" id="stat-inprogress">-</div></div>
+        <div class="stat-card"><div class="stat-label">이번 달 완료</div><div class="stat-value" id="stat-completed">-</div></div>
+        <div class="stat-card"><div class="stat-label">전국 지사 수</div><div class="stat-value" id="stat-branches">-</div></div>
+        <div class="stat-card"><div class="stat-label">누수센서 경보</div><div class="stat-value" id="stat-alerts" style="color:#ef4444">-</div></div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>📈 월별 접수 추이</h3><canvas id="monthlyChart" height="200"></canvas></div>
+        <div class="chart-card"><h3>🏢 지사별 접수 현황</h3><canvas id="branchChart" height="200"></canvas></div>
+      </div>
+      <div class="section-card">
+        <h3>🆕 최근 접수 <span class="badge">최근 10건</span></h3>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="recentTable">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>증상</th><th>접수일시</th><th>상태</th><th>처리</th></tr></thead>
+            <tbody id="recentTbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 전국 접수 현황 -->
+    <div class="panel" id="panel-requests">
+      <div class="inline-form">
+        <select id="filterStatus" onchange="loadRequests()">
+          <option value="">전체 상태</option>
+          <option value="pending">대기</option>
+          <option value="assigned">배정됨</option>
+          <option value="in_progress">진행 중</option>
+          <option value="completed">완료</option>
+        </select>
+        <select id="filterBranch" onchange="loadRequests()"><option value="">전체 지사</option></select>
+        <input type="date" id="filterDate" onchange="loadRequests()" />
+        <button onclick="loadRequests()">🔍 검색</button>
+        <button class="excel-btn" onclick="exportExcel('requests')">📥 엑셀 다운로드</button>
+      </div>
+      <div class="section-card">
+        <h3>📋 전국 접수 현황</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>전화번호</th><th>주소</th><th>증상</th><th>접수일</th><th>담당지사</th><th>상태</th><th>처리</th></tr></thead>
+            <tbody id="requestsTbody"><tr class="loading-row"><td colspan="9">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 지사 목록 -->
+    <div class="panel" id="panel-branches">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button onclick="showCreateBranch()" style="padding:10px 20px;background:#e85d04;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">+ 지사 추가</button>
+      </div>
+      <div id="branchCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+        <div style="text-align:center;padding:40px;color:#6b7280">지사 정보를 불러오는 중...</div>
+      </div>
+      <!-- 지사 추가/수정 폼 -->
+      <div id="createBranchForm" style="display:none" class="section-card">
+        <h3 id="branchFormTitle">🏢 새 지사 추가</h3>
+        <input type="hidden" id="editBranchId" value="" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사명 *</label><input type="text" id="newBranchName" placeholder="예: 통영지사" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지사 코드 *</label><input type="text" id="newBranchCode" placeholder="예: tongyeong" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">대표 연락싹 *</label><input type="text" id="newBranchPhone" placeholder="010-0000-0000" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">상세 주소</label><input type="text" id="newBranchAddr" placeholder="예: 경기도 부천시 ..." style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div style="grid-column:1/-1"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">담당 지역 (콤마로 구분)</label><input type="text" id="newBranchRegions" placeholder="예: 부천시, 인천 서구, 서울 강서구" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" /></div>
+          <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">활성화 여부</label>
+            <select id="newBranchStatus" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px">
+              <option value="active">활성</option>
+              <option value="inactive">정지</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px">
+          <button onclick="saveBranchForm()" style="padding:10px 24px;background:#e85d04;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">저장</button>
+          <button onclick="closeBranchForm()" style="padding:10px 24px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:14px;cursor:pointer">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 월별 통계 -->
+    <div class="panel" id="panel-stats">
+      <div class="inline-form">
+        <select id="statsYear" onchange="loadStats()"></select>
+        <button class="excel-btn" onclick="exportExcel('stats')">📥 엑셀 다운로드</button>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>📈 월별 접수 건수</h3><canvas id="statsMonthlyChart" height="220"></canvas></div>
+        <div class="chart-card"><h3>✅ 월별 완료율</h3><canvas id="statsCompletionChart" height="220"></canvas></div>
+      </div>
+      <div class="section-card">
+        <h3>📊 월별 상세 통계</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>월</th><th>신규 접수</th><th>완료</th><th>완료율</th><th>배관청소</th><th>난방고장</th></tr></thead>
+            <tbody id="statsTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 문자 발송 이력 -->
+    <div class="panel" id="panel-sms">
+      <!-- SOLAPI 연동 상태 카드 -->
+      <div id="smsStatusCard" class="section-card" style="margin-bottom:16px">
+        <h3>📡 SOLAPI 연동 상태</h3>
+        <div id="smsStatusContent" style="padding:8px 0;color:#6b7280">상태를 확인하는 중...</div>
+      </div>
+
+      <!-- SMS 테스트 카드 -->
+      <div class="section-card" style="margin-bottom:16px">
+        <h3>🧪 SMS 발송 테스트</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px">
+          <div>
+            <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:4px">① 관리자 번호 테스트</label>
+            <button id="btnSmsTest" onclick="runSmsTest()" style="background:#ff6b35;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">📨 테스트 문자 발송</button>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:4px">② 고장접수 시뮬레이션 (고객 번호 입력)</label>
+            <div style="display:flex;gap:8px">
+              <input type="tel" id="repairTestPhone" placeholder="010-0000-0000" style="flex:1;height:40px;border:1.5px solid #e5e7eb;border-radius:8px;padding:0 12px;font-size:14px" />
+              <button id="btnRepairTest" onclick="runRepairSmsTest()" style="background:#ea580c;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">🔧 접수 SMS 시뮬레이션</button>
+            </div>
+          </div>
+        </div>
+        <div id="smsTestResult" style="display:none"></div>
+      </div>
+
+      <!-- 발송 이력 -->
+      <div class="inline-form">
+        <input type="date" id="smsDateFrom" />
+        <span>~</span>
+        <input type="date" id="smsDateTo" />
+        <button onclick="loadSmsLogs()">🔍 검색</button>
+        <button class="excel-btn" onclick="exportExcel('sms')">📥 엑셀 다운로드</button>
+      </div>
+      <div class="section-card">
+        <h3>💬 문자 발송 이력</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>발송 시간</th><th>수신 번호</th><th>메시지 유형</th><th>내용 요약</th><th>결과</th><th>실패 사유</th></tr></thead>
+            <tbody id="smsTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 누수센서 관제 -->
+    <div class="panel" id="panel-sensors">
+      <div class="section-card">
+        <h3>📡 전국 누수센서 현황</h3>
+        <div id="sensorGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+          <div style="text-align:center;padding:40px;color:#6b7280">센서 정보를 불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 자재 주문 -->
+    <div class="panel" id="panel-materials">
+      <div class="section-card">
+        <h3>📦 자재 주문 현황</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>주문번호</th><th>지사</th><th>품목</th><th>수량</th><th>주문일</th><th>상태</th></tr></thead>
+            <tbody id="materialsTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 기사 배정 현황 -->
+    <div class="panel" id="panel-assign">
+      <div class="section-card">
+        <h3>👷 기사 배정 현황</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>담당기사</th><th>방문예정일</th><th>상태</th></tr></thead>
+            <tbody id="assignTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 지사별 매출 -->
+    <div class="panel" id="panel-sales">
+      <div class="inline-form">
+        <select id="salesYear" onchange="loadSales()"></select>
+        <select id="salesMonth" onchange="loadSales()">
+          <option value="">전체 월</option>
+          <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+          <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+          <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
+          <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+        </select>
+        <button class="excel-btn" onclick="exportExcel('sales')">📥 엑셀 다운로드</button>
+      </div>
+      <div class="section-card">
+        <h3>💰 지사별 매출 현황</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>지사명</th><th>접수 건수</th><th>완료 건수</th><th>완료율</th><th>매출액</th></tr></thead>
+            <tbody id="salesTbody"><tr class="loading-row"><td colspan="5">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 담당 지역 설정 -->
+    <div class="panel" id="panel-regions">
+      <div class="section-card">
+        <h3>🗺️ 지사별 담당 지역 설정</h3>
+        <p style="font-size:14px;color:#6b7280;margin-bottom:16px">고객이 주소를 입력하면 키워드 매칭으로 담당 지사가 자동 배정됩니다.</p>
+        <div id="regionSettings">데이터를 불러오는 중...</div>
+      </div>
+    </div>
+
+    <!-- 난방 유량 관제 -->
+    <div class="panel" id="panel-flowrate">
+      <!-- 요약 통계 -->
+      <div class="stats-grid" id="flowrateStats">
+        <div class="stat-card"><div class="stat-label">전체 세대</div><div class="stat-value" id="fr-total">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#22c55e">정상</div><div class="stat-value" id="fr-normal" style="color:#22c55e">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#f59e0b">주의</div><div class="stat-value" id="fr-caution" style="color:#f59e0b">-</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:#ef4444">경고</div><div class="stat-value" id="fr-warning" style="color:#ef4444">-</div></div>
+      </div>
+      <!-- ESP32 웹훁 안내 -->
+      <div class="section-card" style="background:#f0f9ff;border:1.5px solid #bae6fd;">
+        <h3 style="color:#0369a1">📱 ESP32 웹훁 엔드포인트</h3>
+        <div style="font-size:13px;color:#0369a1;font-family:monospace;background:#e0f2fe;padding:12px;border-radius:8px;word-break:break-all">
+          POST <span id="webhookUrl">https://서버주소/api/webhook/flow-rate</span>
+        </div>
+        <div style="font-size:12px;color:#6b7280;margin-top:8px">인증: Authorization: Bearer <code>FLOW_RATE_WEBHOOK_SECRET</code> 헤더 필요</div>
+      </div>
+      <!-- 세대 목록 -->
+      <div class="section-card">
+        <h3>🌡️ 세대별 유량 현황 <span class="badge" id="frSettingsCount">0세대</span></h3>
+        <div class="inline-form" style="margin-bottom:12px">
+          <select id="frFilterStatus" onchange="loadFlowRate()">
+            <option value="">전체 상태</option>
+            <option value="정상">정상</option>
+            <option value="주의">주의</option>
+            <option value="경고">경고</option>
+          </select>
+          <input type="text" id="frSearch" placeholder="아파트명 / 동 / 호 검색" style="min-width:180px" oninput="renderFlowRateTable()" />
+          <button onclick="loadFlowRate()" style="background:var(--primary);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">🔄 새로고침</button>
+          <button onclick="openAddFlowRateModal()" style="background:#22c55e;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">+ 세대 등록</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="flowrateTable">
+            <thead><tr>
+              <th>아파트명</th><th>동/호</th><th>센서 ID</th>
+              <th>기준 유량</th><th>현재 유량</th><th>이탈률</th>
+              <th>공급측 압력</th><th>환수측 압력</th><th>차압</th>
+              <th>마지막 측정</th><th>상태</th><th>관리</th>
+            </tr></thead>
+            <tbody id="flowrateTbody"><tr class="loading-row"><td colspan="12">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 데모 테스트 -->
+      <div class="section-card">
+        <h3>🎞️ 데모 테스트 패널</h3>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px">ESP32 센서 없이 유량 값을 임의로 변경하여 상태 변화와 알림 로직을 테스트할 수 있습니다.</p>
+        <div class="inline-form">
+          <select id="demoSensorSelect" style="min-width:200px">
+            <option value="">세대 선택...</option>
+          </select>
+          <input type="number" id="demoFlowValue" placeholder="유량 (LPM)" step="0.01" min="0" style="width:120px" />
+          <button onclick="runFlowRateDemo()" style="background:#8b5cf6;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">🎮 데모 적용</button>
+        </div>
+        <div id="demoQuickBtns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+        <div id="demoResult" style="margin-top:10px;font-size:13px;color:#6b7280"></div>
+      </div>
+      <!-- 유량 로그 -->
+      <div class="section-card">
+        <h3>📊 유량 측정 로그 <span class="badge">최근 50건</span></h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>시간</th><th>아파트명</th><th>동/호</th><th>센서 ID</th><th>유량 (LPM)</th><th>상태</th><th>출체</th></tr></thead>
+            <tbody id="flowrateLogTbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 고객 불만 -->
+    <div class="panel" id="panel-complaints">
+      <div class="section-card">
+        <h3>⚠️ 고객 불만 현황</h3>
+        <div style="text-align:center;padding:48px;color:#6b7280">
+          <div style="font-size:48px;margin-bottom:16px">🎉</div>
+          <div>접수된 불만 사항이 없습니다</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 개발 미리보기(8081)에서는 Express 서버(3000 포트)로 직접 요청
+  function getApiBase() {
+    const host = window.location.hostname;
+    // 호스트명이 808x-xxx 패턴이면 3000-xxx로 변환
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) {
+      return window.location.protocol + '//' + '3000-' + devMatch[2];
+    }
+    return '';
+  }
+  const API = getApiBase() + '/api/trpc';
+  let currentPanel = 'overview';
+  let user = null;
+
+  // 인증 확인
+  function checkAuth() {
+    const stored = sessionStorage.getItem('adminUser');
+    if (!stored) { window.location.href = window.location.origin + '/preview/admin/login.html'; return; }
+    user = JSON.parse(stored);
+    if (user.appRole !== 'hq_admin') { window.location.href = window.location.origin + '/preview/admin/login.html'; return; }
+    document.getElementById('sidebarUsername').textContent = user.username || '관리자';
+  }
+
+  function doLogout() {
+    sessionStorage.removeItem('adminUser');
+    window.location.href = window.location.origin + '/preview/admin/login.html';
+  }
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('show');
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('overlay').classList.remove('show');
+  }
+
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => {
+      if (n.getAttribute('onclick')?.includes("'" + name + "'")) n.classList.add('active');
+    });
+    const titles = { overview:'전체 현황', requests:'전국 접수 현황', assign:'기사 배정 현황', branches:'지사 목록', regions:'담당 지역 설정', stats:'월별 통계', sales:'지사별 매출', sensors:'누수센서 관제', flowrate:'난방 유량 관제', sms:'문자 발송 이력', materials:'자재 주문', complaints:'고객 불만' };
+    document.getElementById('pageTitle').textContent = titles[name] || name;
+    currentPanel = name;
+    loadCurrentPanel();
+    closeSidebar();
+  }
+
+  function loadCurrentPanel() {
+    if (currentPanel === 'overview') loadOverview();
+    else if (currentPanel === 'requests') loadRequests();
+    else if (currentPanel === 'branches') loadBranches();
+    else if (currentPanel === 'stats') loadStats();
+    else if (currentPanel === 'sms') { loadSmsStatus(); loadSmsLogs(); }
+    else if (currentPanel === 'sensors') loadSensors();
+    else if (currentPanel === 'flowrate') loadFlowRate();
+    else if (currentPanel === 'sales') loadSales();
+    else if (currentPanel === 'assign') loadAssign();
+    else if (currentPanel === 'regions') loadRegions();
+    else if (currentPanel === 'materials') loadMaterials();
+  }
+
+  async function trpc(proc, input) {
+    try {
+      // mutation 여부 판단: _mutation 플래그가 있거나 진짜 페이로드가 있으면 POST
+      const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
+      const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => k !== '_mutation' && k !== '_query' && k !== '_dummy')) : {};
+      let url = API + '/' + proc;
+      let opts = { headers: { 'Content-Type': 'application/json' } };
+      if (!isMutation) {
+        url += '?input=' + encodeURIComponent(JSON.stringify({ json: cleanInput }));
+        opts.method = 'GET';
+      } else {
+        opts.method = 'POST';
+        opts.body = JSON.stringify({ json: cleanInput });
+      }
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      return data.result?.data?.json;
+    } catch (e) { return null; }
+  }
+
+  async function loadOverview() {
+    const [repairs, branches, sensors] = await Promise.all([
+      trpc('repair.list', {}),
+      trpc('branch.list', {}),
+      trpc('sensor.list', {}),
+    ]);
+
+    const repairList = repairs || [];
+    const today = new Date().toISOString().split('T')[0];
+    const todayCount = repairList.filter(r => r.createdAt?.startsWith(today)).length;
+    const pending = repairList.filter(r => r.status === 'pending').length;
+    const inprogress = repairList.filter(r => r.status === 'in_progress' || r.status === 'assigned').length;
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const completed = repairList.filter(r => r.status === 'completed' && r.createdAt?.startsWith(thisMonth)).length;
+    const alerts = (sensors || []).filter(s => s.status === 'leak_detected').length;
+
+    document.getElementById('stat-today').textContent = todayCount;
+    document.getElementById('stat-pending').textContent = pending;
+    document.getElementById('stat-inprogress').textContent = inprogress;
+    document.getElementById('stat-completed').textContent = completed;
+    document.getElementById('stat-branches').textContent = (branches || []).length;
+    document.getElementById('stat-alerts').textContent = alerts;
+
+    // 최근 접수
+    const tbody = document.getElementById('recentTbody');
+    const recent = repairList.slice(-10).reverse();
+    tbody.innerHTML = recent.length ? recent.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${Array.isArray(r.symptoms) ? r.symptoms.slice(0,2).join(', ') + (r.symptoms.length > 2 ? '...' : '') : r.symptom || '-'}</td>
+        <td>${r.createdAt ? r.createdAt.slice(0,16).replace('T',' ') : '-'}</td>
+        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
+        <td><button class="action-btn btn-assign" onclick="alert('앱에서 기사를 배정해 주세요')">배정</button></td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="7">접수 데이터가 없습니다</td></tr>';
+
+    // 월별 차트
+    const monthCounts = {};
+    repairList.forEach(r => {
+      if (r.createdAt) {
+        const m = r.createdAt.slice(0, 7);
+        monthCounts[m] = (monthCounts[m] || 0) + 1;
+      }
+    });
+    const sortedMonths = Object.keys(monthCounts).sort().slice(-6);
+    renderChart('monthlyChart', 'bar', sortedMonths, sortedMonths.map(m => monthCounts[m]), '월별 접수', '#e85d04');
+
+    // 지사별 차트
+    const branchList = branches || [];
+    const branchNames = branchList.map(b => b.name);
+    const branchCounts = branchList.map(b => repairList.filter(r => r.branchId === b.id).length);
+    renderChart('branchChart', 'doughnut', branchNames.length ? branchNames : ['안산지사'], branchCounts.length ? branchCounts : [0], '지사별', ['#e85d04','#f97316','#fb923c','#fdba74','#fed7aa']);
+  }
+
+  function renderChart(id, type, labels, data, label, color) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas, {
+      type,
+      data: { labels, datasets: [{ label, data, backgroundColor: Array.isArray(color) ? color : color, borderColor: type === 'bar' ? color : undefined, borderWidth: type === 'bar' ? 0 : 2, borderRadius: type === 'bar' ? 6 : 0 }] },
+      options: { responsive: true, plugins: { legend: { display: type !== 'bar' } }, scales: type === 'bar' ? { y: { beginAtZero: true } } : {} }
+    });
+  }
+
+  function statusLabel(s) {
+    const m = { pending:'대기', assigned:'배정됨', in_progress:'진행중', completed:'완료', cancelled:'취소' };
+    return m[s] || s || '대기';
+  }
+
+  async function loadRequests() {
+    const data = await trpc('repair.list', {});
+    const list = data || [];
+    const tbody = document.getElementById('requestsTbody');
+    tbody.innerHTML = list.length ? list.reverse().map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${r.customerPhone || '-'}</td>
+        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
+        <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
+        <td>${r.branchId ? '지사 #' + r.branchId : '본사'}</td>
+        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
+        <td><button class="action-btn btn-assign" onclick="alert('앱에서 기사를 배정해 주세요')">배정</button></td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="9">접수 데이터가 없습니다</td></tr>';
+  }
+
+  async function loadBranches() {
+    const data = await trpc('branch.list', {});
+    const list = data || [];
+    const el = document.getElementById('branchCards');
+    el.innerHTML = list.length ? list.map(b => `
+      <div
+        data-branch-id="${b.id}"
+        data-name="${(b.name||'').replace(/"/g,'&quot;')}"
+        data-code="${(b.code||'').replace(/"/g,'&quot;')}"
+        data-phone="${(b.phone||'').replace(/"/g,'&quot;')}"
+        data-address="${(b.address||'').replace(/"/g,'&quot;')}"
+        data-regions="${(Array.isArray(b.regions)?b.regions.join(', '):(b.regions||'')).replace(/"/g,'&quot;')}"
+        data-status="${b.status||'active'}"
+        style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${b.status==='inactive'?'#94a3b8':'#e85d04'}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div style="font-size:18px;font-weight:700;color:${b.status==='inactive'?'#94a3b8':'#e85d04'}">🏢 ${b.name}</div>
+          <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${b.status==='active'?'#dcfce7':'#f1f5f9'};color:${b.status==='active'?'#166534':'#64748b'}">${b.status==='active'?'활성':'정지'}</span>
+        </div>
+        <div style="font-size:14px;color:#4b5563;line-height:2">
+          <div>📞 ${b.phone || '미등록'}</div>
+          <div>📍 ${b.address || '주소 미등록'}</div>
+          ${b.regions?.length ? `<div>🗺️ ${Array.isArray(b.regions)?b.regions.join(', '):b.regions}</div>` : ''}
+          <div>🔑 코드: ${b.code || '-'}</div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button onclick="editBranch(${b.id})" style="flex:1;padding:8px;background:#f3f4f6;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">✏️ 수정</button>
+          <button onclick="toggleBranch(${b.id}, '${b.status||'active'}')" style="flex:1;padding:8px;background:${b.status==='active'?'#fee2e2':'#dcfce7'};border:none;border-radius:8px;font-size:13px;cursor:pointer;color:${b.status==='active'?'#991b1b':'#166534'};font-weight:600">${b.status==='active'?'⏸ 정지':'▶ 활성화'}</button>
+        </div>
+      </div>
+    `).join('') : '<div style="text-align:center;padding:40px;color:#6b7280">등록된 지사가 없습니다</div>';
+  }
+
+  async function loadStats() {
+    const year = document.getElementById('statsYear')?.value || new Date().getFullYear();
+    const data = await trpc('repair.list', {});
+    const list = (data || []).filter(r => r.createdAt?.startsWith(year));
+    const months = Array.from({length:12}, (_,i) => `${year}-${String(i+1).padStart(2,'0')}`);
+    const tbody = document.getElementById('statsTbody');
+    tbody.innerHTML = months.map(m => {
+      const mList = list.filter(r => r.createdAt?.startsWith(m));
+      const completed = mList.filter(r => r.status === 'completed').length;
+      const rate = mList.length ? Math.round(completed/mList.length*100) : 0;
+      const cleaning = mList.filter(r => r.requestType === '배관청소').length;
+      const repair = mList.filter(r => r.requestType !== '배관청소').length;
+      return `<tr><td>${parseInt(m.slice(5))}월</td><td>${mList.length}</td><td>${completed}</td><td>${rate}%</td><td>${cleaning}</td><td>${repair}</td></tr>`;
+    }).join('');
+    const counts = months.map(m => list.filter(r => r.createdAt?.startsWith(m)).length);
+    const rates = months.map(m => { const ml = list.filter(r => r.createdAt?.startsWith(m)); return ml.length ? Math.round(ml.filter(r=>r.status==='completed').length/ml.length*100) : 0; });
+    renderChart('statsMonthlyChart', 'bar', months.map(m => parseInt(m.slice(5))+'월'), counts, '접수 건수', '#e85d04');
+    renderChart('statsCompletionChart', 'line', months.map(m => parseInt(m.slice(5))+'월'), rates, '완료율(%)', '#22c55e');
+  }
+
+  async function loadSmsStatus() {
+    const el = document.getElementById('smsStatusContent');
+    const data = await trpc('admin.smsStatus', {});
+    const adminPhoneData = await trpc('admin.getAdminPhone', {});
+    const configured = data?.configured;
+    const adminPhone = adminPhoneData?.phone || '';
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${configured?'#dcfce7':'#fee2e2'};color:${configured?'#15803d':'#dc2626'}">
+          ${configured ? '✅ SOLAPI 연동됨' : '❌ SOLAPI 미연동'}
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${adminPhone?'#dbeafe':'#fef3c7'};color:${adminPhone?'#1d4ed8':'#92400e'}">
+          📱 관리자 번호: ${adminPhone || '미등록'}
+        </span>
+      </div>
+      <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:12px;color:#374151;line-height:1.8">
+        <strong>🌐 현재 서버 IP: 138.185.96.120</strong><br>
+        ${configured
+          ? 'SOLAPI 콘솔(console.solapi.com) → 계정 설정 → IP 보안 설정에서 위 IP를 허용하거나 IP 제한을 해제하면 SMS가 정상 발송됩니다.'
+          : 'SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.'}
+      </div>
+    `;
+  }
+
+  async function runSmsTest() {
+    const btn = document.getElementById('btnSmsTest');
+    const resultEl = document.getElementById('smsTestResult');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    const data = await trpc('admin.sendSmsTest', { _mutation: true });
+    btn.disabled = false; btn.textContent = '📨 테스트 문자 발송';
+    resultEl.style.display = 'block';
+    if (data?.success) {
+      resultEl.innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #22c55e;border-radius:8px;color:#15803d;font-weight:700">✅ 발송 성공! 관리자 번호로 테스트 문자가 발송되었습니다.</div>';
+    } else {
+      resultEl.innerHTML = `<div style="padding:12px;background:#fef2f2;border:1px solid #ef4444;border-radius:8px"><div style="color:#dc2626;font-weight:700">❌ 발송 실패</div><div style="color:#ef4444;font-size:13px;margin-top:4px">실패 원인: ${data?.error || '알 수 없는 오류'}</div></div>`;
+    }
+    loadSmsLogs();
+  }
+
+  async function runRepairSmsTest() {
+    const phone = document.getElementById('repairTestPhone').value.trim();
+    if (!phone || phone.replace(/[^0-9]/g,'').length < 9) {
+      alert('고객 테스트 번호를 입력해 주세요.'); return;
+    }
+    const btn = document.getElementById('btnRepairTest');
+    const resultEl = document.getElementById('smsTestResult');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    const data = await trpc('admin.sendRepairSmsTest', { customerPhone: phone });
+    btn.disabled = false; btn.textContent = '🔧 접수 SMS 시뮬레이션';
+    resultEl.style.display = 'block';
+    const cr = data?.customerResult;
+    const ar = data?.adminResult;
+    const crOk = cr?.result === 'SUCCESS';
+    const arOk = ar?.result === 'SUCCESS';
+    resultEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="padding:12px;background:${crOk?'#f0fdf4':'#fef2f2'};border:1px solid ${crOk?'#22c55e':'#ef4444'};border-radius:8px">
+          <div style="font-weight:700;color:${crOk?'#15803d':'#dc2626'}">고객 SMS: ${crOk?'✅ 발송 성공':'❌ 발송 실패'}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">수신: ${cr?.phone || phone}</div>
+          ${cr?.error?`<div style="font-size:12px;color:#ef4444;margin-top:2px">실패 원인: ${cr.error}</div>`:''}
+        </div>
+        ${ar ? `<div style="padding:12px;background:${arOk?'#f0fdf4':'#fef2f2'};border:1px solid ${arOk?'#22c55e':'#ef4444'};border-radius:8px">
+          <div style="font-weight:700;color:${arOk?'#15803d':'#dc2626'}">관리자 SMS: ${arOk?'✅ 발송 성공':'❌ 발송 실패'}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">수신: ${ar.phone}</div>
+          ${ar.error?`<div style="font-size:12px;color:#ef4444;margin-top:2px">실패 원인: ${ar.error}</div>`:''}
+        </div>` : `<div style="padding:12px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:13px;color:#92400e">⚠️ 관리자 SMS: 관리자 번호가 설정되지 않아 발송되지 않았습니다.</div>`}
+      </div>
+    `;
+    loadSmsLogs();
+  }
+
+  async function loadSmsLogs() {
+    const data = await trpc('admin.notificationLogs', {});
+    const list = data || [];
+    const tbody = document.getElementById('smsTbody');
+    tbody.innerHTML = list.length ? [...list].reverse().map(s => `
+      <tr>
+        <td>${s.createdAt ? String(s.createdAt).slice(0,16).replace('T',' ') : '-'}</td>
+        <td>${s.phoneNumber || '-'}</td>
+        <td>${s.messageType || '-'}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.content || '-'}</td>
+        <td class="${s.result==='SUCCESS'?'sms-log-success':s.result==='SKIPPED'?'':'sms-log-fail'}" style="${s.result==='SKIPPED'?'color:#f59e0b;font-weight:600':''}">${s.result==='SUCCESS'?'✅ 성공':s.result==='SKIPPED'?'⏭ 건너뜀':'❌ 실패'}</td>
+        <td style="color:#ef4444;font-size:13px">${s.errorMessage || ''}</td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="6">발송 이력이 없습니다</td></tr>';
+  }
+
+  async function loadSensors() {
+    const data = await trpc('sensor.list', {});
+    const list = data || [];
+    const el = document.getElementById('sensorGrid');
+    const statusInfo = { normal: { label: '정상', color: '#22c55e', bg: '#dcfce7', icon: '✅' }, leak_detected: { label: '누수 감지', color: '#ef4444', bg: '#fee2e2', icon: '🚨' }, low_battery: { label: '배터리 부족', color: '#f59e0b', bg: '#fef3c7', icon: '🔋' }, offline: { label: '통신 끊김', color: '#6b7280', bg: '#f3f4f6', icon: '📵' } };
+    el.innerHTML = list.length ? list.map(s => {
+      const st = statusInfo[s.status] || statusInfo.normal;
+      return `<div style="background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-top:4px solid ${st.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-weight:700;font-size:15px">${s.name || '센서 #' + s.id}</div>
+          <div style="background:${st.bg};color:${st.color};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${st.icon} ${st.label}</div>
+        </div>
+        <div style="font-size:13px;color:#6b7280;line-height:1.8">
+          <div>📍 ${s.location || '위치 미등록'}</div>
+          <div>🔋 배터리: ${s.batteryLevel ?? '-'}%</div>
+          <div>🕐 마지막 신호: ${s.lastSignalAt ? s.lastSignalAt.slice(0,16).replace('T',' ') : '-'}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:40px;color:#6b7280;grid-column:1/-1">등록된 센서가 없습니다</div>';
+  }
+
+  async function loadSales() {
+    const data = await trpc('repair.list', {});
+    const branches = await trpc('branch.list', {});
+    const list = data || [];
+    const branchList = branches || [];
+    const tbody = document.getElementById('salesTbody');
+    tbody.innerHTML = branchList.length ? branchList.map(b => {
+      const bl = list.filter(r => r.branchId === b.id);
+      const completed = bl.filter(r => r.status === 'completed').length;
+      const rate = bl.length ? Math.round(completed/bl.length*100) : 0;
+      return `<tr><td>${b.name}</td><td>${bl.length}</td><td>${completed}</td><td>${rate}%</td><td>-</td></tr>`;
+    }).join('') : '<tr class="loading-row"><td colspan="5">데이터가 없습니다</td></tr>';
+  }
+
+  async function loadAssign() {
+    const data = await trpc('repair.list', {});
+    const list = (data || []).filter(r => r.status === 'assigned' || r.status === 'in_progress');
+    const tbody = document.getElementById('assignTbody');
+    tbody.innerHTML = list.length ? list.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${r.technicianId ? '기사 #' + r.technicianId : '미배정'}</td>
+        <td>${r.visitDate || '-'}</td>
+        <td><span class="status-badge status-${r.status}">${statusLabel(r.status)}</span></td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="6">배정된 작업이 없습니다</td></tr>';
+  }
+
+  async function loadRegions() {
+    const branches = await trpc('branch.list', {});
+    const list = branches || [];
+    const el = document.getElementById('regionSettings');
+    el.innerHTML = list.length ? list.map(b => `
+      <div style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:12px">
+        <div style="font-weight:700;margin-bottom:10px">🏢 ${b.name}</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:8px">담당 지역 키워드 (쉼표로 구분)</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="region-${b.id}" value="${(b.regions || []).join(', ')}" placeholder="예: 안산, 시흥, 광명" style="flex:1;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px" />
+          <button onclick="saveRegion(${b.id})" style="padding:8px 16px;background:#e85d04;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">저장</button>
+        </div>
+      </div>
+    `).join('') : '<div style="color:#6b7280">등록된 지사가 없습니다</div>';
+  }
+
+  async function loadMaterials() {
+    const tbody = document.getElementById('materialsTbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="6">자재 주문 데이터가 없습니다</td></tr>';
+  }
+
+  function showCreateBranch() {
+    document.getElementById('createBranchForm').style.display = 'block';
+  }
+
+  async function createBranch() {
+    const name = document.getElementById('newBranchName').value.trim();
+    const code = document.getElementById('newBranchCode').value.trim();
+    const phone = document.getElementById('newBranchPhone').value.trim();
+    const address = document.getElementById('newBranchAddr').value.trim();
+    if (!name || !code) { alert('지사명과 코드를 입력해 주세요.'); return; }
+    const res = await fetch(API + '/branch.create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json: { name, code, phone, address } })
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.id) {
+      alert('지사가 추가되었습니다.');
+      document.getElementById('createBranchForm').style.display = 'none';
+      loadBranches();
+    } else {
+      alert('지사 추가 실패: ' + (data.error?.message || '오류'));
+    }
+  }
+
+  async function saveRegion(branchId) {
+    const val = document.getElementById('region-' + branchId).value;
+    const regions = val.split(',').map(r => r.trim()).filter(Boolean);
+    await fetch(API + '/branch.update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json: { id: branchId, regions } })
+    });
+    alert('저장되었습니다.');
+  }
+
+  function exportExcel(type) {
+    alert('엑셀 다운로드 기능은 준비 중입니다.\n(서버에서 xlsx 파일 생성 후 다운로드 제공 예정)');
+  }
+
+  // 지사 추가 폼 표시
+  function showCreateBranch() {
+    document.getElementById('branchFormTitle').textContent = '🏢 새 지사 추가';
+    document.getElementById('editBranchId').value = '';
+    ['newBranchName','newBranchCode','newBranchPhone','newBranchAddr','newBranchRegions'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    document.getElementById('newBranchStatus').value = 'active';
+    document.getElementById('createBranchForm').style.display = 'block';
+    document.getElementById('createBranchForm').scrollIntoView({behavior:'smooth'});
+  }
+
+  // 지사 수정 폼 표시
+  function editBranch(id) {
+    const card = document.querySelector(`[data-branch-id="${id}"]`);
+    if (!card) return;
+    const name = card.dataset.name || '';
+    const code = card.dataset.code || '';
+    const phone = card.dataset.phone || '';
+    const address = card.dataset.address || '';
+    const regions = card.dataset.regions || '';
+    const status = card.dataset.status || 'active';
+    document.getElementById('branchFormTitle').textContent = '🏢 지사 정보 수정';
+    document.getElementById('editBranchId').value = id;
+    document.getElementById('newBranchName').value = name;
+    document.getElementById('newBranchCode').value = code;
+    document.getElementById('newBranchPhone').value = phone;
+    document.getElementById('newBranchAddr').value = address;
+    document.getElementById('newBranchRegions').value = regions;
+    document.getElementById('newBranchStatus').value = status;
+    document.getElementById('createBranchForm').style.display = 'block';
+    document.getElementById('createBranchForm').scrollIntoView({behavior:'smooth'});
+  }
+
+  function closeBranchForm() {
+    document.getElementById('createBranchForm').style.display = 'none';
+    document.getElementById('editBranchId').value = '';
+  }
+
+  // 지사 저장 (추가/수정 통합)
+  async function saveBranchForm() {
+    const editId = document.getElementById('editBranchId').value;
+    const name = document.getElementById('newBranchName').value.trim();
+    const code = document.getElementById('newBranchCode').value.trim();
+    const phone = document.getElementById('newBranchPhone').value.trim();
+    const address = document.getElementById('newBranchAddr').value.trim();
+    const regionsRaw = document.getElementById('newBranchRegions').value.trim();
+    const status = document.getElementById('newBranchStatus').value;
+    const regions = regionsRaw ? regionsRaw.split(',').map(r => r.trim()).filter(Boolean) : [];
+    if (!name || !code) { alert('지사명과 코드는 필수 입력항목입니다.'); return; }
+    const isEdit = !!editId;
+    const endpoint = isEdit ? '/api/trpc/branch.update' : '/api/trpc/branch.create';
+    const body = isEdit
+      ? { json: { id: parseInt(editId), name, code, phone, address, regions, status } }
+      : { json: { name, code, phone, address, regions, status } };
+    const res = await fetch(API + (isEdit ? '/branch.update' : '/branch.create'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.id || data.result?.data?.json?.success) {
+      alert(isEdit ? '지사 정보가 수정되었습니다.' : '지사가 추가되었습니다.');
+      closeBranchForm();
+      loadBranches();
+    } else {
+      alert((isEdit ? '수정' : '추가') + ' 실패: ' + (data.error?.message || JSON.stringify(data)));
+    }
+  }
+
+  async function toggleBranch(id, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const label = newStatus === 'active' ? '활성화' : '정지';
+    if (!confirm(`이 지사를 ${label}하시겠습니까?`)) return;
+    const res = await fetch(API + '/branch.update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      body: JSON.stringify({ json: { id: parseInt(id), status: newStatus } })
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.success || data.result?.data?.json?.id) {
+      loadBranches();
+    } else {
+      alert('상태 변경 실패: ' + (data.error?.message || '오류'));
+    }
+  }
+
+  // 연도 셀렉트 초기화
+  function initYearSelects() {
+    const year = new Date().getFullYear();
+    ['statsYear', 'salesYear'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      for (let y = year; y >= year - 3; y--) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y + '년';
+        el.appendChild(opt);
+      }
+    });
+  }
+
+  // ─── 난방 유량 관제 함수 ─────────────────────────────────────────────────────────────────────────────────
+  let flowRateData = [];
+
+  async function loadFlowRate() {
+    // 웹훁 URL 표시
+    const _apiBase = getApiBase();
+    document.getElementById('webhookUrl').textContent = (_apiBase || window.location.origin) + '/api/webhook/flow-rate';
+
+    const [settings, logs] = await Promise.all([
+      fetch(_apiBase + '/api/flow-rate/settings').then(r => r.json()).catch(() => []),
+      fetch(_apiBase + '/api/flow-rate/logs?limit=50').then(r => r.json()).catch(() => []),
+    ]);
+
+    flowRateData = settings || [];
+
+    // 요약 통계
+    const total = flowRateData.length;
+    const normal = flowRateData.filter(s => (s.lastStatus || '정상') === '정상').length;
+    const caution = flowRateData.filter(s => s.lastStatus === '주의').length;
+    const warning = flowRateData.filter(s => s.lastStatus === '경고').length;
+    document.getElementById('fr-total').textContent = total;
+    document.getElementById('fr-normal').textContent = normal;
+    document.getElementById('fr-caution').textContent = caution;
+    document.getElementById('fr-warning').textContent = warning;
+    document.getElementById('frSettingsCount').textContent = total + '세대';
+
+    // 데모 센서 선택보스 업데이트
+    const sel = document.getElementById('demoSensorSelect');
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">세대 선택...</option>';
+    flowRateData.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.sensorId;
+      opt.textContent = s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 (' + parseFloat(s.baseFlowRateLpm).toFixed(2) + ' LPM)';
+      opt.dataset.base = s.baseFlowRateLpm;
+      opt.dataset.warn = s.warningRangePercent;
+      opt.dataset.caution = s.cautionRangePercent;
+      sel.appendChild(opt);
+    });
+    if (prevVal) sel.value = prevVal;
+    updateDemoQuickBtns();
+
+    // 세대 테이블 렌더링
+    renderFlowRateTable();
+
+    // 로그 테이블
+    const logTbody = document.getElementById('flowrateLogTbody');
+    const logList = logs || [];
+    logTbody.innerHTML = logList.length ? logList.map(l => `
+      <tr>
+        <td>${l.measuredAt ? new Date(l.measuredAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+        <td>${l.apartmentName || '-'}</td>
+        <td>${l.buildingNumber || '-'}동 ${l.roomNumber || '-'}호</td>
+        <td style="font-size:12px;color:#6b7280">${l.sensorId || '-'}</td>
+        <td style="font-weight:700">${l.flowRateLpm ? parseFloat(l.flowRateLpm).toFixed(2) + ' LPM' : '-'}</td>
+        <td><span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${
+          l.status==='경고'?'#fee2e2':l.status==='주의'?'#fef3c7':'#dcfce7'
+        };color:${
+          l.status==='경고'?'#991b1b':l.status==='주의'?'#92400e':'#166534'
+        }">${l.status || '정상'}</span></td>
+        <td style="font-size:12px;color:#6b7280">${l.source || 'ESP32'}</td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="7">로그 데이터가 없습니다</td></tr>';
+  }
+
+  function renderFlowRateTable() {
+    const filterStatus = document.getElementById('frFilterStatus').value;
+    const search = (document.getElementById('frSearch').value || '').toLowerCase();
+    let list = flowRateData.filter(s => {
+      if (filterStatus && (s.lastStatus || '정상') !== filterStatus) return false;
+      if (search && !((s.apartmentName||'').toLowerCase().includes(search) || (s.buildingNumber||'').includes(search) || (s.roomNumber||'').includes(search))) return false;
+      return true;
+    });
+    const tbody = document.getElementById('flowrateTbody');
+    tbody.innerHTML = list.length ? list.map(s => {
+      const status = s.lastStatus || '정상';
+      const statusBg = status==='경고'?'#fee2e2':status==='주의'?'#fef3c7':'#dcfce7';
+      const statusColor = status==='경고'?'#991b1b':status==='주의'?'#92400e':'#166534';
+      const base = parseFloat(s.baseFlowRateLpm);
+      const cur = s.lastFlowRateLpm ? parseFloat(s.lastFlowRateLpm) : null;
+      const devPct = cur !== null && base > 0 ? ((cur - base) / base * 100) : null;
+      const devStr = devPct !== null ? (devPct >= 0 ? '+' : '') + devPct.toFixed(1) + '%' : '-';
+      const devColor = devPct !== null ? (Math.abs(devPct) >= s.warningRangePercent ? '#ef4444' : Math.abs(devPct) >= s.cautionRangePercent ? '#f59e0b' : '#22c55e') : '#6b7280';
+      return `<tr>
+        <td style="font-weight:600">${s.apartmentName || '-'}</td>
+        <td>${s.buildingNumber || '-'}동 ${s.roomNumber || '-'}호</td>
+        <td style="font-size:12px;color:#6b7280">${s.sensorId}</td>
+        <td style="font-weight:700">${base.toFixed(2)} LPM</td>
+        <td style="font-weight:700">${cur !== null ? cur.toFixed(2) + ' LPM' : '-'}</td>
+        <td style="color:${devColor};font-weight:700">${devStr}</td>
+        <td>${s.lastSupplyPressure ? parseFloat(s.lastSupplyPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td>${s.lastReturnPressure ? parseFloat(s.lastReturnPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td>${s.lastDifferentialPressure ? parseFloat(s.lastDifferentialPressure).toFixed(3) + ' MPa' : '-'}</td>
+        <td style="font-size:12px">${s.lastMeasuredAt ? new Date(s.lastMeasuredAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+        <td><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${statusBg};color:${statusColor}">${status}</span></td>
+        <td>
+          <button class="action-btn" style="background:#dbeafe;color:#1e40af;margin-right:4px" onclick="openEditFlowRateModal(${s.id})">수정</button>
+          <button class="action-btn" style="background:#fee2e2;color:#991b1b" onclick="deleteFlowRate(${s.id})">삭제</button>
+        </td>
+      </tr>`;
+    }).join('') : '<tr class="loading-row"><td colspan="12">등록된 세대가 없습니다</td></tr>';
+  }
+
+  function updateDemoQuickBtns() {
+    const sel = document.getElementById('demoSensorSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const container = document.getElementById('demoQuickBtns');
+    if (!opt || !opt.value) { container.innerHTML = ''; return; }
+    const base = parseFloat(opt.dataset.base || '5');
+    const warn = parseFloat(opt.dataset.warn || '30');
+    const caution = parseFloat(opt.dataset.caution || '15');
+    const btns = [
+      { label: '정상 (기준)', pct: 0 },
+      { label: '+' + caution + '% 주의', pct: caution },
+      { label: '+' + warn + '% 경고', pct: warn },
+      { label: '-' + caution + '% 주의', pct: -caution },
+      { label: '-' + warn + '% 경고', pct: -warn },
+    ];
+    container.innerHTML = btns.map(b => {
+      const val = (base * (1 + b.pct / 100)).toFixed(2);
+      return `<button onclick="document.getElementById('demoFlowValue').value='${val}'" style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">${b.label}<br><span style="color:#6b7280">${val} LPM</span></button>`;
+    }).join('');
+  }
+
+  document.getElementById('demoSensorSelect').addEventListener('change', updateDemoQuickBtns);
+
+  async function runFlowRateDemo() {
+    const sensorId = document.getElementById('demoSensorSelect').value;
+    const flow = parseFloat(document.getElementById('demoFlowValue').value);
+    if (!sensorId) { alert('세대를 선택해 주세요.'); return; }
+    if (isNaN(flow) || flow < 0) { alert('유효한 유량 값을 입력해 주세요.'); return; }
+    const res = document.getElementById('demoResult');
+    res.textContent = '적용 중...';
+    try {
+      const r = await fetch(getApiBase() + '/api/trpc/flowRate.demoUpdate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: { sensorId, flowRateLpm: flow } }),
+      });
+      const data = await r.json();
+      const result = data?.result?.data?.json || data;
+      const status = result?.status || '알 수 없음';
+      const statusColor = status==='경고'?'#ef4444':status==='주의'?'#f59e0b':'#22c55e';
+      res.innerHTML = `✅ 적용 완료: <strong style="color:${statusColor}">${status}</strong> (${flow.toFixed(2)} LPM)`;
+      await loadFlowRate();
+    } catch(e) {
+      res.textContent = '❌ 오류: ' + e.message;
+    }
+  }
+
+  async function openAddFlowRateModal() {
+    const sensorId = prompt('센서 ID를 입력하세요:');
+    if (!sensorId) return;
+    const aptName = prompt('아파트명:');
+    if (!aptName) return;
+    const building = prompt('동 (예: 101):');
+    if (!building) return;
+    const room = prompt('호수 (예: 1201):');
+    if (!room) return;
+    const base = parseFloat(prompt('기준 유량 (LPM, 예: 5.50):', '5.50') || '5.50');
+    if (isNaN(base) || base <= 0) { alert('유효하지 않은 기준 유량입니다.'); return; }
+    const warn = parseInt(prompt('경고 범위 (%, 예: 30):', '30') || '30');
+    const caution = parseInt(prompt('주의 범위 (%, 예: 15):', '15') || '15');
+    const alertMin = parseInt(prompt('알림 지속 시간 (분, 예: 10):', '10') || '10');
+    try {
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sensorId, apartmentName: aptName, buildingNumber: building, roomNumber: room, baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert('세대가 등록되었습니다.');
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
+  }
+
+  async function openEditFlowRateModal(id) {
+    const s = flowRateData.find(x => x.id === id);
+    if (!s) return;
+    const base = parseFloat(prompt('기준 유량 (LPM):', parseFloat(s.baseFlowRateLpm).toFixed(2)) || '0');
+    if (isNaN(base) || base <= 0) { alert('유효하지 않은 값입니다.'); return; }
+    const warn = parseInt(prompt('경고 범위 (%):', s.warningRangePercent) || '0');
+    const caution = parseInt(prompt('주의 범위 (%):', s.cautionRangePercent) || '0');
+    const alertMin = parseInt(prompt('알림 지속 시간 (분):', s.alertDurationMinutes) || '0');
+    try {
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert('수정되었습니다.');
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
+  }
+
+  async function deleteFlowRate(id) {
+    const s = flowRateData.find(x => x.id === id);
+    if (!s) return;
+    if (!confirm(s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 설정을 삭제하시겠습니까?')) return;
+    try {
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, { method: 'DELETE' });
+      if (!r.ok) throw new Error(await r.text());
+      await loadFlowRate();
+    } catch(e) { alert('오류: ' + e.message); }
+  }
+
+  checkAuth();
+  initYearSelects();
+  loadOverview();
+</script>
+</body>
+</html>

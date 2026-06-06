@@ -26,6 +26,23 @@ export function registerWebRoutes(app: Express) {
     app.use("/web", express.static(webDir, { index: "index.html" }));
   }
 
+  // 비공개 테스트용 홈페이지 - /preview 경로 (비밀번호 보호는 클라이언트 측에서 처리)
+  const previewDir = path.join(PUBLIC_DIR, "preview");
+  if (fs.existsSync(previewDir)) {
+    app.use("/preview", express.static(previewDir, { index: "gate.html" }));
+  }
+
+  // robots.txt 서빙
+  const robotsPath = path.join(PUBLIC_DIR, "robots.txt");
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    if (fs.existsSync(robotsPath)) {
+      res.setHeader("Content-Type", "text/plain");
+      res.sendFile(robotsPath);
+    } else {
+      res.type("text/plain").send("User-agent: *\nDisallow: /preview/\n");
+    }
+  });
+
   // 엑셀(CSV) 다운로드 API - 전국 접수 현황
   app.get("/api/excel/repairs", async (_req: Request, res: Response) => {
     try {

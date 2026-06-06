@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="/preview/auth-check.js"></script>
+  <script src="/preview/maintenance.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>앱 다운로드 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: #1f2937; background: #f9fafb; }
+    a { text-decoration: none; color: inherit; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { font-size: 18px; font-weight: 700; color: #e85d04; }
+    .back-btn { color: #6b7280; font-size: 14px; }
+    .hero { background: linear-gradient(135deg, #0f172a, #1e293b); color: #fff; padding: 64px 24px; text-align: center; }
+    .hero h1 { font-size: clamp(28px, 5vw, 48px); font-weight: 800; margin-bottom: 12px; }
+    .hero p { color: rgba(255,255,255,.75); font-size: 17px; max-width: 500px; margin: 0 auto; line-height: 1.7; }
+    .container { max-width: 800px; margin: 48px auto; padding: 0 16px 60px; }
+    .download-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 48px; }
+    .download-card { background: #fff; border-radius: 24px; padding: 36px 28px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    .platform-icon { font-size: 56px; margin-bottom: 16px; }
+    .platform-name { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    .platform-desc { font-size: 14px; color: #6b7280; margin-bottom: 24px; line-height: 1.6; }
+    .download-btn { display: block; padding: 14px 24px; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all .15s; }
+    .android-btn { background: #34a853; color: #fff; }
+    .android-btn:hover { background: #2d9248; transform: translateY(-2px); }
+    .ios-btn { background: #000; color: #fff; }
+    .ios-btn:hover { background: #1a1a1a; transform: translateY(-2px); }
+    .coming-soon { display: inline-block; background: #f3f4f6; color: #9ca3af; padding: 14px 24px; border-radius: 14px; font-size: 15px; font-weight: 600; }
+    .qr-section { background: #fff; border-radius: 24px; padding: 40px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.08); margin-bottom: 40px; }
+    .qr-section h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .qr-section p { color: #6b7280; font-size: 14px; margin-bottom: 28px; }
+    .qr-placeholder { width: 180px; height: 180px; background: #f3f4f6; border-radius: 16px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #9ca3af; border: 2px dashed #d1d5db; }
+    .qr-hint { font-size: 13px; color: #9ca3af; }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .feature-item { background: #fff; border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .feature-icon { font-size: 32px; margin-bottom: 10px; }
+    .feature-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .feature-desc { font-size: 12px; color: #6b7280; line-height: 1.5; }
+    .section-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; text-align: center; }
+    .notice-box { background: #fff3ec; border: 1.5px solid #fed7aa; border-radius: 14px; padding: 16px 20px; font-size: 14px; color: #9a3412; margin-bottom: 32px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/preview/index.html" class="logo">🔥 퓨처에너지테크</a>
+  <a href="/preview/index.html" class="back-btn">← 홈으로</a>
+</header>
+<div class="hero">
+  <h1>📱 앱 다운로드</h1>
+  <p>퓨처에너지테크 앱으로 더 편리하게<br />난방 서비스를 이용하세요</p>
+</div>
+<div class="container">
+  <div class="notice-box">
+    💡 <strong>안내:</strong> 현재 Google Play 등록 준비 중입니다. 아래 직접 다운로드 버튼으로 APK 파일을 설치하실 수 있습니다. Google Play 등록 완료 후 스토어 링크가 업데이트됩니다.
+  </div>
+
+  <div class="download-grid">
+    <div class="download-card">
+      <div class="platform-icon">🤖</div>
+      <div class="platform-name">Android</div>
+      <div class="platform-desc">안드로이드 6.0 이상<br />APK 직접 설치 또는 Google Play</div>
+      <!-- Google Play 등록 완료 후 href를 스토어 링크로 변경 -->
+      <a href="#" id="androidBtn" class="download-btn android-btn" onclick="downloadApk(event)">
+        📥 APK 다운로드
+      </a>
+      <div style="margin-top:10px;font-size:12px;color:#6b7280" id="playStoreLink" style="display:none">
+        <a href="https://play.google.com/store/apps/details?id=YOUR_PACKAGE_ID" style="color:#34a853;font-weight:600">Google Play에서 다운로드 →</a>
+      </div>
+    </div>
+    <div class="download-card">
+      <div class="platform-icon">🍎</div>
+      <div class="platform-name">iOS (iPhone)</div>
+      <div class="platform-desc">iOS 14.0 이상<br />App Store 등록 준비 중</div>
+      <div class="coming-soon">🔜 준비 중</div>
+    </div>
+  </div>
+
+  <div class="qr-section">
+    <h3>📷 QR코드로 바로 다운로드</h3>
+    <p>카메라로 QR코드를 스캔하면 바로 다운로드 페이지로 이동합니다</p>
+    <div class="qr-placeholder" id="qrContainer">
+      <div>
+        <div style="font-size:32px;margin-bottom:8px">📱</div>
+        <div>QR코드 준비 중</div>
+      </div>
+    </div>
+    <div class="qr-hint">* Google Play 등록 완료 후 QR코드가 업데이트됩니다</div>
+  </div>
+
+  <div class="section-title">앱 주요 기능</div>
+  <div class="features-grid">
+    <div class="feature-item">
+      <div class="feature-icon">🔧</div>
+      <div class="feature-title">고장 접수</div>
+      <div class="feature-desc">언제 어디서나 빠른 난방 고장 접수</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">📅</div>
+      <div class="feature-title">방문 예약</div>
+      <div class="feature-desc">달력으로 편리하게 방문 일정 선택</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">📡</div>
+      <div class="feature-title">누수센서 알림</div>
+      <div class="feature-desc">누수 감지 시 즉시 푸시 알림 수신</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">📊</div>
+      <div class="feature-title">작업 현황</div>
+      <div class="feature-desc">실시간 작업 진행 상황 확인</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">💬</div>
+      <div class="feature-title">담당 기사 연락</div>
+      <div class="feature-desc">배정된 기사에게 바로 연락</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">🧾</div>
+      <div class="feature-title">견적 확인</div>
+      <div class="feature-desc">작업 견적 확인 및 승인</div>
+    </div>
+  </div>
+</div>
+<script>
+  function downloadApk(e) {
+    e.preventDefault();
+    // APK 파일 경로 - Publish 후 실제 APK URL로 변경
+    const apkUrl = '#'; // 실제 APK URL로 교체 필요
+    if (apkUrl === '#') {
+      alert('APK 파일이 준비 중입니다.\n준비 완료 후 다운로드 가능합니다.\n\n고객센터(031-8042-7310)로 문의해 주세요.');
+      return;
+    }
+    window.location.href = apkUrl;
+  }
+</script>
+</body>
+</html>
