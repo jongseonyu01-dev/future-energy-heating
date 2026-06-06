@@ -55,6 +55,17 @@
   <div class="back-link"><a href="/web/index.html">← 고객 홈페이지로 돌아가기</a></div>
 </div>
 <script>
+  // API 서버 기본 URL: 배포 환경에서는 같은 origin, 개발 환경에서는 3000 포트
+  function getApiBase() {
+    const host = window.location.hostname;
+    // 개발 미리보기: 호스트명이 808x-xxx 패턴이면 3000-xxx로 변환
+    const devMatch = host.match(/^(808\d)-(.*)/); 
+    if (devMatch) {
+      return window.location.protocol + '//' + '3000-' + devMatch[2];
+    }
+    return '';
+  }
+
   async function doLogin() {
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
@@ -71,18 +82,28 @@
     errEl.style.display = 'none';
 
     try {
-      const res = await fetch('/api/trpc/auth.login', {
+      const apiBase = getApiBase();
+      const res = await fetch(apiBase + '/api/trpc/auth.login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ json: { loginId: username, password } })
       });
-      const data = await res.json();
+
+      let data;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error('서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      }
+
       const user = data.result?.data?.json;
 
       if (user && user.success && user.appRole) {
         // 세션 저장
         sessionStorage.setItem('adminUser', JSON.stringify(user));
-        // 권한별 리다이렉트
+        // 리다이렉트는 항상 현재 origin 기준 (개발/배포 모두 동일하게)
         if (user.appRole === 'hq_admin') {
           window.location.href = '/web/admin/dashboard.html';
         } else if (user.appRole === 'branch_manager') {
@@ -91,10 +112,16 @@
           window.location.href = '/web/admin/tech.html';
         }
       } else {
-        throw new Error(user?.error || data.error?.json?.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
+        const errMsg = user?.error || data.error?.json?.message || '';
+        throw new Error(errMsg || '아이디 또는 비밀번호가 올바르지 않습니다.');
       }
     } catch (err) {
-      errEl.textContent = err.message;
+      // 기술적 오류 문구 대신 사용자 친화적 메시지 표시
+      let msg = err.message || '';
+      if (!msg || msg.includes('JSON') || msg.includes('token') || msg.includes('fetch') || msg.includes('Failed')) {
+        msg = '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.';
+      }
+      errEl.textContent = msg;
       errEl.style.display = 'block';
       btn.disabled = false; btn.textContent = '로그인';
     }

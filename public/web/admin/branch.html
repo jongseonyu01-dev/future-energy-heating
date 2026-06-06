@@ -285,21 +285,31 @@
 </div>
 
 <script>
-  const API = '/api/trpc';
+  // 개발 미리보기(8081)에서는 Express 서버(3000 포트)로 직접 요청
+  function getApiBase() {
+    const host = window.location.hostname;
+    // 호스트명이 808x-xxx 패턴이면 3000-xxx로 변환
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) {
+      return window.location.protocol + '//' + '3000-' + devMatch[2];
+    }
+    return '';
+  }
+  const API = getApiBase() + '/api/trpc';
   let user = null;
   let currentPanel = 'overview';
   let selectedRequestId = null;
 
   function checkAuth() {
     const stored = sessionStorage.getItem('adminUser');
-    if (!stored) { window.location.href = '/web/admin/login.html'; return; }
+    if (!stored) { window.location.href = getApiBase() + '/web/admin/login.html'; return; }
     user = JSON.parse(stored);
-    if (user.appRole !== 'branch_manager') { window.location.href = '/web/admin/login.html'; return; }
+    if (user.appRole !== 'branch_manager') { window.location.href = getApiBase() + '/web/admin/login.html'; return; }
     document.getElementById('sidebarUsername').textContent = user.username || '지사장';
     document.getElementById('sidebarBranch').textContent = user.branchName || '';
   }
 
-  function doLogout() { sessionStorage.removeItem('adminUser'); window.location.href = '/web/admin/login.html'; }
+  function doLogout() { sessionStorage.removeItem('adminUser'); window.location.href = getApiBase() + '/web/admin/login.html'; }
   function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('show'); }
   function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('show'); }
   function closeModal(id) { document.getElementById(id).classList.remove('show'); }

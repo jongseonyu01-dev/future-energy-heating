@@ -446,22 +446,32 @@
 </div>
 
 <script>
-  const API = '/api/trpc';
+  // 개발 미리보기(8081)에서는 Express 서버(3000 포트)로 직접 요청
+  function getApiBase() {
+    const host = window.location.hostname;
+    // 호스트명이 808x-xxx 패턴이면 3000-xxx로 변환
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) {
+      return window.location.protocol + '//' + '3000-' + devMatch[2];
+    }
+    return '';
+  }
+  const API = getApiBase() + '/api/trpc';
   let currentPanel = 'overview';
   let user = null;
 
   // 인증 확인
   function checkAuth() {
     const stored = sessionStorage.getItem('adminUser');
-    if (!stored) { window.location.href = '/web/admin/login.html'; return; }
+    if (!stored) { window.location.href = getApiBase() + '/web/admin/login.html'; return; }
     user = JSON.parse(stored);
-    if (user.appRole !== 'hq_admin') { window.location.href = '/web/admin/login.html'; return; }
+    if (user.appRole !== 'hq_admin') { window.location.href = getApiBase() + '/web/admin/login.html'; return; }
     document.getElementById('sidebarUsername').textContent = user.username || '관리자';
   }
 
   function doLogout() {
     sessionStorage.removeItem('adminUser');
-    window.location.href = '/web/admin/login.html';
+    window.location.href = getApiBase() + '/web/admin/login.html';
   }
 
   function toggleSidebar() {
@@ -969,11 +979,12 @@
 
   async function loadFlowRate() {
     // 웹훁 URL 표시
-    document.getElementById('webhookUrl').textContent = window.location.origin + '/api/webhook/flow-rate';
+    const _apiBase = getApiBase();
+    document.getElementById('webhookUrl').textContent = (_apiBase || window.location.origin) + '/api/webhook/flow-rate';
 
     const [settings, logs] = await Promise.all([
-      fetch('/api/flow-rate/settings').then(r => r.json()).catch(() => []),
-      fetch('/api/flow-rate/logs?limit=50').then(r => r.json()).catch(() => []),
+      fetch(_apiBase + '/api/flow-rate/settings').then(r => r.json()).catch(() => []),
+      fetch(_apiBase + '/api/flow-rate/logs?limit=50').then(r => r.json()).catch(() => []),
     ]);
 
     flowRateData = settings || [];
@@ -1097,7 +1108,7 @@
     const res = document.getElementById('demoResult');
     res.textContent = '적용 중...';
     try {
-      const r = await fetch('/api/trpc/flowRate.demoUpdate', {
+      const r = await fetch(getApiBase() + '/api/trpc/flowRate.demoUpdate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ json: { sensorId, flowRateLpm: flow } }),
@@ -1128,7 +1139,7 @@
     const caution = parseInt(prompt('주의 범위 (%, 예: 15):', '15') || '15');
     const alertMin = parseInt(prompt('알림 지속 시간 (분, 예: 10):', '10') || '10');
     try {
-      const r = await fetch('/api/flow-rate/settings', {
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sensorId, apartmentName: aptName, buildingNumber: building, roomNumber: room, baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
@@ -1148,7 +1159,7 @@
     const caution = parseInt(prompt('주의 범위 (%):', s.cautionRangePercent) || '0');
     const alertMin = parseInt(prompt('알림 지속 시간 (분):', s.alertDurationMinutes) || '0');
     try {
-      const r = await fetch('/api/flow-rate/settings/' + id, {
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
@@ -1164,7 +1175,7 @@
     if (!s) return;
     if (!confirm(s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 설정을 삭제하시겠습니까?')) return;
     try {
-      const r = await fetch('/api/flow-rate/settings/' + id, { method: 'DELETE' });
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, { method: 'DELETE' });
       if (!r.ok) throw new Error(await r.text());
       await loadFlowRate();
     } catch(e) { alert('오류: ' + e.message); }
