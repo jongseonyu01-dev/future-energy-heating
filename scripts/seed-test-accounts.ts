@@ -95,7 +95,94 @@ async function main() {
     .where(eq(branches.id, branchId));
   console.log(`✅ 안산지사 지사장 연결 완료 (userId: ${ansanUserId})`);
 
-  // 4. 현장 기사 계정 (worker1 / worker1234)
+  // 4. 호남지사 생성 및 지사장 계정 (fethn / fethn5533)
+  const honamBranchExisting = await db.select().from(branches).where(eq(branches.code, 'HN'));
+  let honamBranchId: number;
+  if (honamBranchExisting.length === 0) {
+    const [result] = await db.insert(branches).values({
+      name: '퓨처에너지테크 호남지사',
+      code: 'HN',
+      region: '호남권',
+      address: '상세 주소 추가 예정',
+      phoneNumber: '010-3241-5533',
+      managerUserId: null,
+      isActive: true,
+      createdAt: new Date(),
+    });
+    honamBranchId = (result as any).insertId;
+    console.log(`✅ 호남지사 생성 완료 (ID: ${honamBranchId})`);
+  } else {
+    honamBranchId = honamBranchExisting[0].id;
+    await db.update(branches).set({ phoneNumber: '010-3241-5533' }).where(eq(branches.id, honamBranchId));
+    console.log(`ℹ️  호남지사 이미 존재 (ID: ${honamBranchId})`);
+  }
+  const honamExisting = await db.select().from(appRoles).where(eq(appRoles.loginId, 'fethn'));
+  let honamUserId = 100005;
+  if (honamExisting.length === 0) {
+    await db.insert(appRoles).values({
+      userId: honamUserId,
+      appRole: 'branch_manager',
+      loginId: 'fethn',
+      passwordHash: simpleHash('fethn5533'),
+      phoneNumber: '010-3241-5533',
+      isActive: true,
+      createdAt: new Date(),
+    });
+    console.log('✅ 호남지사장 계정 생성 완료 (fethn / fethn5533)');
+  } else {
+    honamUserId = honamExisting[0].userId;
+    await db.update(appRoles)
+      .set({ passwordHash: simpleHash('fethn5533'), appRole: 'branch_manager', isActive: true, phoneNumber: '010-3241-5533' })
+      .where(eq(appRoles.loginId, 'fethn'));
+    console.log('ℹ️  호남지사장 계정 업데이트 완료 (fethn / fethn5533)');
+  }
+  await db.update(branches).set({ managerUserId: honamUserId }).where(eq(branches.id, honamBranchId));
+  console.log(`✅ 호남지사 지사장 연결 완료 (userId: ${honamUserId})`);
+
+  // 5. 부천지사 생성 및 지사장 계정 (bucheon / bucheon1234)
+  const bucheonBranchExisting = await db.select().from(branches).where(eq(branches.code, 'BC'));
+  let bucheonBranchId: number;
+  if (bucheonBranchExisting.length === 0) {
+    const [result] = await db.insert(branches).values({
+      name: '퓨처에너지테크 부천지사',
+      code: 'BC',
+      region: '경기 부천',
+      address: '상세 주소 추가 예정',
+      phoneNumber: '010-5380-8317',
+      managerUserId: null,
+      isActive: true,
+      createdAt: new Date(),
+    });
+    bucheonBranchId = (result as any).insertId;
+    console.log(`✅ 부천지사 생성 완료 (ID: ${bucheonBranchId})`);
+  } else {
+    bucheonBranchId = bucheonBranchExisting[0].id;
+    console.log(`ℹ️  부천지사 이미 존재 (ID: ${bucheonBranchId})`);
+  }
+  const bucheonExisting = await db.select().from(appRoles).where(eq(appRoles.loginId, 'bucheon'));
+  let bucheonUserId = 100006;
+  if (bucheonExisting.length === 0) {
+    await db.insert(appRoles).values({
+      userId: bucheonUserId,
+      appRole: 'branch_manager',
+      loginId: 'bucheon',
+      passwordHash: simpleHash('bucheon1234'),
+      phoneNumber: '010-5380-8317',
+      isActive: true,
+      createdAt: new Date(),
+    });
+    console.log('✅ 부천지사장 계정 생성 완료 (bucheon / bucheon1234)');
+  } else {
+    bucheonUserId = bucheonExisting[0].userId;
+    await db.update(appRoles)
+      .set({ passwordHash: simpleHash('bucheon1234'), appRole: 'branch_manager', isActive: true })
+      .where(eq(appRoles.loginId, 'bucheon'));
+    console.log('ℹ️  부천지사장 계정 업데이트 완료 (bucheon / bucheon1234)');
+  }
+  await db.update(branches).set({ managerUserId: bucheonUserId }).where(eq(branches.id, bucheonBranchId));
+  console.log(`✅ 부천지사 지사장 연결 완료 (userId: ${bucheonUserId})`);
+
+  // 6. 현장 기사 계정 (worker1 / worker1234)
   const workerExisting = await db.select().from(appRoles).where(eq(appRoles.loginId, "worker1"));
   let workerUserId = 100003;
   if (workerExisting.length === 0) {
