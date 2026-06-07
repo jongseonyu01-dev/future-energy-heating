@@ -24,6 +24,7 @@ import {
   markLocationSessionSmsSent,
   getActiveLocationSessions,
   getActiveLocationSessionsByBranch,
+  getLocationSessionByRequestId,
   expireOldLocationSessions,
   getLocationConsent,
   createLocationConsent,
@@ -89,11 +90,14 @@ export function registerWebRoutes(app: Express) {
   // ─── 위치 추적 API ──────────────────────────────────────────────
 
   // 고객용 위치 확인 페이지 (토큰 기반)
-  app.get("/track/:token", async (req: Request, res: Response) => {
-    const { token } = req.params;
-    const trackingPagePath = path.join(PUBLIC_DIR, "preview", "track.html");
-    if (fs.existsSync(trackingPagePath)) {
-      res.sendFile(trackingPagePath);
+  app.get("/track/:token", async (_req: Request, res: Response) => {
+    // 공개 홈페이지 경로(web)를 우선 서빙, 없으면 preview 폴백
+    const webPath = path.join(PUBLIC_DIR, "web", "track.html");
+    const previewPath = path.join(PUBLIC_DIR, "preview", "track.html");
+    if (fs.existsSync(webPath)) {
+      res.sendFile(webPath);
+    } else if (fs.existsSync(previewPath)) {
+      res.sendFile(previewPath);
     } else {
       res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
     }
@@ -107,7 +111,19 @@ export function registerWebRoutes(app: Express) {
       if (!session) {
         return res.status(404).json({ error: "세션을 찾을 수 없거나 만료되었습니다." });
       }
-      // 고객에게는 최소한의 정보만 노출 (출발지/전체 이력 제외)
+      // 이동중이 아니면(도착완료/업무취소/만료) 위치 정보는 더 이상 노출하지 않음 (요구사항 6,8)
+      const isActive = session.status === "이동중";
+      const isExpiredByTime = session.expiresAt && new Date(session.expiresAt) < new Date();
+      if (!isActive || isExpiredByTime) {
+        return res.status(410).json({
+          status: isExpiredByTime && isActive ? "만료" : session.status,
+          ended: true,
+          technicianName: session.technicianName,
+          arrivedAt: session.arrivedAt,
+          error: "종료된 위치 공유입니다.",
+        });
+      }
+      // 고객에게는 현재 위치와 예상 도착 정보만 노출 (출발지/과거 이동 이력 제외)
       res.json({
         status: session.status,
         technicianName: session.technicianName,
@@ -165,6 +181,83 @@ export function registerWebRoutes(app: Express) {
       }
       await stopLocationSession(token, reason as "도착완료" | "업무취소");
       res.json({ success: true, status: reason });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자/지사장용 - 직접 위치 공유 시작 (전화 접수 고객 등, 기사 앱 미사용 케이스)
+  app.post("/api/location/start-by-admin", async (req: Request, res: Response) => {
+    try {
+      const {
+        requestId, technicianId, technicianName, technicianPhone,
+        customerName, customerPhone, customerAddress,
+        customerLat, customerLng, branchId, branchName, expireHours,
+      } = req.body;
+      if (!technicianName || !customerName || !customerPhone) {
+        return res.status(400).json({ error: "technicianName, customerName, customerPhone는 필수입니다." });
+      }
+      // 기존 이동중 세션이 있으면 종료(새 링크 발급)
+      const reqIdNum = requestId ? parseInt(String(requestId)) : 0;
+      if (reqIdNum) {
+        const existing = await getLocationSessionByRequestId(reqIdNum);
+        if (existing) {
+          await stopLocationSession(existing.trackingToken, "업무취소");
+        }
+      }
+      const crypto = await import("crypto");
+      const token = crypto.randomUUID();
+      const now = new Date();
+      const hours = expireHours && Number(expireHours) > 0 ? Number(expireHours) : 4;
+      const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+      const session = await createLocationSession({
+        requestId: reqIdNum || 0,
+        technicianId: technicianId ? parseInt(String(technicianId)) : 0,
+        technicianName,
+        technicianPhone: technicianPhone ?? null,
+        customerName,
+        customerPhone,
+        customerAddress: customerAddress ?? "",
+        customerLat: customerLat !== undefined && customerLat !== null ? String(customerLat) : null,
+        customerLng: customerLng !== undefined && customerLng !== null ? String(customerLng) : null,
+        branchId: branchId ? parseInt(String(branchId)) : null,
+        branchName: branchName ?? null,
+        trackingToken: token,
+        status: "이동중",
+        departedAt: now,
+        expiresAt,
+      });
+      if (!session) return res.status(500).json({ error: "세션 생성 실패" });
+      const baseUrl = process.env.SITE_URL || `${req.protocol}://${req.get("host")}`;
+      const trackingUrl = `${baseUrl}/track/${token}`;
+      let smsSent = false;
+      let smsError: string | undefined;
+      try {
+        const msg = buildTechnicianDepartedMessage(customerName, technicianName, trackingUrl);
+        const result = await sendSms(customerPhone, msg);
+        if (result.result === "SUCCESS") {
+          smsSent = true;
+          await markLocationSessionSmsSent(token);
+        } else {
+          smsError = result.errorMessage;
+        }
+      } catch (smsErr: any) {
+        smsError = smsErr?.message ?? String(smsErr);
+      }
+      res.json({ success: true, token, trackingUrl, smsSent, smsError });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자/지사장용 - 위치 세션 강제 종료 (도착완료/업무취소)
+  app.post("/api/location/stop-by-admin", async (req: Request, res: Response) => {
+    try {
+      const { token, reason } = req.body;
+      if (!token) return res.status(400).json({ error: "token 필수" });
+      const r = reason && ["도착완료", "업무취소"].includes(reason) ? reason : "업무취소";
+      await stopLocationSession(token, r as "도착완료" | "업무취소");
+      res.json({ success: true, status: r });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

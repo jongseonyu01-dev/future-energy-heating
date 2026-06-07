@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import * as db from "./db";
@@ -1028,6 +1029,118 @@ export const appRouter = router({
           }
         }
         return { success: true, token, trackingUrl, smsSent };
+      }),
+
+    // 관리자/지사장이 직접 위치 공유 시작 (전화 접수 고객 등 앱 미사용 케이스)
+    // 기사 앱이 없어도 관리자가 세션을 만들고 고객에게 링크 SMS를 보낼 수 있음
+    startTrackingByAdmin: publicProcedure
+      .input(z.object({
+        requestId: z.number(),
+        technicianId: z.number(),
+        technicianName: z.string(),
+        technicianPhone: z.string().optional(),
+        customerName: z.string(),
+        customerPhone: z.string(),
+        customerAddress: z.string(),
+        customerLat: z.number().optional(),
+        customerLng: z.number().optional(),
+        branchId: z.number().optional(),
+        branchName: z.string().optional(),
+        expireHours: z.number().optional(), // 만료 시간(시간 단위), 기본 4시간
+      }))
+      .mutation(async ({ input }) => {
+        // 이미 이동중인 세션이 있으면 종료(새 링크 발급)
+        const existing = await db.getLocationSessionByRequestId(input.requestId);
+        if (existing) {
+          await db.stopLocationSession(existing.trackingToken, "업무취소");
+        }
+        const token = crypto.randomUUID();
+        const now = new Date();
+        const hours = input.expireHours && input.expireHours > 0 ? input.expireHours : 4;
+        const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+        const session = await db.createLocationSession({
+          requestId: input.requestId,
+          technicianId: input.technicianId,
+          technicianName: input.technicianName,
+          technicianPhone: input.technicianPhone ?? null,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          customerAddress: input.customerAddress,
+          customerLat: input.customerLat !== undefined ? String(input.customerLat) : null,
+          customerLng: input.customerLng !== undefined ? String(input.customerLng) : null,
+          branchId: input.branchId ?? null,
+          branchName: input.branchName ?? null,
+          trackingToken: token,
+          status: "이동중",
+          departedAt: now,
+          expiresAt,
+        });
+        if (!session) throw new Error("세션 생성 실패");
+        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const trackingUrl = `${baseUrl}/track/${token}`;
+        let smsSent = false;
+        let smsError: string | undefined;
+        try {
+          const msg = buildTechnicianDepartedMessage(
+            input.customerName,
+            input.technicianName,
+            trackingUrl
+          );
+          const result = await sendSms(input.customerPhone, msg);
+          if (result.result === "SUCCESS") {
+            smsSent = true;
+            await db.markLocationSessionSmsSent(token);
+          } else {
+            smsError = friendlySmsError(result.errorMessage);
+          }
+        } catch (smsErr) {
+          smsError = smsErr instanceof Error ? smsErr.message : String(smsErr);
+          console.error("[위치추적] 관리자 SMS 발송 오류:", smsErr);
+        }
+        return { success: true, token, trackingUrl, smsSent, smsError };
+      }),
+
+    // 관리자/지사장이 위치 세션 강제 종료 (도착완료/업무취소)
+    stopTracking: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        reason: z.enum(["도착완료", "업무취소"]).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.stopLocationSession(input.token, input.reason ?? "업무취소");
+        return { success: true, status: input.reason ?? "업무취소" };
+      }),
+
+    // 토큰으로 위치 세션 재발송 SMS (고객이 문자를 못 받은 경우)
+    resendTrackingSms: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const session = await db.getLocationSessionByToken(input.token);
+        if (!session) throw new Error("세션을 찾을 수 없습니다.");
+        if (session.status !== "이동중") {
+          return { success: false, smsSent: false, smsError: "이미 종료된 세션입니다." };
+        }
+        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
+        let smsSent = false;
+        let smsError: string | undefined;
+        try {
+          const msg = buildTechnicianDepartedMessage(
+            session.customerName ?? "고객",
+            session.technicianName ?? "담당 기사",
+            trackingUrl
+          );
+          const result = await sendSms(session.customerPhone ?? "", msg);
+          if (result.result === "SUCCESS") {
+            smsSent = true;
+            await db.markLocationSessionSmsSent(session.trackingToken);
+          } else {
+            smsError = friendlySmsError(result.errorMessage);
+          }
+        } catch (e) {
+          smsError = e instanceof Error ? e.message : String(e);
+        }
+        return { success: true, smsSent, smsError, trackingUrl };
       }),
 
     // 현재 방문 건의 위치 세션 조회

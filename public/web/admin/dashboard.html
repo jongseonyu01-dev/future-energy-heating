@@ -459,9 +459,42 @@
       <div id="tracking-demo-banner" style="background:#FFF3CD;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
         <span style="font-size:20px">🧪</span>
         <div>
-          <div style="font-weight:700;color:#92400E">데모 모드 안내</div>
-          <div style="font-size:13px;color:#78350F">기사 앱에서 "고객 집으로 출발" 버튼을 누르면 이 화면에 실시간으로 표시됩니다. SMS 발송 없이 전체 흐름을 테스트할 수 있습니다.</div>
+          <div style="font-weight:700;color:#92400E">안내</div>
+          <div style="font-size:13px;color:#78350F">기사 앱에서 "고객 집으로 출발" 버튼을 누르면 이 화면에 실시간으로 표시됩니다. 전화로 접수한 고객(앱 미설치)은 아래 ‘전화 접수 고객 위치 공유’에서 직접 링크를 보낼 수 있습니다.</div>
         </div>
+      </div>
+
+      <!-- 전화 접수 고객 위치 공유 시작 -->
+      <div class="section-card" style="margin-bottom:20px;border:1px solid #DBEAFE;background:#F8FAFF">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:18px">📞</span>
+          <h3 style="margin:0">전화 접수 고객 위치 공유</h3>
+        </div>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 14px">앱을 설치하지 않은 고객에게도 기사 위치 확인 링크를 문자로 보낼 수 있습니다. 아래 정보를 입력하면 고객에게 일회용 링크가 자동 발송됩니다.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">고객명 *</label>
+            <input id="manual-customer-name" type="text" placeholder="예) 홍길동" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">고객 전화번호 *</label>
+            <input id="manual-customer-phone" type="tel" placeholder="01012345678" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">담당 기사명 *</label>
+            <input id="manual-tech-name" type="text" placeholder="예) 김기사" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">기사 전화번호</label>
+            <input id="manual-tech-phone" type="tel" placeholder="01012345678" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">방문 주소</label>
+            <input id="manual-customer-address" type="text" placeholder="예) 안산시 단원구 ..." style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="startManualTracking()" style="width:100%">📤 위치 공유 시작 및 링크 문자 발송</button>
+        <div id="manual-tracking-result" style="margin-top:12px"></div>
       </div>
 
       <div class="section-card">
@@ -1256,14 +1289,93 @@
               <div style="font-size:14px;font-weight:700;color:#374151">${s.customerName || '-'} 고객님</div>
               <div style="font-size:13px;color:#6B7280;margin-top:2px">${s.customerAddress || '-'}</div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <div style="flex:1;font-size:12px;color:#9CA3AF">마지막 위치: ${updTime}</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:120px;font-size:12px;color:#9CA3AF">마지막 위치: ${updTime}</div>
+              <button onclick="copyTrackUrl('${trackUrl}')" style="background:#F3F4F6;color:#374151;border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer">📋 링크 복사</button>
               <a href="${trackUrl}" target="_blank" style="background:#3B82F6;color:white;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;text-decoration:none">🔗 위치 확인</a>
+              <button onclick="stopTrackingSession('${s.trackingToken}')" style="background:#FEE2E2;color:#DC2626;border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer">⏹ 공유 종료</button>
             </div>
           </div>`;
       }).join('');
     } catch(e) {
       console.error('이동 현황 로드 실패:', e);
+    }
+  }
+
+  // 전화 접수 고객 위치 공유 시작
+  async function startManualTracking() {
+    const customerName = (document.getElementById('manual-customer-name').value || '').trim();
+    const customerPhone = (document.getElementById('manual-customer-phone').value || '').trim();
+    const technicianName = (document.getElementById('manual-tech-name').value || '').trim();
+    const technicianPhone = (document.getElementById('manual-tech-phone').value || '').trim();
+    const customerAddress = (document.getElementById('manual-customer-address').value || '').trim();
+    const resultEl = document.getElementById('manual-tracking-result');
+    if (!customerName || !customerPhone || !technicianName) {
+      resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">고객명, 고객 전화번호, 담당 기사명은 필수입니다.</div>';
+      return;
+    }
+    resultEl.innerHTML = '<div style="color:#6B7280;font-size:13px">링크 생성 및 문자 발송 중...</div>';
+    try {
+      const apiBase = getApiBase();
+      const res = await fetch(apiBase + '/api/location/start-by-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerName, customerPhone, technicianName, technicianPhone, customerAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">시작 실패: ' + (data.error || '서버 오류') + '</div>';
+        return;
+      }
+      const smsMsg = data.smsSent
+        ? '<span style="color:#16A34A;font-weight:700">✅ 고객에게 링크 문자가 발송되었습니다.</span>'
+        : '<span style="color:#F59E0B;font-weight:700">⚠️ 문자 발송 실패 (수동 전달 필요): ' + (data.smsError || '알 수 없음') + '</span>';
+      resultEl.innerHTML =
+        '<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:14px">' +
+        '<div style="font-weight:700;color:#065F46;margin-bottom:6px">위치 공유 시작됨</div>' +
+        '<div style="font-size:13px;margin-bottom:8px">' + smsMsg + '</div>' +
+        '<div style="font-size:12px;color:#374151;word-break:break-all;background:white;border-radius:8px;padding:8px;border:1px solid #E5E7EB">' + data.trackingUrl + '</div>' +
+        '<button onclick="copyTrackUrl(\'' + data.trackingUrl + '\')" style="margin-top:8px;background:#3B82F6;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">📋 링크 복사</button>' +
+        '</div>';
+      // 입력 초기화
+      document.getElementById('manual-customer-name').value = '';
+      document.getElementById('manual-customer-phone').value = '';
+      document.getElementById('manual-tech-name').value = '';
+      document.getElementById('manual-tech-phone').value = '';
+      document.getElementById('manual-customer-address').value = '';
+      loadTracking();
+    } catch (e) {
+      resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">오류: ' + e.message + '</div>';
+    }
+  }
+
+  // 세션 강제 종료
+  async function stopTrackingSession(token) {
+    if (!confirm('이 위치 공유를 종료하시겠습니까? 고객 링크가 즉시 만료됩니다.')) return;
+    try {
+      const apiBase = getApiBase();
+      const res = await fetch(apiBase + '/api/location/stop-by-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, reason: '업무취소' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        loadTracking();
+      } else {
+        alert('종료 실패: ' + (data.error || '서버 오류'));
+      }
+    } catch (e) {
+      alert('오류: ' + e.message);
+    }
+  }
+
+  // 링크 복사
+  function copyTrackUrl(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => alert('링크가 복사되었습니다.')).catch(() => prompt('아래 링크를 복사하세요:', url));
+    } else {
+      prompt('아래 링크를 복사하세요:', url);
     }
   }
 
