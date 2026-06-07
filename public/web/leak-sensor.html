@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>누수센서 서비스 - 퓨처에너지테크</title>
+  <meta name="description" content="퓨처에너지테크 누수센서 서비스. 분배기 및 배관 누수를 실시간으로 감지하고 즉시 알림을 받으세요." />
+  <style>
+    :root {
+      --primary: #e85d04;
+      --primary-dark: #c44d03;
+      --primary-light: #fff3ee;
+      --accent: #0077cc;
+      --accent-light: #e8f4ff;
+      --bg: #ffffff;
+      --surface: #f8f9fa;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg); }
+    a { color: inherit; text-decoration: none; }
+
+    /* 헤더 */
+    header { background: var(--primary); color: #fff; padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+    .header-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .logo { font-size: 20px; font-weight: 800; }
+    .logo span { font-size: 12px; font-weight: 400; opacity: 0.85; display: block; }
+    nav { display: flex; gap: 20px; }
+    nav a { font-size: 14px; opacity: 0.9; }
+    nav a:hover { opacity: 1; }
+
+    /* 히어로 */
+    .hero { background: linear-gradient(135deg, #1a1a2e 0%, #0077cc 100%); color: #fff; padding: 60px 20px; text-align: center; }
+    .hero-icon { font-size: 64px; margin-bottom: 16px; }
+    .hero h1 { font-size: 32px; font-weight: 800; margin-bottom: 12px; }
+    .hero p { font-size: 16px; opacity: 0.85; max-width: 500px; margin: 0 auto 28px; line-height: 1.6; }
+    .hero-btn { display: inline-block; background: var(--primary); color: #fff; padding: 14px 32px; border-radius: 50px; font-size: 16px; font-weight: 700; }
+
+    /* 섹션 */
+    section { padding: 60px 20px; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .section-title { font-size: 26px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+    .section-sub { text-align: center; color: var(--text-muted); font-size: 15px; margin-bottom: 40px; }
+
+    /* 특징 카드 */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+    .feature-card { background: var(--surface); border-radius: 16px; padding: 28px; border: 1px solid var(--border); }
+    .feature-icon { font-size: 40px; margin-bottom: 14px; }
+    .feature-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+    /* 작동 방식 */
+    .how-it-works { background: var(--surface); }
+    .steps { display: flex; flex-direction: column; gap: 20px; max-width: 700px; margin: 0 auto; }
+    .step { display: flex; align-items: flex-start; gap: 16px; background: #fff; border-radius: 14px; padding: 20px; border: 1px solid var(--border); }
+    .step-num { background: var(--primary); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; flex-shrink: 0; }
+    .step h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .step p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+    /* 알림 예시 */
+    .alert-example { background: var(--danger-bg); border: 1.5px solid #fca5a5; border-radius: 14px; padding: 20px 24px; max-width: 480px; margin: 0 auto; }
+    .alert-example .alert-title { color: var(--danger); font-weight: 800; font-size: 16px; margin-bottom: 8px; }
+    .alert-example p { font-size: 14px; color: #7f1d1d; line-height: 1.6; }
+
+    /* CTA */
+    .cta { background: var(--primary); color: #fff; text-align: center; padding: 60px 20px; }
+    .cta h2 { font-size: 26px; font-weight: 800; margin-bottom: 12px; }
+    .cta p { font-size: 15px; opacity: 0.9; margin-bottom: 28px; }
+    .cta-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .cta-btn { background: #fff; color: var(--primary); padding: 14px 28px; border-radius: 50px; font-size: 15px; font-weight: 700; }
+    .cta-btn.outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.7); }
+
+    /* 푸터 */
+    footer { background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 28px 20px; font-size: 13px; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 24px; }
+      .section-title { font-size: 22px; }
+      nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <a href="/web/index.html" class="logo">
+      퓨처에너지테크
+      <span>Future Energy Tech</span>
+    </a>
+    <nav>
+      <a href="/web/index.html">홈</a>
+      <a href="/web/report.html">고장접수</a>
+      <a href="/web/heat-status.html">난방상태</a>
+      <a href="/web/contact.html">고객센터</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-icon">💧</div>
+  <h1>누수센서 서비스</h1>
+  <p>분배기·배관 누수를 실시간으로 감지하고<br>즉시 알림을 받아 피해를 최소화하세요.</p>
+  <a href="/web/report.html" class="hero-btn">누수 점검 신청하기</a>
+</div>
+
+<section>
+  <div class="section-inner">
+    <div class="section-title">누수센서의 주요 기능</div>
+    <div class="section-sub">퓨처에너지테크 누수센서는 24시간 실시간으로 누수를 감지합니다.</div>
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <h3>실시간 감지</h3>
+        <p>분배기 및 배관 주변에 설치된 센서가 미세한 수분 변화를 즉시 감지합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>즉시 문자 알림</h3>
+        <p>누수 감지 시 고객 휴대폰으로 즉시 문자 알림이 발송됩니다. 외출 중에도 안심하세요.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔧</div>
+        <h3>신속 출동</h3>
+        <p>알림 수신 후 담당 기사가 신속하게 출동하여 누수 원인을 점검하고 조치합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>앱에서 상태 확인</h3>
+        <p>퓨처에너지테크 앱에서 누수센서 상태와 이력을 언제든지 확인할 수 있습니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏠</div>
+        <h3>설치 간편</h3>
+        <p>분배기 주변에 간단히 설치하며, 별도의 공사 없이 부착 방식으로 설치됩니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔋</div>
+        <h3>장기 배터리</h3>
+        <p>저전력 설계로 배터리 교체 없이 장기간 안정적으로 작동합니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how-it-works">
+  <div class="section-inner">
+    <div class="section-title">작동 방식</div>
+    <div class="section-sub">누수 감지부터 조치까지 자동으로 처리됩니다.</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h4>센서 설치</h4>
+          <p>담당 기사가 분배기 및 주요 배관 주변에 누수센서를 설치합니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h4>24시간 실시간 모니터링</h4>
+          <p>센서가 수분 변화를 지속적으로 감지하며 이상 발생 시 즉시 신호를 전송합니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h4>즉시 알림 발송</h4>
+          <p>누수 감지 즉시 고객 휴대폰과 담당 지사로 알림이 발송됩니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div>
+          <h4>신속 출동 및 조치</h4>
+          <p>담당 기사가 신속하게 출동하여 누수 원인을 확인하고 즉시 조치합니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 40px;">
+      <div class="section-title" style="font-size: 20px; margin-bottom: 20px;">알림 예시</div>
+      <div class="alert-example">
+        <div class="alert-title">🚨 누수 감지 알림</div>
+        <p>[퓨처에너지테크]<br>
+        고객님 댁 분배기 주변에서 누수가 감지되었습니다.<br>
+        담당 기사가 즉시 연락드릴 예정입니다.<br>
+        긴급 문의: 031-8042-7310</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="cta">
+  <h2>누수 걱정 없이 안심하세요</h2>
+  <p>퓨처에너지테크 누수센서 서비스로 소중한 집을 지키세요.</p>
+  <div class="cta-btns">
+    <a href="/web/report.html" class="cta-btn">누수 점검 신청</a>
+    <a href="tel:031-8042-7310" class="cta-btn outline">📞 031-8042-7310</a>
+  </div>
+</div>
+
+<footer>
+  <p>퓨처에너지테크 · 경기도 안산시 · 대표전화 031-8042-7310</p>
+  <p style="margin-top: 6px;">© 2025 Future Energy Tech. All rights reserved.</p>
+</footer>
+
+</body>
+</html>
