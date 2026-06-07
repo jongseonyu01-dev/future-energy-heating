@@ -193,9 +193,14 @@ export function registerWebRoutes(app: Express) {
     }
   });
 
-  // 루트 / → /web 리다이렉트
+  // 루트 / → 홈페이지 index.html 직접 서빙 (리다이렉트 없이 직접 응답)
   app.get("/", (_req: Request, res: Response) => {
-    res.redirect("/web");
+    const indexPath = path.join(PUBLIC_DIR, "web", "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send("홈페이지 파일을 찾을 수 없습니다.");
+    }
   });
 
   // ─── 유량 관리 API ───────────────────────────────────────────────
