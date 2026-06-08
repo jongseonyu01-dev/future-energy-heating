@@ -153,7 +153,7 @@
         <div class="stat-card"><div class="stat-label">처리 대기</div><div class="stat-value" id="stat-pending">-</div></div>
         <div class="stat-card"><div class="stat-label">작업 진행 중</div><div class="stat-value" id="stat-inprogress">-</div></div>
         <div class="stat-card"><div class="stat-label">이번 달 완료</div><div class="stat-value" id="stat-completed">-</div></div>
-        <div class="stat-card"><div class="stat-label">전국 지사 수</div><div class="stat-value" id="stat-branches">-</div></div>
+        <div class="stat-card"><div class="stat-label">활성 지사 수</div><div class="stat-value" id="stat-branches">-</div></div>
         <div class="stat-card"><div class="stat-label">누수센서 경보</div><div class="stat-value" id="stat-alerts" style="color:#ef4444">-</div></div>
       </div>
       <div class="charts-grid">
@@ -632,7 +632,7 @@
     document.getElementById('stat-pending').textContent = pending;
     document.getElementById('stat-inprogress').textContent = inprogress;
     document.getElementById('stat-completed').textContent = completed;
-    document.getElementById('stat-branches').textContent = (branches || []).length;
+    document.getElementById('stat-branches').textContent = (branches || []).filter(b => b.isActive === true).length;
     document.getElementById('stat-alerts').textContent = alerts;
 
     // 최근 접수
@@ -734,11 +734,11 @@
         data-phone="${(b.phone||'').replace(/"/g,'&quot;')}"
         data-address="${(b.address||'').replace(/"/g,'&quot;')}"
         data-regions="${(Array.isArray(b.regions)?b.regions.join(', '):(b.regions||'')).replace(/"/g,'&quot;')}"
-        data-status="${b.status||'active'}"
-        style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${b.status==='inactive'?'#94a3b8':'#e85d04'}">
+        data-active="${b.isActive?'1':'0'}"
+        style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${b.isActive?'#e85d04':'#94a3b8'}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-          <div style="font-size:18px;font-weight:700;color:${b.status==='inactive'?'#94a3b8':'#e85d04'}">🏢 ${b.name}</div>
-          <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${b.status==='active'?'#dcfce7':'#f1f5f9'};color:${b.status==='active'?'#166534':'#64748b'}">${b.status==='active'?'활성':'정지'}</span>
+          <div style="font-size:18px;font-weight:700;color:${b.isActive?'#e85d04':'#94a3b8'}">🏢 ${b.name}</div>
+          <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${b.isActive?'#dcfce7':'#f1f5f9'};color:${b.isActive?'#166534':'#64748b'}">${b.isActive?'활성':'정지'}</span>
         </div>
         <div style="font-size:14px;color:#4b5563;line-height:2">
           <div>📞 ${b.phone || '미등록'}</div>
@@ -748,7 +748,7 @@
         </div>
         <div style="margin-top:12px;display:flex;gap:8px">
           <button onclick="editBranch(${b.id})" style="flex:1;padding:8px;background:#f3f4f6;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">✏️ 수정</button>
-          <button onclick="toggleBranch(${b.id}, '${b.status||'active'}')" style="flex:1;padding:8px;background:${b.status==='active'?'#fee2e2':'#dcfce7'};border:none;border-radius:8px;font-size:13px;cursor:pointer;color:${b.status==='active'?'#991b1b':'#166534'};font-weight:600">${b.status==='active'?'⏸ 정지':'▶ 활성화'}</button>
+          <button onclick="toggleBranch(${b.id}, ${b.isActive?'true':'false'})" style="flex:1;padding:8px;background:${b.isActive?'#fee2e2':'#dcfce7'};border:none;border-radius:8px;font-size:13px;cursor:pointer;color:${b.isActive?'#991b1b':'#166534'};font-weight:600">${b.isActive?'⏸ 정지':'▶ 활성화'}</button>
         </div>
       </div>
     `).join('') : '<div style="text-align:center;padding:40px;color:#6b7280">등록된 지사가 없습니다</div>';
@@ -997,7 +997,7 @@
     const phone = card.dataset.phone || '';
     const address = card.dataset.address || '';
     const regions = card.dataset.regions || '';
-    const status = card.dataset.status || 'active';
+    const isActive = card.dataset.active === '1';
     document.getElementById('branchFormTitle').textContent = '🏢 지사 정보 수정';
     document.getElementById('editBranchId').value = id;
     document.getElementById('newBranchName').value = name;
@@ -1005,7 +1005,7 @@
     document.getElementById('newBranchPhone').value = phone;
     document.getElementById('newBranchAddr').value = address;
     document.getElementById('newBranchRegions').value = regions;
-    document.getElementById('newBranchStatus').value = status;
+    document.getElementById('newBranchStatus').value = isActive ? 'active' : 'inactive';
     document.getElementById('createBranchForm').style.display = 'block';
     document.getElementById('createBranchForm').scrollIntoView({behavior:'smooth'});
   }
@@ -1023,14 +1023,14 @@
     const phone = document.getElementById('newBranchPhone').value.trim();
     const address = document.getElementById('newBranchAddr').value.trim();
     const regionsRaw = document.getElementById('newBranchRegions').value.trim();
-    const status = document.getElementById('newBranchStatus').value;
+    const isActive = document.getElementById('newBranchStatus').value === 'active';
     const regions = regionsRaw ? regionsRaw.split(',').map(r => r.trim()).filter(Boolean) : [];
     if (!name || !code) { alert('지사명과 코드는 필수 입력항목입니다.'); return; }
     const isEdit = !!editId;
-    const endpoint = isEdit ? '/api/trpc/branch.update' : '/api/trpc/branch.create';
+    const region = regions[0] || '미지정';
     const body = isEdit
-      ? { json: { id: parseInt(editId), name, code, phone, address, regions, status } }
-      : { json: { name, code, phone, address, regions, status } };
+      ? { json: { id: parseInt(editId), name, phoneNumber: phone, address, isActive } }
+      : { json: { name, code, region, phoneNumber: phone, address } };
     const res = await fetch(API + (isEdit ? '/branch.update' : '/branch.create'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
@@ -1046,14 +1046,14 @@
     }
   }
 
-  async function toggleBranch(id, currentStatus) {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    const label = newStatus === 'active' ? '활성화' : '정지';
+  async function toggleBranch(id, currentActive) {
+    const newActive = !currentActive;
+    const label = newActive ? '활성화' : '정지';
     if (!confirm(`이 지사를 ${label}하시겠습니까?`)) return;
     const res = await fetch(API + '/branch.update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
-      body: JSON.stringify({ json: { id: parseInt(id), status: newStatus } })
+      body: JSON.stringify({ json: { id: parseInt(id), isActive: newActive } })
     });
     const data = await res.json();
     if (data.result?.data?.json?.success || data.result?.data?.json?.id) {
