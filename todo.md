@@ -224,3 +224,14 @@
 - [x] 홈페이지 상단 메뉴/푸터에 앱 설치 안내 링크 노출 확인 (이미 연결됨)
 - [x] 전체 흐름 테스트: 시작→SMS(smsSent:true)→링크조회→도착 종료→410 만료 확인
 - [x] 기존 누수센서/유량/접수/방문이력 기능 유지 확인
+
+## 고객 접수 기능 버그 수정 (20차)
+- [x] report.html 필드명 서버 스키마에 맞춤 (phoneNumber, apartmentName, detailContent, preferredDate, preferredTime)
+- [x] 기타 증상 enum 위반 수정 (기타 상세는 detailContent로, symptoms에는 enum값만)
+- [x] pipe-cleaning.html을 repair.create(requestType=배관청소)로 통합
+- [x] 배관청소 서비스 항목을 detailContent로 전달
+- [x] 난방고장 1건 실제 등록 테스트 (ID 90001 성공)
+- [x] 배관청소 1건 실제 등록 테스트 (ID 90002 성공)
+- [x] 관리자 화면에서 접수 노출 확인 (repair.listAll 노출 확인)
+- [x] 서버 로그 최종 오류 유무 확인 (신규 오류 없음)
+- [x] 테스트 데이터 정리 (90001, 90002 삭제)

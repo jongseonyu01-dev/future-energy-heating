@@ -205,10 +205,30 @@
     btn.disabled = true; btn.textContent = '신청 중...';
 
     try {
-      const res = await fetch(API + '/cleaning.create', {
+      // 서비스 항목 + 메모를 detailContent로 합성
+      const detailParts = [];
+      if (selectedServices.length > 0) detailParts.push('신청 서비스: ' + selectedServices.join(', '));
+      if (memo) detailParts.push(memo);
+      if (selectedTime) detailParts.push('희망 시간대: ' + selectedTime);
+      const detailContent = detailParts.join('\n');
+
+      // 배관청소도 repair.create로 통합 (requestType=배관청소)
+      const res = await fetch(API + '/repair.create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ json: { customerName: name, customerPhone: phone, aptName, dong, ho, services: selectedServices, visitDate, visitTime: selectedTime || '미정', memo, source: 'web' } })
+        body: JSON.stringify({ json: {
+          customerName: name,
+          phoneNumber: phone,
+          apartmentName: aptName,
+          dong,
+          ho,
+          symptom: '배관청소가필요하다',
+          symptoms: ['배관청소가필요하다'],
+          detailContent: detailContent || undefined,
+          preferredDate: visitDate || undefined,
+          preferredTime: selectedTime || undefined,
+          requestType: '배관청소',
+        } })
       });
       const data = await res.json();
       if (data.result?.data?.json?.id) {

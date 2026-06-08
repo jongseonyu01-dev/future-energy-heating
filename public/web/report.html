@@ -249,31 +249,37 @@
     const memo = document.getElementById('memo').value.trim();
     const etcDetail = document.getElementById('etcDetail').value.trim();
 
+    // 서버 enum과 일치하는 증상만 symptoms로 전송 (기타 상세는 detailContent로 별도 전달)
     const symptomsToSend = [...selectedSymptoms];
-    if (etcDetail) symptomsToSend.push('기타: ' + etcDetail);
 
     const btn = document.getElementById('submitBtn');
     btn.disabled = true;
     btn.textContent = '접수 중...';
 
     try {
+      // 메모 + 기타 상세를 detailContent로 합성
+      const detailParts = [];
+      if (etcDetail) detailParts.push('기타 증상: ' + etcDetail);
+      if (memo) detailParts.push(memo);
+      if (selectedTime) detailParts.push('희망 시간대: ' + selectedTime);
+      const detailContent = detailParts.join('\n');
+
       const res = await fetch(API + '/repair.create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           json: {
             customerName: name,
-            customerPhone: phone,
-            aptName,
+            phoneNumber: phone,
+            apartmentName: aptName,
             dong,
             ho,
             symptoms: symptomsToSend,
             symptom: symptomsToSend[0] || '기타문의',
-            visitDate,
-            visitTime: selectedTime || '미정',
-            memo,
+            detailContent: detailContent || undefined,
+            preferredDate: visitDate || undefined,
+            preferredTime: selectedTime || undefined,
             requestType: '난방고장',
-            source: 'web',
           }
         })
       });
