@@ -529,6 +529,7 @@ export async function getSensorEvents(
 // ─── 앱 권한 관리 ──────────────────────────────────────────────
 import {
   appRoles,
+  phoneVerifications,
   branches,
   regionMappings,
   workReports,
@@ -537,6 +538,8 @@ import {
   materialOrders,
   AppRole,
   InsertAppRole,
+  PhoneVerification,
+  InsertPhoneVerification,
   Branch,
   InsertBranch,
   WorkReport,
@@ -563,8 +566,62 @@ export async function upsertAppRole(data: InsertAppRole): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(appRoles).values(data).onDuplicateKeyUpdate({
-    set: { appRole: data.appRole, loginId: data.loginId, passwordHash: data.passwordHash, phoneNumber: data.phoneNumber, isActive: data.isActive },
+    set: {
+      appRole: data.appRole,
+      loginId: data.loginId,
+      passwordHash: data.passwordHash,
+      phoneNumber: data.phoneNumber,
+      name: data.name,
+      branchId: data.branchId,
+      mustChangePassword: data.mustChangePassword,
+      isActive: data.isActive,
+    },
   });
+}
+
+// 부분 업데이트 (특정 userId의 일부 필드만 변경)
+export async function updateAppRoleFields(
+  userId: number,
+  fields: Partial<Pick<InsertAppRole, "passwordHash" | "mustChangePassword" | "isActive" | "name" | "phoneNumber" | "branchId" | "appRole" | "loginId">>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(appRoles).set(fields).where(eq(appRoles.userId, userId));
+}
+
+// loginId 중복 제외 phoneNumber로 계정 조회 (아이디 찾기용)
+export async function getAppRolesByPhone(phoneNumber: string): Promise<AppRole[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(appRoles).where(eq(appRoles.phoneNumber, phoneNumber));
+}
+
+// ─── 휴대폰 인증코드 관리 ──────────────────────────────────────
+export async function createPhoneVerification(data: InsertPhoneVerification): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(phoneVerifications).values(data);
+}
+
+export async function getLatestPhoneVerification(
+  phoneNumber: string,
+  purpose: string,
+): Promise<PhoneVerification | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(phoneVerifications)
+    .where(and(eq(phoneVerifications.phoneNumber, phoneNumber), eq(phoneVerifications.purpose, purpose)))
+    .orderBy(desc(phoneVerifications.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function markPhoneVerificationVerified(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(phoneVerifications).set({ verified: true }).where(eq(phoneVerifications.id, id));
 }
 
 // loginId로 앱 권한 조회 (비밀번호 로그인용)

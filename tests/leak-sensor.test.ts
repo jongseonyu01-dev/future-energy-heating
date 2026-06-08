@@ -5,7 +5,7 @@ import { buildLeakAlertMessage } from "../server/notification";
 describe("누수 알림 메시지 빌더", () => {
   it("아파트명/동/호수/설치위치를 포함한 메시지를 생성한다", () => {
     const msg = buildLeakAlertMessage("한빛아파트", "101", "1203", "분배기 하단");
-    expect(msg).toContain("[퓨처에너지 난방케어]");
+    expect(msg).toContain("[퓨처에너지테크]");
     expect(msg).toContain("누수 감지 알림입니다.");
     expect(msg).toContain("한빛아파트 101동 1203호");
     expect(msg).toContain("분배기 하단");

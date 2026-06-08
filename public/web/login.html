@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>로그인 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: linear-gradient(135deg, #0f172a, #1e293b); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 24px; padding: 40px 32px; width: 100%; max-width: 440px; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo-icon { width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 12px; object-fit: cover; display: block; }
+    .logo-name { font-size: 22px; font-weight: 800; color: #e85d04; }
+    .logo-sub { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    h2 { font-size: 19px; font-weight: 700; margin-bottom: 20px; text-align: center; color: #1f2937; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #374151; }
+    input { width: 100%; padding: 13px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 15px; font-family: inherit; transition: border-color .15s; }
+    input:focus { outline: none; border-color: #e85d04; }
+    .pw-wrap { position: relative; }
+    .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #9ca3af; padding: 4px; }
+    .btn { width: 100%; padding: 14px; background: #e85d04; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background .15s; }
+    .btn:hover { background: #c44d00; }
+    .btn:disabled { background: #d1d5db; cursor: not-allowed; }
+    .btn-secondary { background: #f3f4f6; color: #374151; }
+    .btn-secondary:hover { background: #e5e7eb; }
+    .error-msg { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #dc2626; margin-bottom: 14px; display: none; }
+    .info-msg { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1d4ed8; margin-bottom: 14px; display: none; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+    .checkbox-row input { width: auto; }
+    .checkbox-row label { margin: 0; font-size: 14px; color: #4b5563; cursor: pointer; }
+    .links { display: flex; justify-content: center; gap: 12px; margin-top: 18px; font-size: 13px; flex-wrap: wrap; }
+    .links a { color: #6b7280; cursor: pointer; }
+    .links a:hover { color: #e85d04; }
+    .divider { width: 1px; height: 12px; background: #d1d5db; }
+    .back-link { text-align: center; margin-top: 18px; font-size: 14px; color: #6b7280; }
+    .back-link a { color: #e85d04; font-weight: 600; text-decoration: none; }
+    .hidden { display: none !important; }
+    .field-row { display: flex; gap: 8px; }
+    .field-row input { flex: 1; }
+    .field-row .btn { width: auto; padding: 13px 16px; margin-top: 0; font-size: 14px; white-space: nowrap; }
+    .masked-ids { background: #f9fafb; border-radius: 8px; padding: 12px; margin: 12px 0; font-size: 14px; color: #374151; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-58W97D3UGLWn9JzTakGt8a.webp" alt="퓨처에너지테크" class="logo-icon" />
+    <div class="logo-name">퓨처에너지테크</div>
+    <div class="logo-sub">Future Energy Tech</div>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="info-msg" id="infoMsg"></div>
+
+  <!-- 로그인 화면 -->
+  <div id="view-login">
+    <h2>로그인</h2>
+    <div class="form-group">
+      <label>아이디</label>
+      <input type="text" id="loginId" placeholder="아이디를 입력하세요" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label>비밀번호</label>
+      <div class="pw-wrap">
+        <input type="password" id="password" placeholder="비밀번호를 입력하세요" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+        <button class="pw-toggle" type="button" onclick="togglePw('password', this)">👁</button>
+      </div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="autoLogin" />
+      <label for="autoLogin">자동 로그인</label>
+    </div>
+    <button class="btn" id="loginBtn" onclick="doLogin()">로그인</button>
+    <div class="links">
+      <a onclick="showView('findId')">아이디 찾기</a>
+      <span class="divider"></span>
+      <a onclick="showView('resetPw')">비밀번호 재설정</a>
+      <span class="divider"></span>
+      <a onclick="showView('signup')">회원가입</a>
+    </div>
+  </div>
+
+  <!-- 회원가입 (고객) -->
+  <div id="view-signup" class="hidden">
+    <h2>고객 회원가입</h2>
+    <div class="form-group">
+      <label>이름</label>
+      <input type="text" id="su-name" placeholder="이름을 입력하세요" />
+    </div>
+    <div class="form-group">
+      <label>휴대전화 번호</label>
+      <div class="field-row">
+        <input type="tel" id="su-phone" placeholder="010-0000-0000" />
+        <button class="btn" id="su-sendBtn" onclick="sendCode('signup','su-phone')">인증요청</button>
+      </div>
+    </div>
+    <div class="form-group" id="su-codeGroup" style="display:none;">
+      <label>인증번호</label>
+      <div class="field-row">
+        <input type="text" id="su-code" placeholder="인증번호 6자리" maxlength="6" />
+        <button class="btn btn-secondary" id="su-verifyBtn" onclick="verifyCode('signup','su-phone','su-code','su')">확인</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>아이디</label>
+      <input type="text" id="su-loginId" placeholder="사용할 아이디" />
+    </div>
+    <div class="form-group">
+      <label>비밀번호</label>
+      <div class="pw-wrap">
+        <input type="password" id="su-pw" placeholder="비밀번호 (6자 이상)" />
+        <button class="pw-toggle" type="button" onclick="togglePw('su-pw', this)">👁</button>
+      </div>
+    </div>
+    <button class="btn" id="su-submitBtn" onclick="doSignup()">가입하기</button>
+    <div class="links"><a onclick="showView('login')">← 로그인으로 돌아가기</a></div>
+  </div>
+
+  <!-- 아이디 찾기 -->
+  <div id="view-findId" class="hidden">
+    <h2>아이디 찾기</h2>
+    <div class="form-group">
+      <label>휴대전화 번호</label>
+      <div class="field-row">
+        <input type="tel" id="fi-phone" placeholder="010-0000-0000" />
+        <button class="btn" id="fi-sendBtn" onclick="sendCode('reset','fi-phone')">인증요청</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>인증번호</label>
+      <input type="text" id="fi-code" placeholder="인증번호 6자리" maxlength="6" />
+    </div>
+    <button class="btn" id="fi-submitBtn" onclick="doFindId()">아이디 찾기</button>
+    <div class="masked-ids hidden" id="fi-result"></div>
+    <div class="links"><a onclick="showView('login')">← 로그인으로 돌아가기</a></div>
+  </div>
+
+  <!-- 비밀번호 재설정 -->
+  <div id="view-resetPw" class="hidden">
+    <h2>비밀번호 재설정</h2>
+    <div class="form-group">
+      <label>아이디</label>
+      <input type="text" id="rp-loginId" placeholder="아이디" />
+    </div>
+    <div class="form-group">
+      <label>휴대전화 번호</label>
+      <div class="field-row">
+        <input type="tel" id="rp-phone" placeholder="010-0000-0000" />
+        <button class="btn" id="rp-sendBtn" onclick="sendCode('reset','rp-phone')">인증요청</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>인증번호</label>
+      <input type="text" id="rp-code" placeholder="인증번호 6자리" maxlength="6" />
+    </div>
+    <div class="form-group">
+      <label>새 비밀번호</label>
+      <div class="pw-wrap">
+        <input type="password" id="rp-pw" placeholder="새 비밀번호 (6자 이상)" />
+        <button class="pw-toggle" type="button" onclick="togglePw('rp-pw', this)">👁</button>
+      </div>
+    </div>
+    <button class="btn" id="rp-submitBtn" onclick="doResetPw()">비밀번호 재설정</button>
+    <div class="links"><a onclick="showView('login')">← 로그인으로 돌아가기</a></div>
+  </div>
+
+  <!-- 임시 비밀번호 변경 (강제) -->
+  <div id="view-changePw" class="hidden">
+    <h2>비밀번호 변경</h2>
+    <div class="info-msg" style="display:block;">임시 비밀번호로 로그인하셨습니다. 보안을 위해 새 비밀번호로 변경해 주세요.</div>
+    <div class="form-group">
+      <label>새 비밀번호</label>
+      <div class="pw-wrap">
+        <input type="password" id="cp-pw" placeholder="새 비밀번호 (6자 이상)" />
+        <button class="pw-toggle" type="button" onclick="togglePw('cp-pw', this)">👁</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>새 비밀번호 확인</label>
+      <input type="password" id="cp-pw2" placeholder="새 비밀번호 다시 입력" />
+    </div>
+    <button class="btn" id="cp-submitBtn" onclick="doChangePw()">변경 후 시작하기</button>
+  </div>
+
+  <div class="back-link"><a href="/web/index.html">← 고객 홈페이지로 돌아가기</a></div>
+</div>
+
+<script>
+  function getApiBase() {
+    const host = window.location.hostname;
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) return window.location.protocol + '//' + '3000-' + devMatch[2];
+    return '';
+  }
+  const API = getApiBase();
+
+  // 임시 변경용 컨텍스트
+  let pendingUser = null;
+
+  function showView(name) {
+    ['login','signup','findId','resetPw','changePw'].forEach(v => {
+      document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
+    });
+    hideMsg();
+  }
+  function showError(msg) { const e = document.getElementById('errorMsg'); e.textContent = msg; e.style.display = 'block'; document.getElementById('infoMsg').style.display = 'none'; }
+  function showInfo(msg) { const e = document.getElementById('infoMsg'); e.textContent = msg; e.style.display = 'block'; document.getElementById('errorMsg').style.display = 'none'; }
+  function hideMsg() { document.getElementById('errorMsg').style.display = 'none'; document.getElementById('infoMsg').style.display = 'none'; }
+
+  function togglePw(id, btn) {
+    const el = document.getElementById(id);
+    if (el.type === 'password') { el.type = 'text'; btn.textContent = '🙈'; }
+    else { el.type = 'password'; btn.textContent = '👁'; }
+  }
+
+  async function callApi(proc, payload) {
+    const res = await fetch(API + '/api/trpc/' + proc, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json: payload })
+    });
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) throw new Error('서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error?.json?.message || '요청 처리 중 오류가 발생했습니다.');
+    return data.result?.data?.json;
+  }
+
+  function redirectByRole(user) {
+    sessionStorage.setItem('authUser', JSON.stringify(user));
+    if (document.getElementById('autoLogin')?.checked) {
+      localStorage.setItem('authUser', JSON.stringify(user));
+    }
+    if (user.appRole === 'hq_admin') window.location.href = '/web/admin/dashboard.html';
+    else if (user.appRole === 'branch_manager') window.location.href = '/web/admin/branch.html';
+    else if (user.appRole === 'technician') window.location.href = '/web/admin/tech.html';
+    else window.location.href = '/web/mypage.html';
+  }
+
+  async function doLogin() {
+    const loginId = document.getElementById('loginId').value.trim();
+    const password = document.getElementById('password').value;
+    const btn = document.getElementById('loginBtn');
+    if (!loginId || !password) { showError('아이디와 비밀번호를 입력해 주세요.'); return; }
+    btn.disabled = true; btn.textContent = '로그인 중...'; hideMsg();
+    try {
+      const user = await callApi('auth.login', { loginId, password });
+      if (user && user.success) {
+        if (user.mustChangePassword) {
+          pendingUser = user;
+          showView('changePw');
+        } else {
+          redirectByRole(user);
+        }
+      } else {
+        throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+      }
+    } catch (err) {
+      showError(err.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
+    } finally {
+      btn.disabled = false; btn.textContent = '로그인';
+    }
+  }
+
+  // 인증번호 발송
+  async function sendCode(purpose, phoneInputId) {
+    const phone = document.getElementById(phoneInputId).value.trim();
+    if (!phone) { showError('휴대전화 번호를 입력해 주세요.'); return; }
+    try {
+      const r = await callApi('auth.sendVerifyCode', { phoneNumber: phone, purpose });
+      if (r && r.success) {
+        showInfo('인증번호를 발송했습니다. 문자를 확인해 주세요.' + (r.devCode ? ' (테스트코드: ' + r.devCode + ')' : ''));
+        if (phoneInputId === 'su-phone') document.getElementById('su-codeGroup').style.display = 'block';
+      } else { throw new Error('인증번호 발송에 실패했습니다.'); }
+    } catch (err) { showError(err.message); }
+  }
+
+  // 인증번호 확인 (회원가입용)
+  let suVerified = false;
+  async function verifyCode(purpose, phoneInputId, codeInputId, prefix) {
+    const phone = document.getElementById(phoneInputId).value.trim();
+    const code = document.getElementById(codeInputId).value.trim();
+    if (!code) { showError('인증번호를 입력해 주세요.'); return; }
+    try {
+      const r = await callApi('auth.checkVerifyCode', { phoneNumber: phone, code, purpose });
+      if (r && r.success) { suVerified = true; showInfo('휴대폰 인증이 완료되었습니다.'); }
+      else throw new Error('인증번호가 올바르지 않습니다.');
+    } catch (err) { showError(err.message); }
+  }
+
+  async function doSignup() {
+    const name = document.getElementById('su-name').value.trim();
+    const phone = document.getElementById('su-phone').value.trim();
+    const code = document.getElementById('su-code').value.trim();
+    const loginId = document.getElementById('su-loginId').value.trim();
+    const pw = document.getElementById('su-pw').value;
+    if (!name || !phone || !loginId || !pw) { showError('모든 항목을 입력해 주세요.'); return; }
+    if (pw.length < 6) { showError('비밀번호는 6자 이상이어야 합니다.'); return; }
+    if (!suVerified) { showError('휴대폰 인증을 먼저 완료해 주세요.'); return; }
+    const btn = document.getElementById('su-submitBtn');
+    btn.disabled = true; btn.textContent = '가입 중...';
+    try {
+      // 인증 재검증 포함하여 가입
+      const r = await callApi('auth.registerCustomer', { loginId, password: pw, name, phoneNumber: phone });
+      void code;
+      if (r && r.success) {
+        showInfo('회원가입이 완료되었습니다. 로그인해 주세요.');
+        setTimeout(() => { showView('login'); document.getElementById('loginId').value = loginId; }, 1200);
+      } else throw new Error('회원가입에 실패했습니다.');
+    } catch (err) { showError(err.message); }
+    finally { btn.disabled = false; btn.textContent = '가입하기'; }
+  }
+
+  async function doFindId() {
+    const phone = document.getElementById('fi-phone').value.trim();
+    const code = document.getElementById('fi-code').value.trim();
+    if (!phone || !code) { showError('휴대전화 번호와 인증번호를 입력해 주세요.'); return; }
+    try {
+      const r = await callApi('auth.findLoginId', { phoneNumber: phone, code });
+      if (r && r.success && r.loginIds && r.loginIds.length) {
+        const el = document.getElementById('fi-result');
+        el.innerHTML = '가입된 아이디: <strong>' + r.loginIds.join(', ') + '</strong>';
+        el.classList.remove('hidden');
+        showInfo('아이디를 찾았습니다.');
+      } else throw new Error('일치하는 계정이 없습니다.');
+    } catch (err) { showError(err.message); }
+  }
+
+  async function doResetPw() {
+    const loginId = document.getElementById('rp-loginId').value.trim();
+    const phone = document.getElementById('rp-phone').value.trim();
+    const code = document.getElementById('rp-code').value.trim();
+    const pw = document.getElementById('rp-pw').value;
+    if (!loginId || !phone || !code || !pw) { showError('모든 항목을 입력해 주세요.'); return; }
+    if (pw.length < 6) { showError('비밀번호는 6자 이상이어야 합니다.'); return; }
+    const btn = document.getElementById('rp-submitBtn');
+    btn.disabled = true; btn.textContent = '처리 중...';
+    try {
+      const r = await callApi('auth.resetPassword', { loginId, phoneNumber: phone, code, newPassword: pw });
+      if (r && r.success) {
+        showInfo('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요.');
+        setTimeout(() => { showView('login'); document.getElementById('loginId').value = loginId; }, 1200);
+      } else throw new Error('비밀번호 재설정에 실패했습니다.');
+    } catch (err) { showError(err.message); }
+    finally { btn.disabled = false; btn.textContent = '비밀번호 재설정'; }
+  }
+
+  async function doChangePw() {
+    const pw = document.getElementById('cp-pw').value;
+    const pw2 = document.getElementById('cp-pw2').value;
+    if (!pw || pw.length < 6) { showError('비밀번호는 6자 이상이어야 합니다.'); return; }
+    if (pw !== pw2) { showError('비밀번호가 일치하지 않습니다.'); return; }
+    const btn = document.getElementById('cp-submitBtn');
+    btn.disabled = true; btn.textContent = '변경 중...';
+    try {
+      const r = await callApi('auth.changePassword', { userId: pendingUser.userId, newPassword: pw });
+      if (r && r.success) {
+        pendingUser.mustChangePassword = false;
+        redirectByRole(pendingUser);
+      } else throw new Error('비밀번호 변경에 실패했습니다.');
+    } catch (err) { showError(err.message); btn.disabled = false; btn.textContent = '변경 후 시작하기'; }
+  }
+
+  // 자동 로그인 체크
+  (function() {
+    const saved = localStorage.getItem('authUser');
+    if (saved) {
+      try {
+        const user = JSON.parse(saved);
+        if (user && user.appRole && !user.mustChangePassword) {
+          sessionStorage.setItem('authUser', saved);
+          if (user.appRole === 'hq_admin') window.location.href = '/web/admin/dashboard.html';
+          else if (user.appRole === 'branch_manager') window.location.href = '/web/admin/branch.html';
+          else if (user.appRole === 'technician') window.location.href = '/web/admin/tech.html';
+          else window.location.href = '/web/mypage.html';
+        }
+      } catch (e) {}
+    }
+  })();
+</script>
+</body>
+</html>

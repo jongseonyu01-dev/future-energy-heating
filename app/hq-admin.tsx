@@ -511,7 +511,7 @@ function HQAccounts({ colors }: { colors: any }) {
                 </>
               )}
               <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => { if (!loginId.trim() || !password.trim()) { Alert.alert("오류", "아이디와 비밀번호를 입력해주세요."); return; } if (appRole === "technician" && !techName.trim()) { Alert.alert("오류", "기사 이름을 입력해주세요."); return; } createMutation.mutate({ loginId, password, appRole, phoneNumber: phone || undefined, technicianName: techName || undefined, branchId: branchId ?? undefined }); }} activeOpacity={0.8} disabled={createMutation.isPending}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => { if (!loginId.trim() || !password.trim()) { Alert.alert("오류", "아이디와 비밀번호를 입력해주세요."); return; } if (appRole === "technician" && !techName.trim()) { Alert.alert("오류", "기사 이름을 입력해주세요."); return; } createMutation.mutate({ loginId, password, appRole, phoneNumber: phone || undefined, name: techName || undefined, branchId: branchId ?? undefined }); }} activeOpacity={0.8} disabled={createMutation.isPending}>
                   <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{createMutation.isPending ? "생성 중..." : "생성"}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ flex: 1, backgroundColor: "#6B7280", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setAddModal(false)} activeOpacity={0.8}>

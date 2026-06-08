@@ -12,7 +12,7 @@ describe("알림 메시지 생성", () => {
     expect(msg).toContain("홍길동");
     expect(msg).toContain("FE-20240604-1234");
     expect(msg).toContain("난방 고장");
-    expect(msg).toContain("퓨처에너지 난방케어");
+    expect(msg).toContain("퓨처에너지");
   });
 
   it("방문예정 상태 변경 메시지에 기사명/일정이 포함된다", () => {

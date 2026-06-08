@@ -528,18 +528,24 @@
   let currentPanel = 'overview';
   let user = null;
 
-  // 인증 확인
+  // 인증 확인 (통합 로그인 authUser 우선, 레거시 adminUser 호환)
   function checkAuth() {
-    const stored = sessionStorage.getItem('adminUser');
-    if (!stored) { window.location.href = window.location.origin + '/web/admin/login.html'; return; }
+    const stored = sessionStorage.getItem('authUser') || localStorage.getItem('authUser') || sessionStorage.getItem('adminUser');
+    if (!stored) { window.location.href = window.location.origin + '/web/login.html'; return; }
     user = JSON.parse(stored);
-    if (user.appRole !== 'hq_admin') { window.location.href = window.location.origin + '/web/admin/login.html'; return; }
-    document.getElementById('sidebarUsername').textContent = user.username || '관리자';
+    if (user.appRole !== 'hq_admin') {
+      alert('본사 관리자 전용 화면입니다.');
+      window.location.href = window.location.origin + '/web/login.html';
+      return;
+    }
+    document.getElementById('sidebarUsername').textContent = user.name || user.username || '관리자';
   }
 
   function doLogout() {
     sessionStorage.removeItem('adminUser');
-    window.location.href = window.location.origin + '/web/admin/login.html';
+    sessionStorage.removeItem('authUser');
+    localStorage.removeItem('authUser');
+    window.location.href = window.location.origin + '/web/login.html';
   }
 
   function toggleSidebar() {

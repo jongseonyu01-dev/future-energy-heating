@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>마이페이지 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f1f5f9; color: #1f2937; padding-bottom: 40px; }
+    .topbar { background: #e85d04; color: #fff; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+    .topbar h1 { font-size: 17px; font-weight: 700; }
+    .topbar .me { font-size: 13px; opacity: .95; margin-top: 2px; }
+    .logout { background: rgba(255,255,255,.2); border: none; color: #fff; padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+    .container { max-width: 640px; margin: 0 auto; padding: 16px; }
+    .section-title { font-size: 15px; font-weight: 700; margin: 20px 4px 10px; color: #374151; }
+    .quick-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .quick { background: #fff; border-radius: 14px; padding: 18px 14px; text-align: center; text-decoration: none; color: #1f2937; box-shadow: 0 2px 8px rgba(0,0,0,.05); display: block; }
+    .quick:active { opacity: .8; }
+    .quick .ico { font-size: 26px; margin-bottom: 8px; }
+    .quick .t { font-size: 14px; font-weight: 700; }
+    .quick .s { font-size: 12px; color: #9ca3af; margin-top: 3px; }
+    .req { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .req-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .req-type { font-size: 15px; font-weight: 700; }
+    .req-num { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+    .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .b-new { background: #fef3c7; color: #b45309; }
+    .b-assigned { background: #dbeafe; color: #1d4ed8; }
+    .b-moving { background: #ede9fe; color: #6d28d9; }
+    .b-arrived { background: #d1fae5; color: #047857; }
+    .b-done { background: #e5e7eb; color: #374151; }
+    .b-cancel { background: #fee2e2; color: #b91c1c; }
+    .req-row { font-size: 13px; color: #4b5563; margin: 4px 0; }
+    .req-row .k { color: #9ca3af; }
+    .track-btn { display: block; margin-top: 10px; background: #6d28d9; color: #fff; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 14px; }
+    .empty { text-align: center; padding: 40px 20px; color: #9ca3af; background: #fff; border-radius: 14px; }
+    .loading { text-align: center; padding: 30px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div>
+    <h1>마이페이지</h1>
+    <div class="me" id="meInfo">-</div>
+  </div>
+  <button class="logout" onclick="logout()">로그아웃</button>
+</div>
+
+<div class="container">
+  <div class="section-title">서비스 신청</div>
+  <div class="quick-grid">
+    <a class="quick" href="/web/report.html"><div class="ico">🔧</div><div class="t">난방 고장 접수</div><div class="s">고장·누수·온도조절기</div></a>
+    <a class="quick" href="/web/pipe-cleaning.html"><div class="ico">🚿</div><div class="t">배관청소 신청</div><div class="s">난방 배관 청소</div></a>
+    <a class="quick" href="/web/emergency.html"><div class="ico">🚨</div><div class="t">긴급출동 접수</div><div class="s">24시간 긴급</div></a>
+    <a class="quick" href="/web/heat-status.html"><div class="ico">🌡️</div><div class="t">우리 집 난방 상태</div><div class="s">누수·유량·압력</div></a>
+  </div>
+
+  <div class="section-title">내 접수 내역</div>
+  <div id="reqList"><div class="loading">접수 내역을 불러오는 중...</div></div>
+</div>
+
+<script>
+  function getApiBase() {
+    const host = window.location.hostname;
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) return window.location.protocol + '//' + '3000-' + devMatch[2];
+    return '';
+  }
+  const API = getApiBase();
+
+  let me = null;
+  (function() {
+    const raw = sessionStorage.getItem('authUser') || localStorage.getItem('authUser');
+    if (!raw) { location.href = '/web/login.html'; return; }
+    try {
+      me = JSON.parse(raw);
+      if (me.appRole !== 'customer') {
+        // 직원 계정이면 해당 화면으로
+        if (me.appRole === 'hq_admin') location.href = '/web/admin/dashboard.html';
+        else if (me.appRole === 'branch_manager') location.href = '/web/admin/branch.html';
+        else if (me.appRole === 'technician') location.href = '/web/admin/tech.html';
+        else location.href = '/web/login.html';
+        return;
+      }
+    } catch (e) { location.href = '/web/login.html'; return; }
+    document.getElementById('meInfo').textContent = (me.name || '고객') + '님 · ' + (me.phoneNumber || '');
+  })();
+
+  function logout() {
+    sessionStorage.removeItem('authUser');
+    localStorage.removeItem('authUser');
+    location.href = '/web/login.html';
+  }
+
+  async function callApi(proc, payload, isQuery) {
+    let url = API + '/api/trpc/' + proc;
+    let opt;
+    if (isQuery) {
+      url += '?input=' + encodeURIComponent(JSON.stringify({ json: payload }));
+      opt = { method: 'GET' };
+    } else {
+      opt = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ json: payload }) };
+    }
+    const res = await fetch(url, opt);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error?.json?.message || '요청 오류');
+    return data.result?.data?.json;
+  }
+
+  const statusBadge = {
+    '신규접수': ['b-new','접수 확인 중'], '접수완료': ['b-new','접수 완료'],
+    '방문예정': ['b-assigned','방문 예정'], '배정완료': ['b-assigned','기사 배정됨'],
+    '이동중': ['b-moving','기사 이동 중'], '방문중': ['b-arrived','방문 중'], '도착': ['b-arrived','도착'],
+    '작업완료': ['b-done','작업 완료'], '완료': ['b-done','완료'],
+    '취소': ['b-cancel','취소됨'], '방문취소': ['b-cancel','방문 취소']
+  };
+
+  async function loadRequests() {
+    if (!me.phoneNumber) {
+      document.getElementById('reqList').innerHTML = '<div class="empty">등록된 연락처가 없어 접수 내역을 불러올 수 없습니다.</div>';
+      return;
+    }
+    try {
+      const reqs = await callApi('repair.find', { query: me.phoneNumber }, true) || [];
+      if (!reqs.length) {
+        document.getElementById('reqList').innerHTML = '<div class="empty">접수 내역이 없습니다.<br/>위 메뉴에서 서비스를 신청해 보세요.</div>';
+        return;
+      }
+      // 각 접수의 활성 위치 세션 조회
+      const html = [];
+      for (const r of reqs) {
+        let trackBlock = '';
+        try {
+          const s = await callApi('location.getSessionByRequest', { requestId: r.id }, true);
+          if (s && s.status === '이동중' && (s.trackingUrl || s.trackingToken)) {
+            const link = s.trackingUrl || ('/track/' + s.trackingToken);
+            trackBlock = '<a class="track-btn" href="' + link + '" target="_blank">📍 기사님 현재 위치 확인하기</a>';
+          }
+        } catch (e) {}
+        const badge = statusBadge[r.status] || ['b-new', r.status];
+        const addr = (r.apartmentName ? r.apartmentName + ' ' : '') + (r.addressDetail || r.address || '');
+        const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('ko-KR') : '';
+        html.push('<div class="req">' +
+          '<div class="req-head"><div><div class="req-type">' + (r.requestType || '난방고장') + '</div>' +
+          '<div class="req-num">' + (r.requestNumber || '') + ' · ' + dateStr + '</div></div>' +
+          '<span class="badge ' + badge[0] + '">' + badge[1] + '</span></div>' +
+          (addr ? '<div class="req-row"><span class="k">주소</span> ' + addr + '</div>' : '') +
+          (r.detailContent ? '<div class="req-row"><span class="k">내용</span> ' + r.detailContent + '</div>' : '') +
+          (r.preferredDate ? '<div class="req-row"><span class="k">희망일</span> ' + r.preferredDate + (r.preferredTime ? ' ' + r.preferredTime : '') + '</div>' : '') +
+          trackBlock + '</div>');
+      }
+      document.getElementById('reqList').innerHTML = html.join('');
+    } catch (err) {
+      document.getElementById('reqList').innerHTML = '<div class="empty">접수 내역을 불러오지 못했습니다.<br/>' + err.message + '</div>';
+    }
+  }
+
+  loadRequests();
+  setInterval(loadRequests, 30000);
+</script>
+</body>
+</html>

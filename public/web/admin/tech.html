@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>기사 작업 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f1f5f9; color: #1f2937; padding-bottom: 40px; }
+    .topbar { background: #e85d04; color: #fff; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+    .topbar h1 { font-size: 17px; font-weight: 700; }
+    .topbar .me { font-size: 13px; opacity: .95; }
+    .logout { background: rgba(255,255,255,.2); border: none; color: #fff; padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+    .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+    .summary { display: flex; gap: 10px; margin-bottom: 16px; }
+    .summary .box { flex: 1; background: #fff; border-radius: 12px; padding: 14px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+    .summary .num { font-size: 22px; font-weight: 800; color: #e85d04; }
+    .summary .lbl { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .job { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .job-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .job-type { font-size: 15px; font-weight: 700; }
+    .job-num { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+    .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .b-new { background: #fef3c7; color: #b45309; }
+    .b-assigned { background: #dbeafe; color: #1d4ed8; }
+    .b-moving { background: #ede9fe; color: #6d28d9; }
+    .b-arrived { background: #d1fae5; color: #047857; }
+    .b-done { background: #e5e7eb; color: #374151; }
+    .b-cancel { background: #fee2e2; color: #b91c1c; }
+    .job-row { font-size: 14px; color: #374151; margin: 5px 0; display: flex; gap: 8px; }
+    .job-row .k { color: #9ca3af; min-width: 60px; }
+    .job-row a { color: #e85d04; text-decoration: none; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .actions.full { grid-template-columns: 1fr; }
+    .act { padding: 12px; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .act-go { background: #e85d04; color: #fff; }
+    .act-arrive { background: #2563eb; color: #fff; }
+    .act-done { background: #059669; color: #fff; }
+    .act-cancel { background: #fff; color: #b91c1c; border: 1.5px solid #fecaca; }
+    .act:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; border: none; }
+    .track-link { background: #f9fafb; border: 1px dashed #d1d5db; border-radius: 8px; padding: 10px; margin-top: 10px; font-size: 12px; color: #4b5563; word-break: break-all; }
+    .empty { text-align: center; padding: 60px 20px; color: #9ca3af; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .gps-banner { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #92400e; margin-bottom: 14px; display: none; }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div>
+    <h1>기사 작업 현황</h1>
+    <div class="me" id="meInfo">-</div>
+  </div>
+  <button class="logout" onclick="logout()">로그아웃</button>
+</div>
+
+<div class="container">
+  <div class="gps-banner" id="gpsBanner">위치 공유 중입니다. 이 화면을 켠 채로 이동해 주세요. 현재 위치가 고객에게 실시간 전송됩니다.</div>
+  <div class="summary">
+    <div class="box"><div class="num" id="cntTotal">0</div><div class="lbl">전체 작업</div></div>
+    <div class="box"><div class="num" id="cntActive">0</div><div class="lbl">진행 예정</div></div>
+    <div class="box"><div class="num" id="cntDone">0</div><div class="lbl">완료</div></div>
+  </div>
+  <div id="jobList"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  function getApiBase() {
+    const host = window.location.hostname;
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) return window.location.protocol + '//' + '3000-' + devMatch[2];
+    return '';
+  }
+  const API = getApiBase();
+
+  // 인증 확인
+  let me = null;
+  (function() {
+    const raw = sessionStorage.getItem('authUser') || localStorage.getItem('authUser');
+    if (!raw) { location.href = '/web/login.html'; return; }
+    try {
+      me = JSON.parse(raw);
+      if (me.appRole !== 'technician') {
+        alert('기사 전용 화면입니다.');
+        location.href = '/web/login.html';
+        return;
+      }
+    } catch (e) { location.href = '/web/login.html'; return; }
+    document.getElementById('meInfo').textContent = (me.name || '기사') + '님' + (me.branchId ? '' : '');
+  })();
+
+  function logout() {
+    sessionStorage.removeItem('authUser');
+    localStorage.removeItem('authUser');
+    location.href = '/web/login.html';
+  }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  async function callApi(proc, payload, isQuery) {
+    let url = API + '/api/trpc/' + proc;
+    let opt;
+    if (isQuery) {
+      url += '?input=' + encodeURIComponent(JSON.stringify({ json: payload }));
+      opt = { method: 'GET' };
+    } else {
+      opt = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ json: payload }) };
+    }
+    const res = await fetch(url, opt);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error?.json?.message || '요청 오류');
+    return data.result?.data?.json;
+  }
+
+  async function restCall(path, body) {
+    const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return res.json();
+  }
+
+  const statusBadge = {
+    '신규접수': ['b-new','신규접수'], '접수완료': ['b-new','접수완료'],
+    '방문예정': ['b-assigned','방문예정'], '배정완료': ['b-assigned','배정완료'],
+    '이동중': ['b-moving','이동중'], '방문중': ['b-arrived','방문중'], '도착': ['b-arrived','도착'],
+    '작업완료': ['b-done','작업완료'], '완료': ['b-done','완료'],
+    '취소': ['b-cancel','취소'], '방문취소': ['b-cancel','방문취소']
+  };
+
+  let sessionsByReq = {}; // requestId -> session
+  let geoWatchId = null;
+  let activeToken = null;
+
+  async function loadJobs() {
+    if (!me.technicianId) {
+      document.getElementById('jobList').innerHTML = '<div class="empty">기사 정보가 연결되지 않았습니다.<br/>관리자에게 문의해 주세요.</div>';
+      return;
+    }
+    try {
+      const jobs = await callApi('repair.listByTechnician', { technicianId: me.technicianId }, true) || [];
+      // 각 작업의 위치 세션 조회
+      sessionsByReq = {};
+      for (const j of jobs) {
+        try {
+          const s = await callApi('location.getSessionByRequest', { requestId: j.id }, true);
+          if (s) sessionsByReq[j.id] = s;
+        } catch (e) {}
+      }
+      renderJobs(jobs);
+    } catch (err) {
+      document.getElementById('jobList').innerHTML = '<div class="empty">작업을 불러오지 못했습니다.<br/>' + err.message + '</div>';
+    }
+  }
+
+  function renderJobs(jobs) {
+    const doneStatuses = ['작업완료','완료','취소','방문취소'];
+    document.getElementById('cntTotal').textContent = jobs.length;
+    document.getElementById('cntDone').textContent = jobs.filter(j => doneStatuses.includes(j.status)).length;
+    document.getElementById('cntActive').textContent = jobs.filter(j => !doneStatuses.includes(j.status)).length;
+
+    if (!jobs.length) {
+      document.getElementById('jobList').innerHTML = '<div class="empty">배정된 작업이 없습니다.</div>';
+      return;
+    }
+    const html = jobs.map(j => {
+      const badge = statusBadge[j.status] || ['b-new', j.status];
+      const session = sessionsByReq[j.id];
+      const isMoving = session && session.status === '이동중';
+      const isDone = doneStatuses.includes(j.status);
+      const addr = (j.apartmentName ? j.apartmentName + ' ' : '') + (j.addressDetail || j.address || '');
+      let trackBlock = '';
+      if (isMoving && session) {
+        const base = location.origin.includes('manus.computer') ? location.origin.replace(/^https?:\/\/808\d-/, 'https://808$&').split('-3000')[0] : '';
+        const url = (window.location.protocol + '//' + window.location.host).replace(/3000-/, '8081-');
+        trackBlock = '<div class="track-link">고객 위치확인 링크 활성화됨<br/>' + (session.trackingUrl || ('/track/' + session.trackingToken)) + '</div>';
+      }
+      let actions;
+      if (isDone) {
+        actions = '<div class="actions full"><button class="act" disabled>' + (badge[1]) + ' 처리됨</button></div>';
+      } else if (isMoving) {
+        actions = '<div class="actions">' +
+          '<button class="act act-arrive" onclick="arrive(' + j.id + ',\'' + (session.trackingToken) + '\')">도착</button>' +
+          '<button class="act act-cancel" onclick="cancelJob(' + j.id + ',\'' + (session.trackingToken) + '\')">출동 취소</button>' +
+          '<button class="act act-done" style="grid-column:1/3" onclick="completeJob(' + j.id + ',\'' + (session.trackingToken) + '\')">작업 완료</button>' +
+          '</div>';
+      } else {
+        actions = '<div class="actions">' +
+          '<button class="act act-go" style="grid-column:1/3" onclick="depart(' + j.id + ')">고객 댁으로 출발 (위치공유 시작)</button>' +
+          '<button class="act act-done" onclick="completeJob(' + j.id + ',null)">작업 완료</button>' +
+          '<button class="act act-cancel" onclick="cancelJob(' + j.id + ',null)">출동 취소</button>' +
+          '</div>';
+      }
+      return '<div class="job">' +
+        '<div class="job-head"><div><div class="job-type">' + (j.requestType || '난방고장') + '</div>' +
+        '<div class="job-num">' + (j.requestNumber || '') + '</div></div>' +
+        '<span class="badge ' + badge[0] + '">' + badge[1] + '</span></div>' +
+        '<div class="job-row"><span class="k">고객</span><span>' + (j.customerName || '-') + '</span></div>' +
+        '<div class="job-row"><span class="k">연락처</span><a href="tel:' + (j.phoneNumber||'') + '">' + (j.phoneNumber || '-') + '</a></div>' +
+        '<div class="job-row"><span class="k">주소</span><span>' + (addr || '-') + '</span></div>' +
+        (j.detailContent ? '<div class="job-row"><span class="k">요청</span><span>' + j.detailContent + '</span></div>' : '') +
+        trackBlock + actions + '</div>';
+    }).join('');
+    document.getElementById('jobList').innerHTML = html;
+  }
+
+  // 고객 댁으로 출발 → 위치 세션 시작 + GPS 전송 시작
+  async function depart(reqId) {
+    if (!navigator.geolocation) { toast('이 기기는 위치 기능을 지원하지 않습니다.'); return; }
+    toast('위치 권한을 확인하는 중...');
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const job = (await callApi('repair.getById', { id: reqId }, true));
+        if (!job) { toast('작업 정보를 찾을 수 없습니다.'); return; }
+        const r = await callApi('location.startTracking', {
+          requestId: reqId,
+          technicianId: me.technicianId,
+          technicianName: me.name || '담당 기사',
+          technicianPhone: me.phoneNumber || undefined,
+          customerName: job.customerName || '고객',
+          customerPhone: job.phoneNumber || '',
+          customerAddress: (job.apartmentName ? job.apartmentName + ' ' : '') + (job.addressDetail || job.address || ''),
+          branchId: me.branchId || undefined,
+        });
+        if (r && r.success) {
+          activeToken = r.token;
+          // 상태도 이동중으로
+          try { await callApi('repair.updateStatus', { id: reqId, status: '이동중', notify: false }); } catch(e) {}
+          await sendPosition(r.token, pos.coords.latitude, pos.coords.longitude);
+          startGpsWatch(r.token);
+          toast(r.smsSent ? '출발! 고객에게 위치 링크를 문자로 보냈습니다.' : '출발! 위치 공유를 시작했습니다.');
+          loadJobs();
+        } else { toast('위치 공유 시작 실패'); }
+      } catch (err) { toast('오류: ' + err.message); }
+    }, (err) => {
+      toast('위치 권한이 필요합니다. 설정에서 허용해 주세요.');
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  }
+
+  async function sendPosition(token, lat, lng) {
+    try { await restCall('/api/location/update', { token, lat, lng }); } catch (e) {}
+  }
+
+  function startGpsWatch(token) {
+    document.getElementById('gpsBanner').style.display = 'block';
+    if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = navigator.geolocation.watchPosition((pos) => {
+      sendPosition(token, pos.coords.latitude, pos.coords.longitude);
+    }, (err) => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+  }
+
+  function stopGpsWatch() {
+    if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+    document.getElementById('gpsBanner').style.display = 'none';
+    activeToken = null;
+  }
+
+  async function arrive(reqId, token) {
+    try {
+      if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '도착완료' });
+      await callApi('repair.updateStatus', { id: reqId, status: '방문중', notify: false });
+      stopGpsWatch();
+      toast('도착 처리되었습니다. 고객 위치 링크가 만료되었습니다.');
+      loadJobs();
+    } catch (err) { toast('오류: ' + err.message); }
+  }
+
+  async function completeJob(reqId, token) {
+    if (!confirm('작업을 완료 처리할까요?')) return;
+    try {
+      if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '도착완료' });
+      await callApi('repair.updateStatus', { id: reqId, status: '작업완료', notify: true });
+      stopGpsWatch();
+      toast('작업 완료 처리되었습니다.');
+      loadJobs();
+    } catch (err) { toast('오류: ' + err.message); }
+  }
+
+  async function cancelJob(reqId, token) {
+    if (!confirm('출동을 취소할까요? 고객 위치 링크가 즉시 만료됩니다.')) return;
+    try {
+      if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '업무취소' });
+      await callApi('repair.updateStatus', { id: reqId, status: '취소', notify: false });
+      stopGpsWatch();
+      toast('출동이 취소되었습니다.');
+      loadJobs();
+    } catch (err) { toast('오류: ' + err.message); }
+  }
+
+  loadJobs();
+  setInterval(() => { if (geoWatchId === null) loadJobs(); }, 30000);
+</script>
+</body>
+</html>

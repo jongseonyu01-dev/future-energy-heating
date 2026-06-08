@@ -246,3 +246,38 @@
 - [x] baseUrl 기본값을 https://futureenergytech.co.kr 로 변경 (3곳)
 - [x] 가비아 futureenergytech.co.kr 커스텀 도메인 DNS 설정값 정리
 - [x] SOLAPI 알림톡 템플릿 버튼 URL 안내 (https://futureenergytech.co.kr/track/#{위치코드})
+
+## 통합 로그인/회원 시스템 (22차)
+- [ ] 현재 인증·계정 DB 구조(employees, customers 등) 점검
+- [ ] 통합 users 계정 스키마 설계 (role: 본사관리자/지사장/기사/고객)
+- [ ] bcrypt 비밀번호 해시 저장 (평문 금지)
+- [ ] 첫 로그인 임시 비밀번호 강제 변경 (mustChangePassword)
+- [ ] 로그인 API (아이디+비밀번호, 자동로그인 토큰)
+- [ ] 회원가입 API (고객, 휴대폰 인증)
+- [ ] 아이디 찾기 API (휴대폰 기반)
+- [ ] 비밀번호 재설정 API
+- [ ] 관리자 계정 발급 API (지사장/기사: 이름,휴대폰,아이디,임시비번,소속지사,권한,사용여부)
+- [ ] 홈페이지 로그인 화면 (아이디/비번/로그인/아이디찾기/비번재설정/회원가입/자동로그인/비번보기)
+- [ ] 홈페이지 권한별 메뉴 분리 (4종 권한)
+- [ ] 앱 로그인 화면 + 권한별 화면
+- [ ] 비로그인 일회용 위치링크 정상 동작 유지
+- [ ] 테스트 계정 4종 생성 (관리자/지사장/기사/고객)
+- [ ] 권한별 메뉴 분리 검증
+- [ ] 비밀번호 재설정 테스트
+
+
+## 홈페이지·앱 통합 로그인 / 권한 시스템 (21차)
+- [x] 홈페이지·앱 공통 계정 DB(app_roles) 단일 관리 — 양쪽에서 가입/로그인 호환
+- [x] 통합 로그인 페이지(login.html): 아이디·비밀번호·로그인·아이디찾기·비밀번호재설정·회원가입·자동로그인·비밀번호 보기/숨기기
+- [x] 앱 로그인 화면(login.tsx) 보강: 비밀번호 토글, 자동 로그인, 첫 로그인 강제 변경, 아이디찾기/비번재설정/회원가입 안내
+- [x] 4단계 권한 분리 (hq_admin / branch_manager / technician / customer)
+- [x] 권한별 메뉴 분리: 홈페이지(dashboard/branch/tech/mypage 리다이렉트) + 앱(탭 동적 분기)
+- [x] 관리자 화면 계정 발급: 이름·휴대전화·아이디·임시비번·소속지사·권한·사용여부 (createAccount API)
+- [x] 첫 로그인 시 임시 비밀번호 강제 변경 (mustChangePassword 플래그 + changePassword)
+- [x] 비밀번호 bcrypt 해시 저장 (평문 미저장, 레거시 해시 폴백 검증)
+- [x] 고객 회원가입 휴대폰 인증 (sendVerifyCode/checkVerifyCode), 직원 계정은 관리자 직접 발급
+- [x] 비로그인 고객도 일회용 위치 링크(/track/:token) 열람 가능 (인증 불요, 이동중에만 위치 노출)
+- [x] userId INT 안전 범위 생성 버그 수정 (readUInt32BE → generateSafeUserId, MySQL INT 초과 방지)
+- [x] 테스트 계정 4종 생성: test_admin / test_branch / test_tech / test_customer
+- [x] 인증 단위 테스트 추가 (bcrypt 해싱/검증, userId 범위) — 전체 45 passed, 1 skipped
+- [x] 전체 흐름 검증: 4종 로그인·권한 반환·강제 변경·비밀번호 재설정·기존 비번 거부 확인

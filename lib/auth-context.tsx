@@ -7,9 +7,11 @@ export interface AuthUser {
   userId: number;
   appRole: AppRole;
   loginId: string;
+  name?: string | null;
   technicianId?: number | null;
   branchId?: number | null;
   phoneNumber?: string | null;
+  mustChangePassword?: boolean;
 }
 
 interface AuthContextValue {

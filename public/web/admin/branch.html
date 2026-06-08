@@ -360,15 +360,19 @@
   let selectedRequestId = null;
 
   function checkAuth() {
-    const stored = sessionStorage.getItem('adminUser');
-    if (!stored) { window.location.href = window.location.origin + '/web/admin/login.html'; return; }
+    const stored = sessionStorage.getItem('authUser') || localStorage.getItem('authUser') || sessionStorage.getItem('adminUser');
+    if (!stored) { window.location.href = window.location.origin + '/web/login.html'; return; }
     user = JSON.parse(stored);
-    if (user.appRole !== 'branch_manager') { window.location.href = window.location.origin + '/web/admin/login.html'; return; }
-    document.getElementById('sidebarUsername').textContent = user.username || '지사장';
+    if (user.appRole !== 'branch_manager') {
+      alert('지사장 전용 화면입니다.');
+      window.location.href = window.location.origin + '/web/login.html';
+      return;
+    }
+    document.getElementById('sidebarUsername').textContent = user.name || user.username || '지사장';
     document.getElementById('sidebarBranch').textContent = user.branchName || '';
   }
 
-  function doLogout() { sessionStorage.removeItem('adminUser'); window.location.href = window.location.origin + '/web/admin/login.html'; }
+  function doLogout() { sessionStorage.removeItem('adminUser'); sessionStorage.removeItem('authUser'); localStorage.removeItem('authUser'); window.location.href = window.location.origin + '/web/login.html'; }
   function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('show'); }
   function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('show'); }
   function closeModal(id) { document.getElementById(id).classList.remove('show'); }

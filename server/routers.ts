@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import * as db from "./db";
@@ -49,8 +50,8 @@ const requestTypeLabel: Record<string, string> = {
   배관청소: "배관청소",
 };
 
-// 간단한 비밀번호 해시 (실제 운영에서는 bcrypt 사용 권장)
-function simpleHash(password: string): string {
+// 레거시 해시 (구버전 계정 호환용 검증 전용, 신규 저장에는 사용 안 함)
+function legacyHash(password: string): string {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
     const char = password.charCodeAt(i);
@@ -60,85 +61,275 @@ function simpleHash(password: string): string {
   return `h${Math.abs(hash).toString(36)}`;
 }
 
+// bcrypt 해시 생성 (신규 비밀번호는 모두 이것으로 저장)
+function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, 10);
+}
+
+// 비밀번호 검증: bcrypt 우선, 레거시 해시 폴백
+// 반환값: { ok, isLegacy } — isLegacy=true면 로그인 성공 후 bcrypt로 재저장 필요
+function verifyPassword(password: string, storedHash: string | null): { ok: boolean; isLegacy: boolean } {
+  if (!storedHash) return { ok: false, isLegacy: false };
+  // bcrypt 해시는 $2a$ / $2b$ / $2y$ 로 시작
+  if (storedHash.startsWith("$2")) {
+    return { ok: bcrypt.compareSync(password, storedHash), isLegacy: false };
+  }
+  // 레거시 해시
+  return { ok: legacyHash(password) === storedHash, isLegacy: true };
+}
+
+// 6자리 숫자 인증코드 생성
+function generateVerifyCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// 휴대폰 번호 정규화 (숫자만)
+function normalizePhone(phone: string): string {
+  return (phone || "").replace(/[^0-9]/g, "");
+}
+
+// MySQL INT(부호있음, 최대 2,147,483,647) 안전 범위 내 userId 생성
+// 100000 ~ 2,000,099,999 사이 값으로 제한
+function generateSafeUserId(seed: string): number {
+  const h = crypto.createHash("sha256").update(seed).digest().readUInt32BE(0);
+  return (h % 2_000_000_000) + 100000;
+}
+
 export const appRouter = router({
   // 헬스체크
   health: publicProcedure.query(() => ({ status: "ok" })),
 
-  // ─── 앱 인증 (ID/PW 기반) ────────────────────────────────────
+  // ─── 앱 인증 (ID/PW 기반, 홈페이지·앱 공통) ──────────────────
   auth: router({
-    // 앱 로그인 (기사/지사장/본사관리자용)
+    // 통합 로그인 (고객/기사/지사장/본사관리자 공통)
     login: publicProcedure
       .input(z.object({ loginId: z.string().min(1), password: z.string().min(1) }))
       .mutation(async ({ input }) => {
-        const role = await db.getAppRoleByLoginId(input.loginId);
-        if (!role || !role.isActive) {
+        const loginId = input.loginId.trim();
+        const role = await db.getAppRoleByLoginId(loginId);
+        if (!role) {
           return { success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." };
         }
-        const hash = simpleHash(input.password);
-        if (role.passwordHash !== hash) {
+        if (!role.isActive) {
+          return { success: false, error: "비활성화된 계정입니다. 관리자에게 문의하세요." };
+        }
+        const check = verifyPassword(input.password, role.passwordHash);
+        if (!check.ok) {
           return { success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." };
         }
-        // 기사인 경우 기사 정보도 반환
+        // 레거시 해시로 로그인 성공 시 bcrypt로 자동 업그레이드
+        if (check.isLegacy) {
+          try { await db.updateAppRoleFields(role.userId, { passwordHash: hashPassword(input.password) }); } catch {}
+        }
+        // 권한별 부가정보
         let technicianId: number | null = null;
-        let branchId: number | null = null;
+        let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
           const tech = await db.getTechnicianByUserId(role.userId);
           if (tech) {
             technicianId = tech.id;
-            branchId = tech.branchId ?? null;
+            branchId = tech.branchId ?? branchId;
           }
         } else if (role.appRole === "branch_manager") {
-          // 지사장이면 본인 지사 찾기
           const allBranches = await db.getAllBranches();
           const branch = allBranches.find(b => b.managerUserId === role.userId);
           if (branch) branchId = branch.id;
+        }
+        // 자동로그인용 토큰 (userId + 비밀번호해시 일부로 서명)
+        const token = crypto
+          .createHmac("sha256", (role.passwordHash || "seed"))
+          .update(String(role.userId))
+          .digest("hex");
+        return {
+          success: true,
+          userId: role.userId,
+          appRole: role.appRole,
+          name: role.name ?? null,
+          technicianId,
+          branchId,
+          phoneNumber: role.phoneNumber,
+          mustChangePassword: role.mustChangePassword,
+          token,
+        };
+      }),
+
+    // 자동로그인 토큰 검증
+    verifyToken: publicProcedure
+      .input(z.object({ userId: z.number(), token: z.string() }))
+      .mutation(async ({ input }) => {
+        const role = await db.getAppRole(input.userId);
+        if (!role || !role.isActive) return { success: false };
+        const expected = crypto
+          .createHmac("sha256", (role.passwordHash || "seed"))
+          .update(String(role.userId))
+          .digest("hex");
+        if (expected !== input.token) return { success: false };
+        let technicianId: number | null = null;
+        let branchId: number | null = role.branchId ?? null;
+        if (role.appRole === "technician") {
+          const tech = await db.getTechnicianByUserId(role.userId);
+          if (tech) { technicianId = tech.id; branchId = tech.branchId ?? branchId; }
         }
         return {
           success: true,
           userId: role.userId,
           appRole: role.appRole,
+          name: role.name ?? null,
           technicianId,
           branchId,
           phoneNumber: role.phoneNumber,
+          mustChangePassword: role.mustChangePassword,
         };
       }),
 
-    // 계정 생성 (본사 관리자용)
+    // ── 고객 회원가입: 휴대폰 인증코드 발송 ──
+    sendVerifyCode: publicProcedure
+      .input(z.object({ phoneNumber: z.string().min(10), purpose: z.enum(["signup", "reset"]).default("signup") }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        if (phone.length < 10) return { success: false, error: "올바른 휴대폰 번호를 입력하세요." };
+        // 가입 목적인데 이미 동일 휴대폰으로 고객계정이 있으면 안내
+        if (input.purpose === "signup") {
+          const existing = await db.getAppRolesByPhone(phone);
+          if (existing.some(r => r.appRole === "customer" && r.loginId)) {
+            return { success: false, error: "이미 가입된 휴대폰 번호입니다. 로그인 또는 아이디 찾기를 이용하세요." };
+          }
+        }
+        const code = generateVerifyCode();
+        const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3분
+        await db.createPhoneVerification({ phoneNumber: phone, code, purpose: input.purpose, expiresAt });
+        // SMS 발송
+        let smsSent = false;
+        if (isSmsConfigured()) {
+          try {
+            const res = await sendSms(phone, `[퓨처에너지테크] 인증번호 ${code} (3분 이내 입력)`);
+            smsSent = res?.result === "SUCCESS";
+          } catch {}
+        }
+        // 개발/미설정 환경에서는 코드 노출(테스트용)
+        return { success: true, smsSent, devCode: smsSent ? undefined : code };
+      }),
+
+    // ── 휴대폰 인증코드 확인 ──
+    checkVerifyCode: publicProcedure
+      .input(z.object({ phoneNumber: z.string(), code: z.string(), purpose: z.enum(["signup", "reset"]).default("signup") }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        const v = await db.getLatestPhoneVerification(phone, input.purpose);
+        if (!v) return { success: false, error: "인증코드를 먼저 요청하세요." };
+        if (new Date(v.expiresAt).getTime() < Date.now()) return { success: false, error: "인증코드가 만료되었습니다. 다시 요청하세요." };
+        if (v.code !== input.code.trim()) return { success: false, error: "인증코드가 일치하지 않습니다." };
+        await db.markPhoneVerificationVerified(v.id);
+        return { success: true };
+      }),
+
+    // ── 고객 회원가입 (휴대폰 인증 완료 후) ──
+    registerCustomer: publicProcedure
+      .input(z.object({
+        loginId: z.string().min(4).max(64),
+        password: z.string().min(6).max(64),
+        name: z.string().min(1).max(50),
+        phoneNumber: z.string().min(10),
+      }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        // 휴대폰 인증 완료 여부 확인
+        const v = await db.getLatestPhoneVerification(phone, "signup");
+        if (!v || !v.verified) return { success: false, error: "휴대폰 인증을 먼저 완료하세요." };
+        const existing = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (existing) return { success: false, error: "이미 사용 중인 아이디입니다." };
+        const userId = generateSafeUserId(input.loginId + phone + Date.now());
+        await db.upsertAppRole({
+          userId,
+          appRole: "customer",
+          loginId: input.loginId.trim(),
+          passwordHash: hashPassword(input.password),
+          name: input.name,
+          phoneNumber: phone,
+          mustChangePassword: false,
+          isActive: true,
+        });
+        return { success: true, userId };
+      }),
+
+    // ── 아이디 찾기 (휴대폰 인증 후 마스킹된 아이디 반환) ──
+    findLoginId: publicProcedure
+      .input(z.object({ phoneNumber: z.string(), code: z.string() }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        const v = await db.getLatestPhoneVerification(phone, "reset");
+        if (!v) return { success: false, error: "인증코드를 먼저 요청하세요." };
+        if (new Date(v.expiresAt).getTime() < Date.now()) return { success: false, error: "인증코드가 만료되었습니다." };
+        if (v.code !== input.code.trim()) return { success: false, error: "인증코드가 일치하지 않습니다." };
+        const roles = await db.getAppRolesByPhone(phone);
+        const ids = roles.filter(r => r.loginId).map(r => r.loginId as string);
+        if (ids.length === 0) return { success: false, error: "해당 번호로 등록된 계정이 없습니다." };
+        // 마스킹: 앞 3자만 노출
+        const masked = ids.map(id => id.length <= 3 ? id[0] + "**" : id.slice(0, 3) + "*".repeat(Math.max(2, id.length - 3)));
+        return { success: true, loginIds: masked };
+      }),
+
+    // ── 비밀번호 재설정 (휴대폰 인증 후) ──
+    resetPassword: publicProcedure
+      .input(z.object({ loginId: z.string(), phoneNumber: z.string(), code: z.string(), newPassword: z.string().min(6).max(64) }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        const v = await db.getLatestPhoneVerification(phone, "reset");
+        if (!v) return { success: false, error: "인증코드를 먼저 요청하세요." };
+        if (new Date(v.expiresAt).getTime() < Date.now()) return { success: false, error: "인증코드가 만료되었습니다." };
+        if (v.code !== input.code.trim()) return { success: false, error: "인증코드가 일치하지 않습니다." };
+        const role = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (!role) return { success: false, error: "아이디를 찾을 수 없습니다." };
+        if (normalizePhone(role.phoneNumber || "") !== phone) {
+          return { success: false, error: "아이디와 휴대폰 번호가 일치하지 않습니다." };
+        }
+        await db.updateAppRoleFields(role.userId, { passwordHash: hashPassword(input.newPassword), mustChangePassword: false });
+        return { success: true };
+      }),
+
+    // ── 계정 생성 (본사 관리자용: 지사장/기사 발급) ──
     createAccount: publicProcedure
       .input(z.object({
         loginId: z.string().min(2).max(64),
-        password: z.string().min(4).max(64),
+        password: z.string().min(4).max(64), // 임시 비밀번호
         appRole: z.enum(["customer", "technician", "branch_manager", "hq_admin"]),
+        name: z.string().optional(),
         phoneNumber: z.string().optional(),
-        // 기사인 경우 기사 정보
-        technicianName: z.string().optional(),
         branchId: z.number().optional(),
+        // 첫 로그인 시 비밀번호 변경 강제 여부 (관리자 발급 계정은 기본 true)
+        mustChangePassword: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
-        const existing = await db.getAppRoleByLoginId(input.loginId);
+        const existing = await db.getAppRoleByLoginId(input.loginId.trim());
         if (existing) return { success: false, error: "이미 사용 중인 아이디입니다." };
-        const passwordHash = simpleHash(input.password);
-        // userId는 loginId 해시로 임시 생성 (Manus OAuth 미사용)
-        const userId = Math.abs(simpleHash(input.loginId + Date.now()).split("").reduce((a, c) => a + c.charCodeAt(0), 0)) + 100000;
+        const passwordHash = hashPassword(input.password);
+        const userId = generateSafeUserId(input.loginId + Date.now());
         await db.upsertAppRole({
           userId,
           appRole: input.appRole,
-          loginId: input.loginId,
+          loginId: input.loginId.trim(),
           passwordHash,
-          phoneNumber: input.phoneNumber,
+          name: input.name,
+          phoneNumber: input.phoneNumber ? normalizePhone(input.phoneNumber) : undefined,
+          branchId: input.branchId,
+          mustChangePassword: input.mustChangePassword ?? (input.appRole !== "customer"),
           isActive: true,
         });
         // 기사 계정이면 technicians 테이블에도 등록
-        if (input.appRole === "technician" && input.technicianName) {
+        if (input.appRole === "technician" && input.name) {
           await db.createTechnician({
-            name: input.technicianName,
-            phoneNumber: input.phoneNumber,
+            name: input.name,
+            phoneNumber: input.phoneNumber ? normalizePhone(input.phoneNumber) : undefined,
             branchId: input.branchId,
             userId,
             isActive: true,
           });
         }
-        return { success: true, userId };
+        // 지사장 계정이면 지사의 managerUserId 연결
+        if (input.appRole === "branch_manager" && input.branchId) {
+          try { await db.updateBranch(input.branchId, { managerUserId: userId }); } catch {}
+        }
+        return { success: true, userId, tempPassword: input.password };
       }),
 
     // 계정 목록 (본사 관리자용)
@@ -146,23 +337,67 @@ export const appRouter = router({
       return db.getAllAppRoles();
     }),
 
+    // 계정 정보 수정 (본사 관리자용)
+    updateAccount: publicProcedure
+      .input(z.object({
+        userId: z.number(),
+        name: z.string().optional(),
+        phoneNumber: z.string().optional(),
+        branchId: z.number().optional(),
+        appRole: z.enum(["customer", "technician", "branch_manager", "hq_admin"]).optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const role = await db.getAppRole(input.userId);
+        if (!role) return { success: false, error: "계정을 찾을 수 없습니다." };
+        await db.updateAppRoleFields(input.userId, {
+          name: input.name ?? role.name ?? undefined,
+          phoneNumber: input.phoneNumber ? normalizePhone(input.phoneNumber) : (role.phoneNumber ?? undefined),
+          branchId: input.branchId ?? role.branchId ?? undefined,
+          appRole: input.appRole ?? role.appRole,
+          isActive: input.isActive ?? role.isActive,
+        });
+        return { success: true };
+      }),
+
     // 계정 활성/비활성
     setActive: publicProcedure
       .input(z.object({ userId: z.number(), isActive: z.boolean() }))
       .mutation(async ({ input }) => {
         const role = await db.getAppRole(input.userId);
         if (!role) return { success: false };
-        await db.upsertAppRole({ ...role, isActive: input.isActive });
+        await db.updateAppRoleFields(input.userId, { isActive: input.isActive });
         return { success: true };
       }),
 
-    // 비밀번호 변경
-    changePassword: publicProcedure
-      .input(z.object({ userId: z.number(), newPassword: z.string().min(4) }))
+    // 관리자에 의한 임시 비밀번호 재발급
+    resetTempPassword: publicProcedure
+      .input(z.object({ userId: z.number(), tempPassword: z.string().min(4) }))
       .mutation(async ({ input }) => {
         const role = await db.getAppRole(input.userId);
         if (!role) return { success: false };
-        await db.upsertAppRole({ ...role, passwordHash: simpleHash(input.newPassword) });
+        await db.updateAppRoleFields(input.userId, {
+          passwordHash: hashPassword(input.tempPassword),
+          mustChangePassword: true,
+        });
+        return { success: true };
+      }),
+
+    // 비밀번호 변경 (로그인 사용자 본인 / 첫 로그인 임시비번 변경)
+    changePassword: publicProcedure
+      .input(z.object({ userId: z.number(), currentPassword: z.string().optional(), newPassword: z.string().min(6) }))
+      .mutation(async ({ input }) => {
+        const role = await db.getAppRole(input.userId);
+        if (!role) return { success: false, error: "계정을 찾을 수 없습니다." };
+        // 현재 비밀번호 확인 (mustChangePassword가 아닌 일반 변경 시)
+        if (!role.mustChangePassword && input.currentPassword !== undefined) {
+          const check = verifyPassword(input.currentPassword, role.passwordHash);
+          if (!check.ok) return { success: false, error: "현재 비밀번호가 올바르지 않습니다." };
+        }
+        await db.updateAppRoleFields(input.userId, {
+          passwordHash: hashPassword(input.newPassword),
+          mustChangePassword: false,
+        });
         return { success: true };
       }),
   }),

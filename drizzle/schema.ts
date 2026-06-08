@@ -37,6 +37,9 @@ export const appRoles = mysqlTable("app_roles", {
   loginId: varchar("loginId", { length: 64 }),
   passwordHash: varchar("passwordHash", { length: 128 }),
   phoneNumber: varchar("phoneNumber", { length: 20 }),
+  name: varchar("name", { length: 50 }),
+  branchId: int("branchId"),
+  mustChangePassword: boolean("mustChangePassword").default(false).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -399,11 +402,24 @@ export const locationConsents = mysqlTable("location_consents", {
   isActive: boolean("isActive").default(true).notNull(),
 });
 
+// ─── 휴대폰 인증코드 테이블 (고객 회원가입/비밀번호 재설정) ──────────
+export const phoneVerifications = mysqlTable("phone_verifications", {
+  id: int("id").autoincrement().primaryKey(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  code: varchar("code", { length: 6 }).notNull(),
+  purpose: varchar("purpose", { length: 20 }).notNull().default("signup"), // signup | reset
+  verified: boolean("verified").default(false).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── 타입 내보내기 ───────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type AppRole = typeof appRoles.$inferSelect;
 export type InsertAppRole = typeof appRoles.$inferInsert;
+export type PhoneVerification = typeof phoneVerifications.$inferSelect;
+export type InsertPhoneVerification = typeof phoneVerifications.$inferInsert;
 export type Branch = typeof branches.$inferSelect;
 export type InsertBranch = typeof branches.$inferInsert;
 export type RegionMapping = typeof regionMappings.$inferSelect;
