@@ -1523,7 +1523,7 @@ export const appRouter = router({
         if (session.status !== "이동중") {
           return { success: false, smsSent: false, smsError: "이미 종료된 세션입니다." };
         }
-        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const baseUrl = process.env.SITE_URL || "https://futureenergytech.co.kr";
         const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
         let smsSent = false;
         let smsError: string | undefined;
