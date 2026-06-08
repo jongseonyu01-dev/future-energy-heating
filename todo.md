@@ -235,3 +235,14 @@
 - [x] 관리자 화면에서 접수 노출 확인 (repair.listAll 노출 확인)
 - [x] 서버 로그 최종 오류 유무 확인 (신규 오류 없음)
 - [x] 테스트 데이터 정리 (90001, 90002 삭제)
+
+## 위치코드 일회용 강화 + 커스텀 도메인 (21차)
+- [x] /track/{코드} 라우트 점검 (프래그먼트 # 미사용 확인)
+- [x] 위치코드를 추측 불가능한 43자 base64url(256비트) 일회용 코드로 발급
+- [x] 출발 시 활성화, 도착/완료/취소 시 즉시 만료 로직 확인 (410)
+- [x] 시간 초과 자동 만료 동작 확인 (expireOldLocationSessions)
+- [x] 고객 화면 현재 위치+예상 도착만 노출, 과거 경로/타 고객정보 비노출 재확인
+- [x] 테스트용 위치코드 1개 발급 + 실제 링크 동작 검증
+- [x] baseUrl 기본값을 https://futureenergytech.co.kr 로 변경 (3곳)
+- [x] 가비아 futureenergytech.co.kr 커스텀 도메인 DNS 설정값 정리
+- [x] SOLAPI 알림톡 템플릿 버튼 URL 안내 (https://futureenergytech.co.kr/track/#{위치코드})

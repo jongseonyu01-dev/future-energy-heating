@@ -206,7 +206,8 @@ export function registerWebRoutes(app: Express) {
         }
       }
       const crypto = await import("crypto");
-      const token = crypto.randomUUID();
+      // 추측 불가능한 긴 일회용 위치코드 (256비트 = 43자 base64url)
+      const token = crypto.randomBytes(32).toString("base64url");
       const now = new Date();
       const hours = expireHours && Number(expireHours) > 0 ? Number(expireHours) : 4;
       const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
@@ -228,7 +229,7 @@ export function registerWebRoutes(app: Express) {
         expiresAt,
       });
       if (!session) return res.status(500).json({ error: "세션 생성 실패" });
-      const baseUrl = process.env.SITE_URL || `${req.protocol}://${req.get("host")}`;
+      const baseUrl = process.env.SITE_URL || "https://futureenergytech.co.kr";
       const trackingUrl = `${baseUrl}/track/${token}`;
       let smsSent = false;
       let smsError: string | undefined;

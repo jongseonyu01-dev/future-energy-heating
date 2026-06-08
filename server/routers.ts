@@ -16,6 +16,12 @@ import {
 import { dispatchLeakSms } from "./leak-sms";
 import { buildTechnicianDepartedMessage } from "./notification";
 
+// 추측 불가능한 긴 일회용 위치코드 생성 (256비트 = 43자 base64url)
+// 예: "Xa7kQ2..." (대소문자+숫자+-_, URL-safe)
+function generateTrackingToken(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
 // 증상 enum
 const symptomValues = [
   "집전체가춥다",
@@ -985,8 +991,8 @@ export const appRouter = router({
         if (existing) {
           await db.stopLocationSession(existing.trackingToken, "업무취소");
         }
-        // UUID 토큰 생성
-        const token = crypto.randomUUID();
+        // 추측 불가능한 긴 일회용 위치코드 생성
+        const token = generateTrackingToken();
         const now = new Date();
         const expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000); // 4시간 후 만료
         const session = await db.createLocationSession({
@@ -1008,7 +1014,7 @@ export const appRouter = router({
         });
         if (!session) throw new Error("세션 생성 실패");
         // 고객용 전용 링크 생성
-        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const baseUrl = process.env.SITE_URL || "https://futureenergytech.co.kr";
         const trackingUrl = `${baseUrl}/track/${token}`;
         // 고객 SMS 발송 (데모 모드가 아닌 경우)
         let smsSent = false;
@@ -1054,7 +1060,7 @@ export const appRouter = router({
         if (existing) {
           await db.stopLocationSession(existing.trackingToken, "업무취소");
         }
-        const token = crypto.randomUUID();
+        const token = generateTrackingToken();
         const now = new Date();
         const hours = input.expireHours && input.expireHours > 0 ? input.expireHours : 4;
         const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
@@ -1076,7 +1082,7 @@ export const appRouter = router({
           expiresAt,
         });
         if (!session) throw new Error("세션 생성 실패");
-        const baseUrl = process.env.SITE_URL || "https://futureheat-htdx5kse.manus.space";
+        const baseUrl = process.env.SITE_URL || "https://futureenergytech.co.kr";
         const trackingUrl = `${baseUrl}/track/${token}`;
         let smsSent = false;
         let smsError: string | undefined;
