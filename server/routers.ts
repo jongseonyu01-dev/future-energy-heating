@@ -5,7 +5,9 @@ import { router, publicProcedure } from "./_core/trpc";
 import * as db from "./db";
 import {
   sendSms,
+  sendNotification,
   isSmsConfigured,
+  isAlimtalkConfigured,
   buildReceivedMessage,
   buildStatusChangeMessage,
   buildLeakAlertMessage,
@@ -13,9 +15,34 @@ import {
   buildAdminReceivedMessage,
   buildSmsTestMessage,
   friendlySmsError,
+  buildBranchAssignedMessage,
+  buildScheduleConfirmedMessage,
+  buildTechnicianArrivedMessage,
+  buildWorkCompletedMessage,
 } from "./notification";
 import { dispatchLeakSms } from "./leak-sms";
 import { buildTechnicianDepartedMessage } from "./notification";
+
+// 알림 통합 발송 + 이력 기록 헬퍼 (알림톡 우선 → 실패 시 문자 대체)
+async function notifyAndLog(params: {
+  requestId: number;
+  phoneNumber: string;
+  messageType: string;
+  content: string;
+}): Promise<{ channel: string; result: string; fallbackUsed: boolean; errorMessage?: string }> {
+  const r = await sendNotification(params.phoneNumber, params.content);
+  await db.createNotificationLog({
+    requestId: params.requestId,
+    phoneNumber: params.phoneNumber,
+    channel: r.channel as "SMS" | "ALIMTALK",
+    messageType: params.messageType,
+    content: params.content,
+    result: r.result,
+    errorMessage: r.errorMessage,
+    fallbackUsed: r.fallbackUsed,
+  });
+  return r;
+}
 
 // 추측 불가능한 긴 일회용 위치코드 생성 (256비트 = 43자 base64url)
 // 예: "Xa7kQ2..." (대소문자+숫자+-_, URL-safe)
@@ -135,6 +162,12 @@ export const appRouter = router({
           const branch = allBranches.find(b => b.managerUserId === role.userId);
           if (branch) branchId = branch.id;
         }
+        // 소속 지사명 조회 (화면 표시용)
+        let branchName: string | null = null;
+        if (branchId) {
+          const b = await db.getBranchById(branchId);
+          branchName = b?.name ?? null;
+        }
         // 자동로그인용 토큰 (userId + 비밀번호해시 일부로 서명)
         const token = crypto
           .createHmac("sha256", (role.passwordHash || "seed"))
@@ -147,6 +180,7 @@ export const appRouter = router({
           name: role.name ?? null,
           technicianId,
           branchId,
+          branchName,
           phoneNumber: role.phoneNumber,
           mustChangePassword: role.mustChangePassword,
           token,
@@ -169,6 +203,15 @@ export const appRouter = router({
         if (role.appRole === "technician") {
           const tech = await db.getTechnicianByUserId(role.userId);
           if (tech) { technicianId = tech.id; branchId = tech.branchId ?? branchId; }
+        } else if (role.appRole === "branch_manager") {
+          const allBranches = await db.getAllBranches();
+          const branch = allBranches.find(b => b.managerUserId === role.userId);
+          if (branch) branchId = branch.id;
+        }
+        let branchName: string | null = null;
+        if (branchId) {
+          const b = await db.getBranchById(branchId);
+          branchName = b?.name ?? null;
         }
         return {
           success: true,
@@ -177,6 +220,7 @@ export const appRouter = router({
           name: role.name ?? null,
           technicianId,
           branchId,
+          branchName,
           phoneNumber: role.phoneNumber,
           mustChangePassword: role.mustChangePassword,
         };
@@ -496,6 +540,8 @@ export const appRouter = router({
           ...input,
           symptoms: symptomsJson,
           branchId: branch?.id ?? null,
+          // 주소 기반 자동 배정 성공 시 지사배정, 아니면 접수완료
+          workflowStage: branch?.id ? "지사배정" : "접수완료",
         });
 
         // 실제 증상 목록 (복수 선택 우선, 없으면 단일 symptom 사용)
@@ -504,7 +550,7 @@ export const appRouter = router({
           : [input.symptom];
         const typeLabel = requestTypeLabel[input.requestType] ?? "서비스";
 
-        // ① 고객에게 접수 완료 SMS 발송
+        // ① 고객에게 접수 완료 알림 (알림톡 우선 → 실패 시 문자 대체)
         const customerMsg = buildCustomerReceivedMessage({
           requestType: typeLabel,
           symptoms: symptomsForSms,
@@ -512,15 +558,11 @@ export const appRouter = router({
           dong: input.dong,
           ho: input.ho,
         });
-        const customerSendResult = await sendSms(input.phoneNumber, customerMsg);
-        await db.createNotificationLog({
+        await notifyAndLog({
           requestId: created.id,
           phoneNumber: input.phoneNumber,
-          channel: "SMS",
           messageType: "접수완료_고객",
           content: customerMsg,
-          result: customerSendResult.result,
-          errorMessage: customerSendResult.errorMessage,
         });
 
         // ② 본사 관리자에게 신규 접수 알림 SMS 발송 (관리자 번호가 설정된 경우만)
@@ -629,22 +671,92 @@ export const appRouter = router({
               req.customerName, req.requestNumber, "방문예정",
               input.technicianName, input.scheduledDate ?? req.scheduledDate, input.scheduledTime ?? req.scheduledTime
             );
-            const sendResult = await sendSms(req.phoneNumber, message);
-            await db.createNotificationLog({
-              requestId: req.id, phoneNumber: req.phoneNumber, channel: "SMS",
+            await notifyAndLog({
+              requestId: req.id, phoneNumber: req.phoneNumber,
               messageType: "기사배정", content: message,
-              result: sendResult.result, errorMessage: sendResult.errorMessage,
             });
           }
         }
         return { success: true };
       }),
 
-    // 방문 일정 변경
+    // 방문 일정 변경/확정 (지사장/본사만 가능 → 프론트 권한 제한, 변경 시 고객 안내)
     updateSchedule: publicProcedure
-      .input(z.object({ id: z.number(), scheduledDate: z.string(), scheduledTime: z.string() }))
+      .input(z.object({
+        id: z.number(),
+        scheduledDate: z.string(),
+        scheduledTime: z.string(),
+        changeReason: z.string().optional(),
+        notify: z.boolean().default(true),
+      }))
       .mutation(async ({ input }) => {
-        await db.updateSchedule(input.id, input.scheduledDate, input.scheduledTime);
+        const before = await db.getRepairRequestById(input.id);
+        const isChanged = Boolean(
+          before && (before.scheduledDate !== input.scheduledDate || before.scheduledTime !== input.scheduledTime)
+        );
+        if (input.changeReason && input.changeReason.trim()) {
+          await db.updateScheduleWithReason(input.id, input.scheduledDate, input.scheduledTime, input.changeReason.trim());
+        } else {
+          await db.updateSchedule(input.id, input.scheduledDate, input.scheduledTime);
+        }
+        if (input.notify && before) {
+          const message = buildScheduleConfirmedMessage(
+            before.customerName, input.scheduledDate, input.scheduledTime, isChanged, input.changeReason
+          );
+          await notifyAndLog({
+            requestId: input.id, phoneNumber: before.phoneNumber,
+            messageType: isChanged ? "일정변경" : "일정확정", content: message,
+          });
+        }
+        return { success: true };
+      }),
+
+    // 지사 배정 안내 발송 (본사 관리자용, 발송 여부 선택)
+    notifyBranchAssigned: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const req = await db.getRepairRequestById(input.id);
+        if (!req) throw new Error("접수 정보를 찾을 수 없습니다.");
+        const branch = req.branchId ? await db.getBranchById(req.branchId) : null;
+        const message = buildBranchAssignedMessage(
+          req.customerName, branch?.name ?? "본사", branch?.phoneNumber
+        );
+        const r = await notifyAndLog({
+          requestId: req.id, phoneNumber: req.phoneNumber,
+          messageType: "지사배정안내", content: message,
+        });
+        return { success: true, result: r.result };
+      }),
+
+    // 결제 완료 처리 (지사장/본사)
+    markPaid: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db2 = await db.getDb();
+        if (!db2) throw new Error("Database not available");
+        const { repairRequests: rr } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db2.update(rr).set({ paidAt: new Date(), workflowStage: "결제완료" }).where(eq(rr.id, input.id));
+        return { success: true };
+      }),
+
+    // 후기 요청 발송 (지사장/본사)
+    requestReview: publicProcedure
+      .input(z.object({ id: z.number(), reviewUrl: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const db2 = await db.getDb();
+        if (!db2) throw new Error("Database not available");
+        const { repairRequests: rr } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db2.update(rr).set({ reviewRequestedAt: new Date(), workflowStage: "후기요청" }).where(eq(rr.id, input.id));
+        const req = await db.getRepairRequestById(input.id);
+        if (req) {
+          const message = buildWorkCompletedMessage(req.customerName, input.reviewUrl);
+          await notifyAndLog({
+            requestId: req.id, phoneNumber: req.phoneNumber,
+            messageType: "후기요청", content: message,
+          });
+        }
         return { success: true };
       }),
 
@@ -664,11 +776,11 @@ export const appRouter = router({
         if (!db2) throw new Error("Database not available");
         const { repairRequests: rr } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
-        await db2.update(rr).set({ estimateAmount: String(input.estimateAmount), status: "견적승인대기" }).where(eq(rr.id, input.id));
+        await db2.update(rr).set({ estimateAmount: String(input.estimateAmount), status: "견적승인대기", workflowStage: "견적전달", estimateSentAt: new Date() }).where(eq(rr.id, input.id));
         return { success: true };
       }),
 
-    // 견적 승인 (고객용)
+    // 견적 승인 (고객용) → 견적승인 단계로 이동 (기사 배정/일정 확정 가능)
     approveEstimate: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -676,7 +788,7 @@ export const appRouter = router({
         if (!db2) throw new Error("Database not available");
         const { repairRequests: rr } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
-        await db2.update(rr).set({ estimateApprovedAt: new Date(), status: "작업진행중" }).where(eq(rr.id, input.id));
+        await db2.update(rr).set({ estimateApprovedAt: new Date(), status: "기사배정대기", workflowStage: "견적승인" }).where(eq(rr.id, input.id));
         return { success: true };
       }),
 
@@ -697,6 +809,9 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), branchId: z.number().nullable() }))
       .mutation(async ({ input }) => {
         await db.reassignBranch(input.id, input.branchId);
+        if (input.branchId) {
+          await db.setWorkflowStage(input.id, "지사배정");
+        }
         return { success: true };
       }),
   }),
@@ -1221,6 +1336,11 @@ export const appRouter = router({
         demoMode: z.boolean().optional(), // 데모 모드: SMS 발송 안 함
       }))
       .mutation(async ({ input }) => {
+        // 견적 게이팅: 견적이 고객에게 전달되었으나 아직 승인되지 않았다면 출발 차단
+        const reqForGate = await db.getRepairRequestById(input.requestId);
+        if (reqForGate && reqForGate.estimateSentAt && !reqForGate.estimateApprovedAt) {
+          throw new Error("고객이 견적을 아직 승인하지 않았습니다. 견적 승인 후 출발 처리할 수 있습니다.");
+        }
         // 이미 이동중인 세션이 있으면 종료
         const existing = await db.getLocationSessionByRequestId(input.requestId);
         if (existing) {
@@ -1251,7 +1371,9 @@ export const appRouter = router({
         // 고객용 전용 링크 생성
         const baseUrl = process.env.SITE_URL || "https://futureenergytech.co.kr";
         const trackingUrl = `${baseUrl}/track/${token}`;
-        // 고객 SMS 발송 (데모 모드가 아닌 경우)
+        // 워크플로우 단계: 기사출발
+        try { await db.setWorkflowStage(input.requestId, "기사출발"); } catch {}
+        // 고객 알림 발송 (데모 모드가 아닌 경우, 알림톡 우선 → 문자 대체)
         let smsSent = false;
         if (!input.demoMode) {
           try {
@@ -1260,8 +1382,13 @@ export const appRouter = router({
               input.technicianName,
               trackingUrl
             );
-            const result = await sendSms(input.customerPhone, msg);
-            if (result.result === "SUCCESS") {
+            const r = await notifyAndLog({
+              requestId: input.requestId,
+              phoneNumber: input.customerPhone,
+              messageType: "기사출발",
+              content: msg,
+            });
+            if (r.result === "SUCCESS") {
               smsSent = true;
               await db.markLocationSessionSmsSent(token);
             }
@@ -1350,6 +1477,41 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await db.stopLocationSession(input.token, input.reason ?? "업무취소");
         return { success: true, status: input.reason ?? "업무취소" };
+      }),
+
+    // 기사 도착 처리 (도착 버튼) → 단계 갱신 + 고객 도착 안내
+    markArrived: publicProcedure
+      .input(z.object({ requestId: z.number(), token: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        if (input.token) {
+          await db.stopLocationSession(input.token, "도착완료");
+        }
+        try { await db.setWorkflowStage(input.requestId, "기사도착"); } catch {}
+        const req = await db.getRepairRequestById(input.requestId);
+        if (req) {
+          const message = buildTechnicianArrivedMessage(req.customerName, req.technicianName ?? "담당 기사");
+          await notifyAndLog({
+            requestId: req.id, phoneNumber: req.phoneNumber,
+            messageType: "기사도착", content: message,
+          });
+        }
+        return { success: true };
+      }),
+
+    // 작업 완료 처리 (완료 버튼) → 단계 갱신 + 고객 완료 안내
+    markWorkCompleted: publicProcedure
+      .input(z.object({ requestId: z.number(), reviewUrl: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        try { await db.setWorkflowStage(input.requestId, "작업완료"); } catch {}
+        const req = await db.getRepairRequestById(input.requestId);
+        if (req) {
+          const message = buildWorkCompletedMessage(req.customerName, input.reviewUrl);
+          await notifyAndLog({
+            requestId: req.id, phoneNumber: req.phoneNumber,
+            messageType: "작업완료", content: message,
+          });
+        }
+        return { success: true };
       }),
 
     // 토큰으로 위치 세션 재발송 SMS (고객이 문자를 못 받은 경우)

@@ -201,9 +201,23 @@ export async function assignTechnician(
       technicianId,
       technicianName,
       status: "방문예정",
+      workflowStage: scheduledDate && scheduledTime ? "일정확정" : "기사배정",
       ...(scheduledDate ? { scheduledDate } : {}),
       ...(scheduledTime ? { scheduledTime } : {}),
     })
+    .where(eq(repairRequests.id, id));
+}
+
+// ─── 워크플로우 단계만 갱신 ───────────────────────────────────
+export async function setWorkflowStage(
+  id: number,
+  stage: RepairRequest["workflowStage"]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(repairRequests)
+    .set({ workflowStage: stage })
     .where(eq(repairRequests.id, id));
 }
 
@@ -218,7 +232,22 @@ export async function updateSchedule(
 
   await db
     .update(repairRequests)
-    .set({ scheduledDate, scheduledTime })
+    .set({ scheduledDate, scheduledTime, workflowStage: "일정확정" })
+    .where(eq(repairRequests.id, id));
+}
+
+// ─── 일정 변경 (사유 기록) ────────────────────────────────────
+export async function updateScheduleWithReason(
+  id: number,
+  scheduledDate: string,
+  scheduledTime: string,
+  reason: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(repairRequests)
+    .set({ scheduledDate, scheduledTime, scheduleChangeReason: reason, workflowStage: "일정확정" })
     .where(eq(repairRequests.id, id));
 }
 

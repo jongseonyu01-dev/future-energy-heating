@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
+  findNodeHandle,
+  UIManager,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAppAuth } from "@/lib/auth-context";
@@ -27,6 +30,7 @@ export default function LoginScreen() {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
@@ -55,6 +59,25 @@ export default function LoginScreen() {
 
   const s = styles(colors);
 
+  // 포커스된 입력칸이 키보드 위로 보이도록 자동 스크롤
+  const scrollRef = useRef<ScrollView>(null);
+  const handleFocus = (e: any) => {
+    const node = findNodeHandle(e?.target);
+    const scrollNode = scrollRef.current;
+    if (!node || !scrollNode) return;
+    // measureLayout으로 입력칸의 스크롤뷰 내 위치를 구해 약간 위로 스크롤
+    try {
+      UIManager.measureLayout(
+        node,
+        findNodeHandle(scrollNode as any) as number,
+        () => {},
+        (_x: number, y: number) => {
+          scrollNode.scrollTo({ y: Math.max(y - 80, 0), animated: true });
+        }
+      );
+    } catch {}
+  };
+
   const clearMsg = () => { setError(""); setInfo(""); };
   const go = (v: View2) => { setView(v); clearMsg(); };
 
@@ -67,10 +90,12 @@ export default function LoginScreen() {
         name: data.name ?? null,
         technicianId: data.technicianId ?? null,
         branchId: data.branchId ?? null,
+        branchName: data.branchName ?? null,
         phoneNumber: data.phoneNumber ?? null,
         mustChangePassword: false,
       },
-      loginId
+      loginId,
+      rememberMe
     );
     router.replace("/(tabs)");
   };
@@ -106,12 +131,14 @@ export default function LoginScreen() {
   const resetPwMutation = trpc.auth.resetPassword.useMutation();
 
   const handleLogin = () => {
+    Keyboard.dismiss();
     clearMsg();
     if (!loginId.trim() || !password.trim()) { setError("아이디와 비밀번호를 입력해주세요."); return; }
     loginMutation.mutate({ loginId: loginId.trim(), password });
   };
 
   const handleChangePw = () => {
+    Keyboard.dismiss();
     clearMsg();
     if (newPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     if (newPw !== newPw2) { setError("비밀번호가 일치하지 않습니다."); return; }
@@ -138,6 +165,7 @@ export default function LoginScreen() {
     );
   };
   const handleSignup = () => {
+    Keyboard.dismiss();
     clearMsg();
     if (!suName.trim() || !suPhone.trim() || !suLoginId.trim() || !suPw) { setError("모든 항목을 입력해주세요."); return; }
     if (suPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
@@ -158,6 +186,7 @@ export default function LoginScreen() {
     );
   };
   const handleFindId = () => {
+    Keyboard.dismiss();
     clearMsg();
     if (!fiPhone.trim() || !fiCode.trim()) { setError("휴대전화 번호와 인증번호를 입력해주세요."); return; }
     findIdMutation.mutate(
@@ -176,6 +205,7 @@ export default function LoginScreen() {
     );
   };
   const handleResetPw = () => {
+    Keyboard.dismiss();
     clearMsg();
     if (!rpLoginId.trim() || !rpPhone.trim() || !rpCode.trim() || !rpPw) { setError("모든 항목을 입력해주세요."); return; }
     if (rpPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
@@ -192,10 +222,30 @@ export default function LoginScreen() {
     </>
   );
 
+  // 아이디/비번 공통 입력 속성: 자동 대문자/자동완성/자동수정 모두 비활성화
+  const idInputProps = {
+    autoCapitalize: "none" as const,
+    autoCorrect: false,
+    autoComplete: "off" as const,
+    textContentType: "none" as const,
+    spellCheck: false,
+    importantForAutofill: "no" as const,
+  };
+
   return (
-    <ScreenContainer>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+    <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={s.header}>
             <View style={s.logoBox}><Text style={s.logoText}>🌐</Text></View>
             <Text style={s.title}>퓨처에너지테크</Text>
@@ -208,12 +258,19 @@ export default function LoginScreen() {
             <>
               <View style={s.form}>
                 <Text style={s.label}>아이디</Text>
-                <TextInput style={s.input} value={loginId} onChangeText={setLoginId} placeholder="아이디를 입력하세요" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} returnKeyType="next" />
+                <TextInput style={s.input} value={loginId} onChangeText={setLoginId} onFocus={handleFocus} placeholder="아이디를 입력하세요" placeholderTextColor={colors.muted} returnKeyType="next" {...idInputProps} />
                 <Text style={s.label}>비밀번호</Text>
                 <View style={s.pwWrap}>
-                  <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={password} onChangeText={setPassword} placeholder="비밀번호를 입력하세요" placeholderTextColor={colors.muted} secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleLogin} />
+                  <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={password} onChangeText={setPassword} onFocus={handleFocus} placeholder="비밀번호를 입력하세요" placeholderTextColor={colors.muted} secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleLogin} {...idInputProps} />
                   <TouchableOpacity onPress={() => setShowPw(!showPw)} style={s.pwToggle}><Text style={{ fontSize: 18 }}>{showPw ? "🙈" : "👁"}</Text></TouchableOpacity>
                 </View>
+
+                {/* 자동 로그인 */}
+                <TouchableOpacity style={s.rememberRow} onPress={() => setRememberMe(!rememberMe)} activeOpacity={0.7}>
+                  <View style={[s.checkbox, rememberMe && s.checkboxOn]}>{rememberMe ? <Text style={s.checkMark}>✓</Text> : null}</View>
+                  <Text style={s.rememberText}>자동 로그인</Text>
+                </TouchableOpacity>
+
                 <Msg />
                 <TouchableOpacity style={[s.loginBtn, loginMutation.isPending && s.loginBtnDisabled]} onPress={handleLogin} disabled={loginMutation.isPending} activeOpacity={0.8}>
                   {loginMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>로그인</Text>}
@@ -242,11 +299,11 @@ export default function LoginScreen() {
               <Text style={s.noticeBox}>임시 비밀번호로 로그인하셨습니다. 보안을 위해 새 비밀번호로 변경해주세요.</Text>
               <Text style={s.label}>새 비밀번호</Text>
               <View style={s.pwWrap}>
-                <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={newPw} onChangeText={setNewPw} placeholder="새 비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry={!showPw} />
+                <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={newPw} onChangeText={setNewPw} onFocus={handleFocus} placeholder="새 비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry={!showPw} {...idInputProps} />
                 <TouchableOpacity onPress={() => setShowPw(!showPw)} style={s.pwToggle}><Text style={{ fontSize: 18 }}>{showPw ? "🙈" : "👁"}</Text></TouchableOpacity>
               </View>
               <Text style={s.label}>새 비밀번호 확인</Text>
-              <TextInput style={s.input} value={newPw2} onChangeText={setNewPw2} placeholder="새 비밀번호 다시 입력" placeholderTextColor={colors.muted} secureTextEntry />
+              <TextInput style={s.input} value={newPw2} onChangeText={setNewPw2} onFocus={handleFocus} placeholder="새 비밀번호 다시 입력" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
               <TouchableOpacity style={[s.loginBtn, changePwMutation.isPending && s.loginBtnDisabled]} onPress={handleChangePw} disabled={changePwMutation.isPending} activeOpacity={0.8}>
                 {changePwMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>변경 후 시작하기</Text>}
@@ -259,25 +316,25 @@ export default function LoginScreen() {
             <View style={s.form}>
               <Text style={s.formTitle}>고객 회원가입</Text>
               <Text style={s.label}>이름</Text>
-              <TextInput style={s.input} value={suName} onChangeText={setSuName} placeholder="이름" placeholderTextColor={colors.muted} />
+              <TextInput style={s.input} value={suName} onChangeText={setSuName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
               <Text style={s.label}>휴대전화 번호</Text>
               <View style={s.rowField}>
-                <TextInput style={[s.input, { flex: 1 }]} value={suPhone} onChangeText={setSuPhone} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+                <TextInput style={[s.input, { flex: 1 }]} value={suPhone} onChangeText={setSuPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
                 <TouchableOpacity style={s.smallBtn} onPress={suSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
               </View>
               {suCodeSent && (
                 <>
                   <Text style={s.label}>인증번호</Text>
                   <View style={s.rowField}>
-                    <TextInput style={[s.input, { flex: 1 }]} value={suCode} onChangeText={setSuCode} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
+                    <TextInput style={[s.input, { flex: 1 }]} value={suCode} onChangeText={setSuCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
                     <TouchableOpacity style={[s.smallBtn, { backgroundColor: "#6B7280" }]} onPress={suVerify}><Text style={s.smallBtnText}>확인</Text></TouchableOpacity>
                   </View>
                 </>
               )}
               <Text style={s.label}>아이디</Text>
-              <TextInput style={s.input} value={suLoginId} onChangeText={setSuLoginId} placeholder="사용할 아이디" placeholderTextColor={colors.muted} autoCapitalize="none" />
+              <TextInput style={s.input} value={suLoginId} onChangeText={setSuLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
               <Text style={s.label}>비밀번호</Text>
-              <TextInput style={s.input} value={suPw} onChangeText={setSuPw} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry />
+              <TextInput style={s.input} value={suPw} onChangeText={setSuPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
               <TouchableOpacity style={[s.loginBtn, registerMutation.isPending && s.loginBtnDisabled]} onPress={handleSignup} disabled={registerMutation.isPending} activeOpacity={0.8}>
                 {registerMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>가입하기</Text>}
@@ -292,11 +349,11 @@ export default function LoginScreen() {
               <Text style={s.formTitle}>아이디 찾기</Text>
               <Text style={s.label}>휴대전화 번호</Text>
               <View style={s.rowField}>
-                <TextInput style={[s.input, { flex: 1 }]} value={fiPhone} onChangeText={setFiPhone} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+                <TextInput style={[s.input, { flex: 1 }]} value={fiPhone} onChangeText={setFiPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
                 <TouchableOpacity style={s.smallBtn} onPress={fiSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
               </View>
               <Text style={s.label}>인증번호</Text>
-              <TextInput style={s.input} value={fiCode} onChangeText={setFiCode} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
+              <TextInput style={s.input} value={fiCode} onChangeText={setFiCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
               <Msg />
               {fiResult ? <Text style={s.resultBox}>가입된 아이디: {fiResult}</Text> : null}
               <TouchableOpacity style={s.loginBtn} onPress={handleFindId} activeOpacity={0.8}><Text style={s.loginBtnText}>아이디 찾기</Text></TouchableOpacity>
@@ -309,16 +366,16 @@ export default function LoginScreen() {
             <View style={s.form}>
               <Text style={s.formTitle}>비밀번호 재설정</Text>
               <Text style={s.label}>아이디</Text>
-              <TextInput style={s.input} value={rpLoginId} onChangeText={setRpLoginId} placeholder="아이디" placeholderTextColor={colors.muted} autoCapitalize="none" />
+              <TextInput style={s.input} value={rpLoginId} onChangeText={setRpLoginId} onFocus={handleFocus} placeholder="아이디" placeholderTextColor={colors.muted} {...idInputProps} />
               <Text style={s.label}>휴대전화 번호</Text>
               <View style={s.rowField}>
-                <TextInput style={[s.input, { flex: 1 }]} value={rpPhone} onChangeText={setRpPhone} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+                <TextInput style={[s.input, { flex: 1 }]} value={rpPhone} onChangeText={setRpPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
                 <TouchableOpacity style={s.smallBtn} onPress={rpSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
               </View>
               <Text style={s.label}>인증번호</Text>
-              <TextInput style={s.input} value={rpCode} onChangeText={setRpCode} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
+              <TextInput style={s.input} value={rpCode} onChangeText={setRpCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
               <Text style={s.label}>새 비밀번호</Text>
-              <TextInput style={s.input} value={rpPw} onChangeText={setRpPw} placeholder="새 비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry />
+              <TextInput style={s.input} value={rpPw} onChangeText={setRpPw} onFocus={handleFocus} placeholder="새 비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
               <TouchableOpacity style={[s.loginBtn, resetPwMutation.isPending && s.loginBtnDisabled]} onPress={handleResetPw} disabled={resetPwMutation.isPending} activeOpacity={0.8}>
                 {resetPwMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>비밀번호 재설정</Text>}
@@ -326,6 +383,9 @@ export default function LoginScreen() {
               <TouchableOpacity onPress={() => go("login")} style={{ marginTop: 14, alignItems: "center" }}><Text style={s.link}>← 로그인으로 돌아가기</Text></TouchableOpacity>
             </View>
           )}
+
+          {/* 키보드 위 여백: 작은 화면에서도 버튼이 가려지지 않도록 충분히 확보 */}
+          <View style={{ height: 120 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -350,6 +410,11 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     rowField: { flexDirection: "row", alignItems: "center", gap: 8 },
     smallBtn: { backgroundColor: "#FF6B35", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13 },
     smallBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+    rememberRow: { flexDirection: "row", alignItems: "center", marginTop: 16, gap: 8 },
+    checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+    checkboxOn: { backgroundColor: "#FF6B35", borderColor: "#FF6B35" },
+    checkMark: { color: "#fff", fontSize: 14, fontWeight: "900" },
+    rememberText: { fontSize: 14, color: colors.foreground, fontWeight: "500" },
     errorText: { color: colors.error, fontSize: 13, marginTop: 10, textAlign: "center" },
     infoText: { color: "#1D4ED8", fontSize: 13, marginTop: 10, textAlign: "center" },
     resultBox: { backgroundColor: colors.background, borderRadius: 10, padding: 12, marginTop: 10, fontSize: 14, fontWeight: "700", color: colors.foreground, textAlign: "center" },

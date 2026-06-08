@@ -143,7 +143,30 @@ export const repairRequests = mysqlTable("repair_requests", {
   inspectionResult: text("inspectionResult"),
   // 견적 금액
   estimateAmount: decimal("estimateAmount", { precision: 12, scale: 2 }),
-  estimateApprovedAt: timestamp("estimateApprovedAt"),
+  estimateSentAt: timestamp("estimateSentAt"),       // 고객에게 견적 전달 시각
+  estimateApprovedAt: timestamp("estimateApprovedAt"), // 고객 견적 승인 시각
+  // 워크플로우 13단계 (enum status와 별개로 세부 진행단계 추적)
+  workflowStage: mysqlEnum("workflowStage", [
+    "접수완료",
+    "지사배정",
+    "현장확인",
+    "견적작성",
+    "견적전달",
+    "견적승인",
+    "기사배정",
+    "일정확정",
+    "기사출발",
+    "기사도착",
+    "작업진행",
+    "작업완료",
+    "결제완료",
+    "후기요청",
+  ]).notNull().default("접수완료"),
+  // 결제 완료 / 후기 요청
+  paidAt: timestamp("paidAt"),
+  reviewRequestedAt: timestamp("reviewRequestedAt"),
+  // 일정 변경 사유 (희망일정과 확정일정이 다를 때 기록)
+  scheduleChangeReason: text("scheduleChangeReason"),
   // 작업 완료 정보
   completedAt: timestamp("completedAt"),
   completionMemo: text("completionMemo"),
@@ -209,6 +232,8 @@ export const notificationLogs = mysqlTable("notification_logs", {
   content: text("content"),
   result: mysqlEnum("result", ["SUCCESS", "FAILED", "SKIPPED"]).notNull().default("SKIPPED"),
   errorMessage: text("errorMessage"),
+  // 알림톡 시도 후 문자로 대체 발송되었는지 여부
+  fallbackUsed: boolean("fallbackUsed").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

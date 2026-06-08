@@ -10,6 +10,7 @@ export interface AuthUser {
   name?: string | null;
   technicianId?: number | null;
   branchId?: number | null;
+  branchName?: string | null;
   phoneNumber?: string | null;
   mustChangePassword?: boolean;
 }
@@ -17,7 +18,8 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (user: AuthUser, loginId: string) => Promise<void>;
+  /** rememberMe=true면 기기에 세션을 저장(자동 로그인), false면 앱 재시작 시 로그아웃 */
+  login: (user: AuthUser, loginId: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -45,10 +47,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const login = useCallback(async (authUser: AuthUser, loginId: string) => {
+  const login = useCallback(async (authUser: AuthUser, loginId: string, rememberMe: boolean = true) => {
     const userWithLoginId = { ...authUser, loginId };
     setUser(userWithLoginId);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));
+    // 자동 로그인 체크 시에만 기기에 세션 저장. 해제 시 저장된 세션 제거.
+    if (rememberMe) {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));
+    } else {
+      await AsyncStorage.removeItem(STORAGE_KEY);
+    }
   }, []);
 
   const logout = useCallback(async () => {

@@ -88,15 +88,19 @@
     </div>
     <div class="form-group">
       <label>방문 시간</label>
-      <select id="assignTime">
+      <select id="assignTime" onchange="checkScheduleConflict()">
         <option value="09:00">오전 9시</option><option value="10:00">오전 10시</option>
         <option value="11:00">오전 11시</option><option value="13:00">오후 1시</option>
         <option value="14:00">오후 2시</option><option value="15:00">오후 3시</option>
         <option value="16:00">오후 4시</option><option value="17:00">오후 5시</option>
       </select>
     </div>
+    <div id="assignConflict" style="display:none;background:#fef2f2;color:#b91c1c;border-radius:8px;padding:10px;font-size:13px;margin:6px 0"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0">
+      <input type="checkbox" id="assignNotify" checked /> 고객에게 일정 안내 문자/알림톡 발송
+    </label>
     <div class="modal-actions">
-      <button class="btn-primary" onclick="submitAssign()">배정 완료</button>
+      <button class="btn-primary" onclick="submitAssign()">배정 및 일정 확정</button>
       <button class="btn-cancel" onclick="closeModal('assignModal')">취소</button>
     </div>
   </div>
@@ -399,9 +403,14 @@
     else if (currentPanel === 'sensors') loadSensors();
   }
 
+  // 프론트에서 사용하는 간단 이름 → 실제 라우터 procedure 매핑
+  function resolveProc(proc) {
+    const alias = { 'repair.list':'repair.listAll', 'branch.list':'branch.listAll', 'sensor.list':'sensor.listAll' };
+    return alias[proc] || proc;
+  }
   async function trpc(proc, input) {
     try {
-      let url = API + '/' + proc;
+      let url = API + '/' + resolveProc(proc);
       let opts = { headers: { 'Content-Type': 'application/json' } };
       if (!input || Object.keys(input).length === 0) {
         url += '?input=' + encodeURIComponent(JSON.stringify({ json: {} }));
@@ -418,8 +427,15 @@
 
   function statusLabel(s) {
     const m = { pending:'대기', assigned:'배정됨', in_progress:'진행중', completed:'완료', cancelled:'취소' };
-    return m[s] || s || '대기';
+    return m[s] || s || '신규접수';
   }
+  function statusClass(s) {
+    const m = { '신규접수':'pending','기사배정대기':'pending','방문예정':'assigned','작업진행중':'in_progress','견적승인대기':'in_progress','작업완료':'completed','재방문필요':'cancelled', pending:'pending',assigned:'assigned',in_progress:'in_progress',completed:'completed',cancelled:'cancelled' };
+    return m[s] || 'pending';
+  }
+  function addrText(r) { return `${r.apartmentName || r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호`.trim(); }
+  // 미배정(기사 없음) 여부
+  function isUnassignedReq(r) { return !r.technicianId; }
 
   async function loadOverview() {
     const [repairs, sensors] = await Promise.all([
@@ -432,9 +448,9 @@
     const thisMonth = new Date().toISOString().slice(0, 7);
 
     document.getElementById('bstat-today').textContent = list.filter(r => r.createdAt?.startsWith(today)).length;
-    document.getElementById('bstat-pending').textContent = list.filter(r => r.status === 'pending').length;
-    document.getElementById('bstat-inprogress').textContent = list.filter(r => r.status === 'in_progress' || r.status === 'assigned').length;
-    document.getElementById('bstat-completed').textContent = list.filter(r => r.status === 'completed' && r.createdAt?.startsWith(thisMonth)).length;
+    document.getElementById('bstat-pending').textContent = list.filter(r => isUnassignedReq(r) && r.status !== '작업완료').length;
+    document.getElementById('bstat-inprogress').textContent = list.filter(r => !isUnassignedReq(r) && r.status !== '작업완료').length;
+    document.getElementById('bstat-completed').textContent = list.filter(r => r.status === '작업완료' && r.createdAt?.startsWith(thisMonth)).length;
     document.getElementById('bstat-techs').textContent = '-';
     document.getElementById('bstat-alerts').textContent = (sensors || []).filter(s => s.status === 'leak_detected' && (!branchId || s.branchId === branchId)).length;
 
@@ -445,12 +461,12 @@
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.slice(0,2).join(', ') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
-        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
         <td>
-          ${r.status === 'pending' ? `<button class="action-btn btn-assign" onclick="openAssign(${r.id})">배정</button>` : ''}
+          <button class="action-btn btn-assign" onclick="openAssign(${r.id})">${isUnassignedReq(r) ? '배정' : '재배정'}</button>
           <button class="action-btn btn-estimate" onclick="openEstimate(${r.id})">견적</button>
         </td>
       </tr>
@@ -488,15 +504,15 @@
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.customerPhone || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${r.phoneNumber || r.customerPhone || '-'}</td>
+        <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
-        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
         <td>
-          ${r.status === 'pending' ? `<button class="action-btn btn-assign" onclick="openAssign(${r.id})">배정</button>` : ''}
+          <button class="action-btn btn-assign" onclick="openAssign(${r.id})">${isUnassignedReq(r) ? '배정' : '재배정'}</button>
           <button class="action-btn btn-estimate" onclick="openEstimate(${r.id})">견적</button>
-          ${r.status === 'in_progress' ? `<button class="action-btn btn-complete" onclick="completeRequest(${r.id})">완료</button>` : ''}
+          ${r.status !== '작업완료' ? `<button class="action-btn btn-complete" onclick="completeRequest(${r.id})">완료</button>` : ''}
         </td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="8">접수 데이터가 없습니다</td></tr>';
@@ -505,13 +521,13 @@
   async function loadUnassigned() {
     const data = await trpc('repair.list', {});
     const branchId = user.branchId;
-    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && r.status === 'pending');
+    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && isUnassignedReq(r) && r.status !== '작업완료');
     const tbody = document.getElementById('unassignedTbody');
     tbody.innerHTML = list.length ? list.map(r => `
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
         <td><button class="action-btn btn-assign" onclick="openAssign(${r.id})">기사 배정</button></td>
@@ -522,17 +538,17 @@
   async function loadSchedule() {
     const data = await trpc('repair.list', {});
     const branchId = user.branchId;
-    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && (r.status === 'assigned' || r.status === 'in_progress') && r.visitDate);
+    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && !isUnassignedReq(r) && r.status !== '작업완료' && r.scheduledDate);
     const tbody = document.getElementById('scheduleTbody');
     tbody.innerHTML = list.length ? list.map(r => `
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
-        <td>${r.technicianId ? '기사 #' + r.technicianId : '미배정'}</td>
-        <td>${r.visitDate || '-'}</td>
-        <td>${r.visitTime || '-'}</td>
-        <td><span class="status-badge status-${r.status}">${statusLabel(r.status)}</span></td>
+        <td>${addrText(r)}</td>
+        <td>${r.technicianName || (r.technicianId ? '기사 #' + r.technicianId : '미배정')}</td>
+        <td>${r.scheduledDate || '-'}</td>
+        <td>${r.scheduledTime || '-'}</td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
         <td><button class="action-btn btn-assign" onclick="openAssign(${r.id})">변경</button></td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="8">예정된 방문 일정이 없습니다</td></tr>';
@@ -552,7 +568,7 @@
     const tbody = document.getElementById('branchSalesTbody');
     tbody.innerHTML = months.map(m => {
       const ml = list.filter(r => r.createdAt?.startsWith(m));
-      const completed = ml.filter(r => r.status === 'completed').length;
+      const completed = ml.filter(r => r.status === '작업완료').length;
       const rate = ml.length ? Math.round(completed/ml.length*100) : 0;
       return `<tr><td>${parseInt(m.slice(5))}월</td><td>${ml.length}</td><td>${completed}</td><td>${rate}%</td></tr>`;
     }).join('');
@@ -581,28 +597,56 @@
     }).join('') : '<div style="text-align:center;padding:40px;color:#6b7280;grid-column:1/-1">등록된 센서가 없습니다</div>';
   }
 
-  function openAssign(requestId) {
+  let _branchRequests = [];
+  let _branchTechs = [];
+  async function openAssign(requestId) {
     selectedRequestId = requestId;
-    document.getElementById('assignDate').value = '';
+    document.getElementById('assignConflict').style.display = 'none';
+    const [reqs, techs] = await Promise.all([ trpc('repair.list', {}), trpc('technicians.list', {}) ]);
+    _branchRequests = reqs || [];
+    // 소속 지사 기사만 표시
+    _branchTechs = (techs || []).filter(t => !user.branchId || t.branchId === user.branchId);
+    const r = _branchRequests.find(x => x.id === requestId);
+    const sel = document.getElementById('assignTechSelect');
+    sel.innerHTML = '<option value="">기사를 선택하세요</option>' +
+      _branchTechs.map(t => `<option value="${t.id}" data-name="${(t.name||'').replace(/"/g,'&quot;')}">${t.name}</option>`).join('');
+    sel.onchange = checkScheduleConflict;
+    document.getElementById('assignDate').value = (r && (r.scheduledDate || r.preferredDate)) || '';
+    if (r && r.scheduledTime) document.getElementById('assignTime').value = r.scheduledTime;
+    if (r && r.technicianId) sel.value = String(r.technicianId);
     document.getElementById('assignModal').classList.add('show');
   }
 
-  async function submitAssign() {
+  function checkScheduleConflict() {
+    const techId = parseInt(document.getElementById('assignTechSelect').value || '0', 10);
     const date = document.getElementById('assignDate').value;
     const time = document.getElementById('assignTime').value;
+    const box = document.getElementById('assignConflict');
+    if (!techId || !date) { box.style.display = 'none'; return; }
+    const conflicts = _branchRequests.filter(r => r.id !== selectedRequestId && r.technicianId === techId && r.scheduledDate === date && r.status !== '작업완료' && (!time || !r.scheduledTime || r.scheduledTime === time));
+    if (conflicts.length) {
+      box.style.display = 'block';
+      box.innerHTML = `⚠️ 이 기사는 ${date}에 이미 ${conflicts.length}건의 방문이 있습니다 (${conflicts.map(c=>'#'+c.id).join(', ')}).`;
+    } else { box.style.display = 'none'; }
+  }
+
+  async function submitAssign() {
+    const sel = document.getElementById('assignTechSelect');
+    const techId = parseInt(sel.value || '0', 10);
+    const techName = sel.options[sel.selectedIndex]?.getAttribute('data-name') || '';
+    const date = document.getElementById('assignDate').value;
+    const time = document.getElementById('assignTime').value;
+    const notify = document.getElementById('assignNotify').checked;
+    if (!techId) { alert('담당 기사를 선택해 주세요.'); return; }
     if (!date) { alert('방문 예정일을 선택해 주세요.'); return; }
-    const res = await fetch(API + '/repair.update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ json: { id: selectedRequestId, status: 'assigned', visitDate: date, visitTime: time } })
-    });
-    const data = await res.json();
-    if (data.result?.data?.json?.id) {
-      alert('배정이 완료되었습니다.');
+    try {
+      await trpc('repair.assignTechnician', { id: selectedRequestId, technicianId: techId, technicianName: techName, scheduledDate: date, scheduledTime: time, notify: false });
+      await trpc('repair.updateSchedule', { id: selectedRequestId, scheduledDate: date, scheduledTime: time, notify });
+      alert('기사 배정과 일정 확정이 완료되었습니다.' + (notify ? '\n고객에게 안내를 발송했습니다.' : ''));
       closeModal('assignModal');
       loadCurrentPanel();
-    } else {
-      alert('배정 실패: ' + (data.error?.message || '오류'));
+    } catch (e) {
+      alert('배정 실패: ' + (e?.message || e));
     }
   }
 

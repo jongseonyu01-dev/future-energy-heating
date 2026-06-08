@@ -289,8 +289,8 @@
         <h3>💬 문자 발송 이력</h3>
         <div style="overflow-x:auto">
           <table class="data-table">
-            <thead><tr><th>발송 시간</th><th>수신 번호</th><th>메시지 유형</th><th>내용 요약</th><th>결과</th><th>실패 사유</th></tr></thead>
-            <tbody id="smsTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+            <thead><tr><th>발송 시간</th><th>수신 번호</th><th>메시지 유형</th><th>채널</th><th>내용 요약</th><th>결과</th><th>실패 사유</th></tr></thead>
+            <tbody id="smsTbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -325,8 +325,8 @@
         <h3>👷 기사 배정 현황</h3>
         <div style="overflow-x:auto">
           <table class="data-table">
-            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>담당기사</th><th>방문예정일</th><th>상태</th></tr></thead>
-            <tbody id="assignTbody"><tr class="loading-row"><td colspan="6">데이터를 불러오는 중...</td></tr></tbody>
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>담당기사</th><th>방문예정/희망</th><th>상태</th><th>관리</th></tr></thead>
+            <tbody id="assignTbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -585,7 +585,14 @@
     else if (currentPanel === 'materials') loadMaterials();
   }
 
+  // 서버 라우터 실제 명칭으로 보정 (목록 조회는 listAll)
+  const PROC_ALIAS = {
+    'repair.list': 'repair.listAll',
+    'branch.list': 'branch.listAll',
+    'sensor.list': 'sensor.listAll',
+  };
   async function trpc(proc, input) {
+    proc = PROC_ALIAS[proc] || proc;
     try {
       // mutation 여부 판단: _mutation 플래그가 있거나 진짜 페이로드가 있으면 POST
       const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
@@ -635,11 +642,11 @@
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.slice(0,2).join(', ') + (r.symptoms.length > 2 ? '...' : '') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,16).replace('T',' ') : '-'}</td>
-        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
-        <td><button class="action-btn btn-assign" onclick="alert('앱에서 기사를 배정해 주세요')">배정</button></td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="7">접수 데이터가 없습니다</td></tr>';
 
@@ -674,7 +681,26 @@
 
   function statusLabel(s) {
     const m = { pending:'대기', assigned:'배정됨', in_progress:'진행중', completed:'완료', cancelled:'취소' };
-    return m[s] || s || '대기';
+    return m[s] || s || '신규접수';
+  }
+  // 한글 상태값 → 배지 색상 클래스 매핑
+  function statusClass(s) {
+    const m = {
+      '신규접수':'pending', '기사배정대기':'pending',
+      '방문예정':'assigned', '작업진행중':'in_progress',
+      '견적승인대기':'in_progress', '작업완료':'completed',
+      '재방문필요':'cancelled',
+      pending:'pending', assigned:'assigned', in_progress:'in_progress', completed:'completed', cancelled:'cancelled',
+    };
+    return m[s] || 'pending';
+  }
+  // 접수 행 공통 주소 표기
+  function addrText(r) {
+    return `${r.apartmentName || r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호`.trim();
+  }
+  // 미배정/배정 상태 판단
+  function isUnassigned(r) {
+    return !r.technicianId;
   }
 
   async function loadRequests() {
@@ -685,13 +711,13 @@
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.customerPhone || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
+        <td>${r.phoneNumber || r.customerPhone || '-'}</td>
+        <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
         <td>${r.branchId ? '지사 #' + r.branchId : '본사'}</td>
-        <td><span class="status-badge status-${r.status || 'pending'}">${statusLabel(r.status)}</span></td>
-        <td><button class="action-btn btn-assign" onclick="alert('앱에서 기사를 배정해 주세요')">배정</button></td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="9">접수 데이터가 없습니다</td></tr>';
   }
@@ -830,11 +856,12 @@
         <td>${s.createdAt ? String(s.createdAt).slice(0,16).replace('T',' ') : '-'}</td>
         <td>${s.phoneNumber || '-'}</td>
         <td>${s.messageType || '-'}</td>
+        <td>${s.channel === 'ALIMTALK' ? '🟡 알림톡' : '📨 문자'}${s.fallbackUsed ? ' <span style="color:#f59e0b;font-size:11px">(대체)</span>' : ''}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.content || '-'}</td>
         <td class="${s.result==='SUCCESS'?'sms-log-success':s.result==='SKIPPED'?'':'sms-log-fail'}" style="${s.result==='SKIPPED'?'color:#f59e0b;font-weight:600':''}">${s.result==='SUCCESS'?'✅ 성공':s.result==='SKIPPED'?'⏭ 건너뜀':'❌ 실패'}</td>
         <td style="color:#ef4444;font-size:13px">${s.errorMessage || ''}</td>
       </tr>
-    `).join('') : '<tr class="loading-row"><td colspan="6">발송 이력이 없습니다</td></tr>';
+    `).join('') : '<tr class="loading-row"><td colspan="7">발송 이력이 없습니다</td></tr>';
   }
 
   async function loadSensors() {
@@ -874,18 +901,20 @@
 
   async function loadAssign() {
     const data = await trpc('repair.list', {});
-    const list = (data || []).filter(r => r.status === 'assigned' || r.status === 'in_progress');
+    // 완료/취소를 제외한 진행 중인 건을 모두 표시 (미배정 포함)
+    const list = (data || []).filter(r => r.status !== '작업완료');
     const tbody = document.getElementById('assignTbody');
-    tbody.innerHTML = list.length ? list.map(r => `
+    tbody.innerHTML = list.length ? list.reverse().map(r => `
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
-        <td>${r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호</td>
-        <td>${r.technicianId ? '기사 #' + r.technicianId : '미배정'}</td>
-        <td>${r.visitDate || '-'}</td>
-        <td><span class="status-badge status-${r.status}">${statusLabel(r.status)}</span></td>
+        <td>${addrText(r)}</td>
+        <td>${r.technicianName ? r.technicianName : (r.technicianId ? '기사 #' + r.technicianId : '<span style=\"color:#ef4444\">미배정</span>')}</td>
+        <td>${r.scheduledDate ? (r.scheduledDate + (r.scheduledTime ? ' ' + r.scheduledTime : '')) : (r.preferredDate ? '희망:' + r.preferredDate : '-')}</td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
       </tr>
-    `).join('') : '<tr class="loading-row"><td colspan="6">배정된 작업이 없습니다</td></tr>';
+    `).join('') : '<tr class="loading-row"><td colspan="7">진행 중인 작업이 없습니다</td></tr>';
   }
 
   async function loadRegions() {
@@ -1402,9 +1431,132 @@
     }
   };
 
+  // ===== 기사 배정 모달 =====
+  let _assignReqId = null;
+  let _allRequests = [];
+  let _allTechnicians = [];
+
+  async function openAssignModal(reqId) {
+    _assignReqId = reqId;
+    document.getElementById('assignConflict').style.display = 'none';
+    // 접수 상세 + 기사 목록 병렬 로딩
+    const [reqs, techs] = await Promise.all([
+      trpc('repair.list', {}),
+      trpc('technicians.list', {}),
+    ]);
+    _allRequests = reqs || [];
+    _allTechnicians = techs || [];
+    const r = _allRequests.find(x => x.id === reqId);
+    if (!r) { alert('접수 정보를 찾을 수 없습니다.'); return; }
+    // 접수 정보 표시 (고객 희망 일정 포함)
+    document.getElementById('assignReqInfo').innerHTML =
+      `<div><b>${r.customerName || '-'}</b> (${r.phoneNumber || '-'})</div>` +
+      `<div>📍 ${addrText(r)}</div>` +
+      `<div>🔧 ${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : (r.symptom || '-')}</div>` +
+      `<div>🗓️ 고객 희망일: <b style="color:#e85d04">${r.preferredDate || '지정 안함'}</b></div>` +
+      `<div>📌 현재 상태: ${r.status || '신규접수'} ${r.technicianName ? '/ 담당 ' + r.technicianName : ''}</div>`;
+    // 기사 선택지 (같은 지사 기사 우선 표시)
+    const sel = document.getElementById('assignTechSelect');
+    const sameBranch = _allTechnicians.filter(t => !r.branchId || t.branchId === r.branchId);
+    const others = _allTechnicians.filter(t => r.branchId && t.branchId !== r.branchId);
+    const optHtml = (t) => `<option value="${t.id}" data-name="${(t.name||'').replace(/"/g,'&quot;')}">${t.name}${t.branchName ? ' (' + t.branchName + ')' : ''}</option>`;
+    sel.innerHTML = '<option value="">기사를 선택하세요</option>' +
+      sameBranch.map(optHtml).join('') +
+      (others.length ? '<optgroup label="타 지사 기사">' + others.map(optHtml).join('') + '</optgroup>' : '');
+    // 일정 기본값: 기존 확정일 > 고객 희망일
+    document.getElementById('assignDate').value = r.scheduledDate || r.preferredDate || '';
+    document.getElementById('assignTime').value = r.scheduledTime || '';
+    sel.onchange = checkScheduleConflict;
+    document.getElementById('assignModal').style.display = 'flex';
+  }
+
+  function closeAssignModal() {
+    document.getElementById('assignModal').style.display = 'none';
+    _assignReqId = null;
+  }
+
+  // 선택한 기사의 동일 시간대 중복 배정 경고
+  function checkScheduleConflict() {
+    const techId = parseInt(document.getElementById('assignTechSelect').value || '0', 10);
+    const date = document.getElementById('assignDate').value;
+    const time = document.getElementById('assignTime').value;
+    const box = document.getElementById('assignConflict');
+    if (!techId || !date) { box.style.display = 'none'; return; }
+    const conflicts = _allRequests.filter(r =>
+      r.id !== _assignReqId && r.technicianId === techId &&
+      r.scheduledDate === date && r.status !== '작업완료' &&
+      (!time || !r.scheduledTime || r.scheduledTime === time)
+    );
+    if (conflicts.length) {
+      box.style.display = 'block';
+      box.innerHTML = `⚠️ 이 기사는 ${date}에 이미 ${conflicts.length}건의 방문이 있습니다` +
+        ` (${conflicts.map(c => '#' + c.id + ' ' + (c.scheduledTime || '시간미정')).join(', ')}). 일정을 확인하세요.`;
+    } else {
+      box.style.display = 'none';
+    }
+  }
+
+  async function submitAssign() {
+    const sel = document.getElementById('assignTechSelect');
+    const techId = parseInt(sel.value || '0', 10);
+    const techName = sel.options[sel.selectedIndex]?.getAttribute('data-name') || '';
+    const date = document.getElementById('assignDate').value;
+    const time = document.getElementById('assignTime').value;
+    const notify = document.getElementById('assignNotify').checked;
+    if (!techId) { alert('담당 기사를 선택하세요.'); return; }
+    if (!date) { alert('방문 날짜를 선택하세요.'); return; }
+    const btn = document.getElementById('assignSubmitBtn');
+    btn.disabled = true; btn.textContent = '처리 중...';
+    try {
+      // 1) 기사 배정 (알림은 일정확정에서 일괄 발송하므로 여기서는 notify=false)
+      await trpc('repair.assignTechnician', { id: _assignReqId, technicianId: techId, technicianName: techName, scheduledDate: date, scheduledTime: time, notify: false });
+      // 2) 일정 확정 + 고객 안내
+      await trpc('repair.updateSchedule', { id: _assignReqId, scheduledDate: date, scheduledTime: time, notify });
+      alert('기사 배정과 일정 확정이 완료되었습니다.' + (notify ? '\n고객에게 안내를 발송했습니다.' : ''));
+      closeAssignModal();
+      loadCurrentPanel();
+    } catch (e) {
+      alert('처리 중 오류가 발생했습니다: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = '배정 및 일정 확정';
+    }
+  }
+
   checkAuth();
   initYearSelects();
   loadOverview();
 </script>
+<!-- 기사 배정 모달 -->
+<div id="assignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">👷 기사 배정 / 일정 확정</h3>
+      <button onclick="closeAssignModal()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">×</button>
+    </div>
+    <div id="assignReqInfo" style="background:#f9fafb;border-radius:10px;padding:12px;font-size:14px;margin-bottom:16px;line-height:1.7"></div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">담당 기사 선택</label>
+      <select id="assignTechSelect" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:15px"></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:6px">
+      <div style="flex:1">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">방문 날짜</label>
+        <input type="date" id="assignDate" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:15px" onchange="checkScheduleConflict()" />
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">방문 시간</label>
+        <input type="time" id="assignTime" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:15px" onchange="checkScheduleConflict()" />
+      </div>
+    </div>
+    <div id="assignConflict" style="display:none;background:#fef2f2;color:#b91c1c;border-radius:8px;padding:10px;font-size:13px;margin:8px 0"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:14px 0">
+      <input type="checkbox" id="assignNotify" checked /> 고객에게 일정 안내 문자/알림톡 발송
+    </label>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button onclick="closeAssignModal()" style="flex:1;padding:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px;font-size:15px;cursor:pointer">취소</button>
+      <button id="assignSubmitBtn" onclick="submitAssign()" style="flex:2;padding:12px;border:none;background:#e85d04;color:#fff;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">배정 및 일정 확정</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

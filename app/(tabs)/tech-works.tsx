@@ -50,7 +50,7 @@ export default function TechWorksScreen() {
     <ScreenContainer>
       <View style={s.header}>
         <Text style={s.headerTitle}>작업 목록</Text>
-        <Text style={s.headerSub}>배정된 전체 작업 {works.length}건</Text>
+        <Text style={s.headerSub}>{user?.name ? `${user.name}님 · ` : ""}소속: {user?.branchName || "미지정"} · 전체 {works.length}건</Text>
       </View>
 
       {/* 검색 */}
@@ -103,13 +103,16 @@ export default function TechWorksScreen() {
               </View>
               <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName}</Text>
               <Text style={[s.address, { color: colors.muted }]}>{work.apartmentName} {work.dong}동 {work.ho}호</Text>
+              {(work.preferredDate || work.preferredTime) && (
+                <Text style={[s.schedLine, { color: colors.muted }]}>희망: {`${work.preferredDate || ""} ${work.preferredTime || ""}`.trim()}</Text>
+              )}
+              <Text style={[s.schedLine, { color: (work.scheduledDate || work.scheduledTime) ? "#0369A1" : colors.muted, fontWeight: (work.scheduledDate || work.scheduledTime) ? "700" : "400" }]}>
+                확정: {(work.scheduledDate || work.scheduledTime) ? `${work.scheduledDate || ""} ${work.scheduledTime || ""}`.trim() : "일정 미확정"}
+              </Text>
               <View style={s.cardBottom}>
                 <Text style={[s.symptom, { color: "#FF6B35" }]}>
                   {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
                 </Text>
-                {work.scheduledDate && (
-                  <Text style={[s.date, { color: colors.muted }]}>📅 {work.scheduledDate}</Text>
-                )}
               </View>
             </TouchableOpacity>
           ))}
@@ -143,4 +146,5 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   cardBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   symptom: { fontSize: 13, fontWeight: "600" },
   date: { fontSize: 12 },
+  schedLine: { fontSize: 12, marginTop: 2 },
 });

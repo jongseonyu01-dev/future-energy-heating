@@ -88,7 +88,7 @@
         return;
       }
     } catch (e) { location.href = '/web/login.html'; return; }
-    document.getElementById('meInfo').textContent = (me.name || '기사') + '님' + (me.branchId ? '' : '');
+    document.getElementById('meInfo').textContent = (me.name || '기사') + '님 · 소속: ' + (me.branchName || '미지정');
   })();
 
   function logout() {
@@ -201,6 +201,8 @@
         '<div class="job-row"><span class="k">고객</span><span>' + (j.customerName || '-') + '</span></div>' +
         '<div class="job-row"><span class="k">연락처</span><a href="tel:' + (j.phoneNumber||'') + '">' + (j.phoneNumber || '-') + '</a></div>' +
         '<div class="job-row"><span class="k">주소</span><span>' + (addr || '-') + '</span></div>' +
+        ((j.preferredDate || j.preferredTime) ? '<div class="job-row"><span class="k">고객 희망</span><span>' + ((j.preferredDate||'') + ' ' + (j.preferredTime||'')).trim() + '</span></div>' : '') +
+        ((j.scheduledDate || j.scheduledTime) ? '<div class="job-row"><span class="k">확정 일정</span><span style="color:#0369a1;font-weight:600">' + ((j.scheduledDate||'') + ' ' + (j.scheduledTime||'')).trim() + '</span></div>' : '<div class="job-row"><span class="k">확정 일정</span><span style="color:#9ca3af">일정 미확정</span></div>') +
         (j.detailContent ? '<div class="job-row"><span class="k">요청</span><span>' + j.detailContent + '</span></div>' : '') +
         trackBlock + actions + '</div>';
     }).join('');
@@ -260,10 +262,11 @@
 
   async function arrive(reqId, token) {
     try {
-      if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '도착완료' });
+      // 도착 처리: 세션 종료 + 단계 갱신 + 고객 도착 안내(서버에서 발송)
+      await callApi('location.markArrived', { requestId: reqId, token: (token && token !== 'null') ? token : undefined }, false);
       await callApi('repair.updateStatus', { id: reqId, status: '방문중', notify: false });
       stopGpsWatch();
-      toast('도착 처리되었습니다. 고객 위치 링크가 만료되었습니다.');
+      toast('도착 처리되었습니다. 고객 위치 링크가 만료되고 도착 안내가 발송됩니다.');
       loadJobs();
     } catch (err) { toast('오류: ' + err.message); }
   }
@@ -272,9 +275,11 @@
     if (!confirm('작업을 완료 처리할까요?')) return;
     try {
       if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '도착완료' });
-      await callApi('repair.updateStatus', { id: reqId, status: '작업완료', notify: true });
+      await callApi('repair.updateStatus', { id: reqId, status: '작업완료', notify: false });
+      // 작업완료 단계 갱신 + 고객 완료 안내 (서버에서 발송)
+      await callApi('location.markWorkCompleted', { requestId: reqId }, false);
       stopGpsWatch();
-      toast('작업 완료 처리되었습니다.');
+      toast('작업 완료 처리되었습니다. 고객에게 완료 안내가 발송됩니다.');
       loadJobs();
     } catch (err) { toast('오류: ' + err.message); }
   }

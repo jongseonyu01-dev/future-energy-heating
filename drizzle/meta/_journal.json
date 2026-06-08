@@ -36,6 +36,13 @@
       "when": 1780766027844,
       "tag": "0004_woozy_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1780909618039,
+      "tag": "0005_material_quasimodo",
+      "breakpoints": true
     }
   ]
 }
