@@ -248,6 +248,129 @@ export default function TechScheduleScreen() {
   const todayWorks = (allWorks ?? []).filter(
     (w) => w.scheduledDate === today && w.status !== "작업완료"
   );
+  // 미래 예정 일정 (오늘 이후, 작업완료 제외)
+  const upcomingWorks = (allWorks ?? []).filter(
+    (w) => w.scheduledDate && w.scheduledDate > today && w.status !== "작업완료"
+  );
+  // 날짜 미지정이지만 배정된 오더 (신규접수·작업완료 제외)
+  const unscheduledWorks = (allWorks ?? []).filter(
+    (w) => !w.scheduledDate && w.status !== "작업완료" && w.status !== "신규접수"
+  );
+
+  // 오더 카드 렌더링 함수
+  const renderWorkCard = (work: any) => {
+    const isThisTracking = trackingRequestId === work.id && !!trackingToken;
+    return (
+      <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
+        <View style={s.cardHeader}>
+          <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
+            <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
+          </View>
+          <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
+        </View>
+
+        {isThisTracking && (
+          <View style={s.trackingIndicator}>
+            <Text style={s.trackingIndicatorText}>📍 위치 공유 중</Text>
+          </View>
+        )}
+
+        <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName} 고객님</Text>
+        <Text style={[s.address, { color: colors.muted }]}>
+          {work.apartmentName} {work.dong}동 {work.ho}호
+        </Text>
+        <Text style={[s.symptom, { color: "#FF6B35" }]}>
+          {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
+        </Text>
+
+        {work.scheduledDate && (
+          <Text style={[s.time, { color: colors.foreground }]}>
+            📅 {work.scheduledDate.replace(/-/g, ".")}
+            {work.scheduledTime ? ` ${work.scheduledTime}` : ""}
+          </Text>
+        )}
+
+        {!work.scheduledDate && (
+          <Text style={[s.time, { color: colors.muted }]}>📅 방문 일정 미정</Text>
+        )}
+
+        {work.detailContent ? (
+          <Text style={[s.detail, { color: colors.muted }]} numberOfLines={2}>{work.detailContent}</Text>
+        ) : null}
+
+        {/* 위치 공유 링크 표시 */}
+        {isThisTracking && trackingUrl && (
+          <TouchableOpacity
+            style={s.trackingLinkBox}
+            onPress={() => Linking.openURL(trackingUrl)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.trackingLinkText}>🔗 고객 위치 확인 링크 보기</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 출발/도착/취소 버튼 */}
+        <View style={s.locationBtns}>
+          {!isThisTracking ? (
+            <TouchableOpacity
+              style={[s.departBtn, isStartingTracking && s.btnDisabled]}
+              onPress={() => handleDepart(work)}
+              activeOpacity={0.8}
+              disabled={isStartingTracking}
+            >
+              {isStartingTracking ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={s.trackingActions}>
+              <TouchableOpacity
+                style={s.arriveBtn}
+                onPress={() => handleArrive(work)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.arriveBtnText}>✅ 도착</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.cancelBtn}
+                onPress={() => handleCancel(work)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* 기존 액션 버튼 */}
+        <View style={s.actions}>
+          <TouchableOpacity
+            style={[s.actionBtn, { backgroundColor: "#3B82F6" }]}
+            onPress={() => handleCall(work.phoneNumber)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.actionBtnText}>📞 고객 전화</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.actionBtn, { backgroundColor: "#22C55E" }]}
+            onPress={() => handleNav(`${work.apartmentName} ${work.dong}동`)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.actionBtnText}>🗺 내비게이션</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.actionBtn, { backgroundColor: "#FF6B35" }]}
+            onPress={() => router.push(`/work-report?id=${work.id}` as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.actionBtnText}>📋 점검표</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   if (!technicianId) {
     return (
@@ -272,7 +395,7 @@ export default function TechScheduleScreen() {
       )}
 
       <View style={s.header}>
-        <Text style={s.headerTitle}>오늘 방문 일정</Text>
+        <Text style={s.headerTitle}>방문 일정</Text>
         <Text style={s.headerDate}>{today.replace(/-/g, ".")}</Text>
       </View>
 
@@ -280,119 +403,39 @@ export default function TechScheduleScreen() {
         <View style={s.center}>
           <ActivityIndicator color="#FF6B35" size="large" />
         </View>
-      ) : todayWorks.length === 0 ? (
+      ) : todayWorks.length === 0 && upcomingWorks.length === 0 && unscheduledWorks.length === 0 ? (
         <View style={s.center}>
           <Text style={s.emptyIcon}>📅</Text>
-          <Text style={[s.empty, { color: colors.muted }]}>오늘 예정된 방문이 없습니다.</Text>
+          <Text style={[s.empty, { color: colors.muted }]}>배정된 방문 일정이 없습니다.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.list}>
-          {todayWorks.map((work) => {
-            const isThisTracking = trackingRequestId === work.id && !!trackingToken;
-            return (
-              <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
-                <View style={s.cardHeader}>
-                  <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
-                    <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
-                  </View>
-                  <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
-                </View>
+          {/* 오늘 일정 섹션 */}
+          {todayWorks.length > 0 && (
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>📅 오늘 방문 일정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{todayWorks.length}건</Text>
+            </View>
+          )}
+          {todayWorks.map((work) => renderWorkCard(work))}
 
-                {isThisTracking && (
-                  <View style={s.trackingIndicator}>
-                    <Text style={s.trackingIndicatorText}>📍 위치 공유 중</Text>
-                  </View>
-                )}
+          {/* 예정 일정 섹션 */}
+          {upcomingWorks.length > 0 && (
+            <View style={[s.sectionHeader, todayWorks.length > 0 && { marginTop: 8 }]}>
+              <Text style={s.sectionTitle}>🗓 예정 일정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{upcomingWorks.length}건</Text>
+            </View>
+          )}
+          {upcomingWorks.map((work) => renderWorkCard(work))}
 
-                <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName} 고객님</Text>
-                <Text style={[s.address, { color: colors.muted }]}>
-                  {work.apartmentName} {work.dong}동 {work.ho}호
-                </Text>
-                <Text style={[s.symptom, { color: "#FF6B35" }]}>
-                  {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
-                </Text>
-
-                {work.scheduledTime && (
-                  <Text style={[s.time, { color: colors.foreground }]}>⏰ {work.scheduledTime}</Text>
-                )}
-
-                {work.detailContent ? (
-                  <Text style={[s.detail, { color: colors.muted }]} numberOfLines={2}>{work.detailContent}</Text>
-                ) : null}
-
-                {/* 위치 공유 링크 표시 */}
-                {isThisTracking && trackingUrl && (
-                  <TouchableOpacity
-                    style={s.trackingLinkBox}
-                    onPress={() => Linking.openURL(trackingUrl)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={s.trackingLinkText}>🔗 고객 위치 확인 링크 보기</Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* 출발/도착/취소 버튼 */}
-                <View style={s.locationBtns}>
-                  {!isThisTracking ? (
-                    <TouchableOpacity
-                      style={[s.departBtn, isStartingTracking && s.btnDisabled]}
-                      onPress={() => handleDepart(work)}
-                      activeOpacity={0.8}
-                      disabled={isStartingTracking}
-                    >
-                      {isStartingTracking ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
-                      )}
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={s.trackingActions}>
-                      <TouchableOpacity
-                        style={s.arriveBtn}
-                        onPress={() => handleArrive(work)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={s.arriveBtnText}>✅ 도착</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={s.cancelBtn}
-                        onPress={() => handleCancel(work)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-
-                {/* 기존 액션 버튼 */}
-                <View style={s.actions}>
-                  <TouchableOpacity
-                    style={[s.actionBtn, { backgroundColor: "#3B82F6" }]}
-                    onPress={() => handleCall(work.phoneNumber)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={s.actionBtnText}>📞 고객 전화</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.actionBtn, { backgroundColor: "#22C55E" }]}
-                    onPress={() => handleNav(`${work.apartmentName} ${work.dong}동`)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={s.actionBtnText}>🗺 내비게이션</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.actionBtn, { backgroundColor: "#FF6B35" }]}
-                    onPress={() => router.push(`/work-report?id=${work.id}` as any)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={s.actionBtnText}>📋 점검표</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
+          {/* 날짜 미지정 배정 오더 섹션 */}
+          {unscheduledWorks.length > 0 && (
+            <View style={[s.sectionHeader, (todayWorks.length > 0 || upcomingWorks.length > 0) && { marginTop: 8 }]}>
+              <Text style={s.sectionTitle}>⏳ 일정 미확정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{unscheduledWorks.length}건</Text>
+            </View>
+          )}
+          {unscheduledWorks.map((work) => renderWorkCard(work))}
         </ScrollView>
       )}
 
@@ -414,7 +457,8 @@ export default function TechScheduleScreen() {
           }
           // 대기 중인 방문 건 출발 처리
           if (pendingDepartRequestId !== null) {
-            const work = todayWorks.find((w) => w.id === pendingDepartRequestId);
+            const allDisplayWorks = [...todayWorks, ...upcomingWorks, ...unscheduledWorks];
+            const work = allDisplayWorks.find((w) => w.id === pendingDepartRequestId);
             if (work) await doDepart(work);
             setPendingDepartRequestId(null);
           }
@@ -436,6 +480,20 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyIcon: { fontSize: 48 },
   empty: { fontSize: 16, textAlign: "center" },
   list: { padding: 16, gap: 12 },
+  // 섹션 헤더
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    marginBottom: 4,
+  },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#374151" },
+  sectionCount: { fontSize: 13, fontWeight: "600" },
+  // 카드
   card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 6 },
   cardTracking: { borderWidth: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
