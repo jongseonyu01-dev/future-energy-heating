@@ -444,11 +444,20 @@ async function loadSession() {
     const res = await fetch(`${BASE_URL}/api/location/session/${token}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      // 종료된 세션(410): 상태별 친절한 안내
       let icon = '⏰';
       let title = '링크 만료 또는 오류';
       let desc = err.error || '위치 정보를 불러올 수 없습니다.';
-      if (res.status === 410 || err.ended) {
+      // 404: 세션 없음 → 기사 출발 전 또는 링크 만료
+      if (res.status === 404) {
+        icon = '🚗'; title = '기사 출발 전입니다';
+        desc = '담당 기사가 아직 출발하지 않았습니다.<br>기사가 출발하면 이 페이지에서 실시간 위치를 확인하실 수 있습니다.<br><br>잠시 후 다시 확인해 주세요.';
+        // 30초마다 자동 재시도 (출발 대기 중)
+        if (!refreshInterval) {
+          refreshInterval = setInterval(loadSession, 30000);
+        }
+      } else if (res.status === 410 || err.ended) {
+        // 410: 세션 종료됨
+        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
         if (err.status === '도착완료') {
           icon = '✅'; title = '기사가 도착했습니다';
           desc = '담당 기사가 고객님 댁에 무사히 도착하여 위치 공유가 종료되었습니다.';
@@ -459,6 +468,8 @@ async function loadSession() {
           icon = '⏰'; title = '위치 공유가 종료되었습니다';
           desc = '링크 유효 시간이 지나 위치 공유가 자동 종료되었습니다.';
         }
+      } else {
+        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
       }
       document.getElementById('app').innerHTML = `
         <div class="error-card">
@@ -466,7 +477,7 @@ async function loadSession() {
           <div class="error-title">${title}</div>
           <div class="error-desc">${desc}<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>
         </div>`;
-      if (refreshInterval) clearInterval(refreshInterval);
+      if (res.status !== 404) return;
       return;
     }
     const data = await res.json();

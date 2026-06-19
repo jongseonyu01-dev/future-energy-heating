@@ -1576,7 +1576,10 @@ export const appRouter = router({
       .input(z.object({ requestId: z.number() }))
       .query(async ({ input }) => {
         const session = await db.getLocationSessionByRequestId(input.requestId);
-        return session;
+        if (!session) return null;
+        const baseUrl = process.env.SITE_URL || "https://www.futureenergytech.co.kr";
+        const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
+        return { ...session, trackingUrl };
       }),
 
     // 이동 중 전체 목록 (관리자용)

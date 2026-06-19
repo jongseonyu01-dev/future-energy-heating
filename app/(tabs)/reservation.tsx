@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Linking,
 } from "react-native";
 import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
@@ -304,6 +305,11 @@ export default function ReservationScreen() {
                       </>
                     )}
 
+                    {/* 기사 위치 확인 버튼 (방문예정/이동중 상태에서만 표시) */}
+                    {(item.status === "방문예정" || item.status === "작업진행중") && (
+                      <TrackingButton requestId={item.id} />
+                    )}
+
                     {/* 접수일 */}
                     <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
                       <Text style={[styles.cardFooterText, { color: colors.muted }]}>
@@ -331,6 +337,63 @@ export default function ReservationScreen() {
         </View>
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+function TrackingButton({ requestId }: { requestId: number }) {
+  const { data: session, isLoading } = trpc.location.getSessionByRequest.useQuery(
+    { requestId },
+    { refetchInterval: 30000 } // 30초마다 자동 갱신
+  );
+
+  const handlePress = () => {
+    if (session?.trackingUrl) {
+      Linking.openURL(session.trackingUrl);
+    } else {
+      // 세션이 없어도 위치 확인 페이지를 열어줄 수 없으므로 안내
+      Alert.alert(
+        "기사 출발 전",
+        "담당 기사가 아직 출발하지 않았습니다.\n기사가 출발하면 실시간 위치를 확인하실 수 있습니다.",
+        [{ text: "확인" }]
+      );
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const isMoving = session?.status === "이동중";
+
+  return (
+    <View style={styles.trackingSection}>
+      <View style={[styles.divider, { backgroundColor: isMoving ? "#FF6B35" : "#E5E7EB" }]} />
+      <View style={[styles.trackingBox, { backgroundColor: isMoving ? "#FFF3E0" : "#F9FAFB" }]}>
+        <View style={styles.trackingRow}>
+          <View style={styles.trackingStatus}>
+            {isMoving && <View style={styles.trackingPulse} />}
+            <Text style={[styles.trackingStatusText, { color: isMoving ? "#FF6B35" : "#6B7280" }]}>
+              {isLoading ? "조회 중..." : isMoving ? "기사 이동 중" : "기사 출발 전"}
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [
+              styles.trackingButton,
+              { backgroundColor: isMoving ? "#FF6B35" : "#8B5CF6", opacity: pressed ? 0.8 : 1 },
+            ]}
+            onPress={handlePress}
+          >
+            <Text style={styles.trackingButtonText}>
+              {isMoving ? "📍 실시간 위치 확인" : "🚗 기사 위치 확인"}
+            </Text>
+          </Pressable>
+        </View>
+        {isMoving && (
+          <Text style={styles.trackingHint}>
+            10초마다 자동 갱신 · 실시간 지도 표시
+          </Text>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -575,5 +638,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  // 기사 위치 확인 섹션
+  trackingSection: {
+    // 래퍼만
+  },
+  trackingBox: {
+    padding: 12,
+    gap: 6,
+  },
+  trackingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  trackingStatus: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  trackingPulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF6B35",
+  },
+  trackingStatusText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  trackingButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trackingButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  trackingHint: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    textAlign: "center",
   },
 });
