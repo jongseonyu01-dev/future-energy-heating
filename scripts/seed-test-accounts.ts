@@ -191,7 +191,7 @@ async function main() {
       appRole: "technician",
       loginId: "worker1",
       passwordHash: simpleHash("worker1234"),
-      phoneNumber: "010-0000-0003",
+      phoneNumber: "010-5754-7310",
       isActive: true,
       createdAt: new Date(),
     });
@@ -199,7 +199,7 @@ async function main() {
   } else {
     workerUserId = workerExisting[0].userId;
     await db.update(appRoles)
-      .set({ passwordHash: simpleHash("worker1234"), appRole: "technician", isActive: true })
+      .set({ passwordHash: simpleHash("worker1234"), appRole: "technician", isActive: true, phoneNumber: "010-5754-7310" })
       .where(eq(appRoles.loginId, "worker1"));
     console.log("ℹ️  현장 기사 계정 업데이트 완료 (worker1 / worker1234)");
   }
@@ -209,7 +209,7 @@ async function main() {
   if (techExisting.length === 0) {
     await db.insert(technicians).values({
       name: "홍길동 기사",
-      phoneNumber: "010-0000-0003",
+      phoneNumber: "010-5754-7310",
       branchId: branchId,
       userId: workerUserId,
       isActive: true,

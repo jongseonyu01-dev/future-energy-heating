@@ -10,8 +10,6 @@ import {
   Platform,
   ScrollView,
   Keyboard,
-  findNodeHandle,
-  UIManager,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAppAuth } from "@/lib/auth-context";
@@ -60,22 +58,12 @@ export default function LoginScreen() {
   const s = styles(colors);
 
   // 포커스된 입력칸이 키보드 위로 보이도록 자동 스크롤
+  // Web에서는 findNodeHandle/UIManager를 사용할 수 없으므로 건너뜀
   const scrollRef = useRef<ScrollView>(null);
-  const handleFocus = (e: any) => {
-    const node = findNodeHandle(e?.target);
-    const scrollNode = scrollRef.current;
-    if (!node || !scrollNode) return;
-    // measureLayout으로 입력칸의 스크롤뷰 내 위치를 구해 약간 위로 스크롤
-    try {
-      UIManager.measureLayout(
-        node,
-        findNodeHandle(scrollNode as any) as number,
-        () => {},
-        (_x: number, y: number) => {
-          scrollNode.scrollTo({ y: Math.max(y - 80, 0), animated: true });
-        }
-      );
-    } catch {}
+  const handleFocus = (_e: any) => {
+    if (Platform.OS === "web") return;
+    // Native(iOS/Android)에서만 스크롤 처리
+    // KeyboardAvoidingView가 대부분의 경우를 처리하므로 추가 스크롤 불필요
   };
 
   const clearMsg = () => { setError(""); setInfo(""); };
