@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
 import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
@@ -28,11 +29,78 @@ export default function ReservationScreen() {
   const colors = useColors();
   const [query, setQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [actionItemId, setActionItemId] = useState<number | null>(null);
 
   const { data: results, isLoading, refetch } = trpc.repair.find.useQuery(
     { query: searchQuery },
     { enabled: searchQuery.length > 0 }
   );
+
+  const approveMutation = trpc.repair.approveEstimate.useMutation({
+    onSuccess: () => {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      setActionItemId(null);
+      refetch();
+      Alert.alert("승인 완료", "견적이 승인되었습니다. 곧 기사가 배정됩니다.");
+    },
+    onError: () => {
+      setActionItemId(null);
+      Alert.alert("오류", "처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+    },
+  });
+
+  const rejectMutation = trpc.repair.updateStatus.useMutation({
+    onSuccess: () => {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+      setActionItemId(null);
+      refetch();
+      Alert.alert("거절 완료", "견적을 거절하였습니다. 담당자가 다시 연락드리겠습니다.");
+    },
+    onError: () => {
+      setActionItemId(null);
+      Alert.alert("오류", "처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+    },
+  });
+
+  const handleApprove = (id: number) => {
+    Alert.alert(
+      "견적 승인",
+      "견적을 승인하시겠습니까? 승인 후 기사가 배정됩니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "승인",
+          style: "default",
+          onPress: () => {
+            setActionItemId(id);
+            approveMutation.mutate({ id });
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReject = (id: number) => {
+    Alert.alert(
+      "견적 거절",
+      "견적을 거절하시겠습니까? 담당자가 다시 연락드립니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "거절",
+          style: "destructive",
+          onPress: () => {
+            setActionItemId(id);
+            rejectMutation.mutate({ id, status: "신규접수", adminMemo: "고객 견적 거절 → 재접수", notify: false });
+          },
+        },
+      ]
+    );
+  };
 
   const handleSearch = () => {
     if (!query.trim()) return;
@@ -40,11 +108,6 @@ export default function ReservationScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSearchQuery(query.trim());
-  };
-
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "-";
-    return dateStr;
   };
 
   return (
@@ -124,12 +187,17 @@ export default function ReservationScreen() {
               </Text>
               {results.map((item) => {
                 const statusInfo = STATUS_CONFIG[item.status] || STATUS_CONFIG["신규접수"];
+                const isEstimatePending = item.status === "견적승인대기";
+                const estimateAmount = item.estimateAmount ? Number(item.estimateAmount) : null;
+                const isActioning = actionItemId === item.id;
+
                 return (
                   <View
                     key={item.id}
                     style={[
                       styles.resultCard,
-                      { backgroundColor: colors.surface, borderColor: colors.border },
+                      { backgroundColor: colors.surface, borderColor: isEstimatePending ? "#EAB308" : colors.border },
+                      isEstimatePending && styles.estimateCard,
                     ]}
                   >
                     {/* 상태 배지 */}
@@ -159,6 +227,48 @@ export default function ReservationScreen() {
                         value={`${item.apartmentName} ${item.dong}동 ${item.ho}호`}
                       />
                     </View>
+
+                    {/* 견적 금액 및 승인/거절 버튼 (견적승인대기 상태일 때만 표시) */}
+                    {isEstimatePending && estimateAmount !== null && (
+                      <>
+                        <View style={[styles.divider, { backgroundColor: "#EAB308" }]} />
+                        <View style={[styles.estimateSection, { backgroundColor: "#FFFBEB" }]}>
+                          <Text style={styles.estimateTitle}>💰 견적 안내</Text>
+                          <Text style={styles.estimateAmount}>
+                            {estimateAmount.toLocaleString("ko-KR")}원
+                          </Text>
+                          <Text style={styles.estimateDesc}>
+                            위 금액으로 작업을 진행합니다. 승인하시면 기사가 배정됩니다.
+                          </Text>
+                          <View style={styles.estimateButtons}>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.rejectButton,
+                                { opacity: pressed || isActioning ? 0.7 : 1 },
+                              ]}
+                              onPress={() => handleReject(item.id)}
+                              disabled={isActioning}
+                            >
+                              <Text style={styles.rejectButtonText}>거절</Text>
+                            </Pressable>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.approveButton,
+                                { opacity: pressed || isActioning ? 0.7 : 1 },
+                              ]}
+                              onPress={() => handleApprove(item.id)}
+                              disabled={isActioning}
+                            >
+                              {isActioning ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                              ) : (
+                                <Text style={styles.approveButtonText}>✅ 견적 승인</Text>
+                              )}
+                            </Pressable>
+                          </View>
+                        </View>
+                      </>
+                    )}
 
                     {/* 방문 일정 */}
                     {(item.scheduledDate || item.preferredDate) && (
@@ -344,6 +454,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+  estimateCard: {
+    borderWidth: 2,
+  },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -409,5 +522,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     lineHeight: 22,
+  },
+  // 견적 섹션
+  estimateSection: {
+    padding: 16,
+    gap: 8,
+  },
+  estimateTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#92400E",
+  },
+  estimateAmount: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#B45309",
+  },
+  estimateDesc: {
+    fontSize: 13,
+    color: "#78350F",
+    lineHeight: 20,
+  },
+  estimateButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  rejectButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  rejectButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  approveButton: {
+    flex: 2,
+    height: 48,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#16A34A",
+  },
+  approveButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

@@ -19,6 +19,7 @@ import {
   buildScheduleConfirmedMessage,
   buildTechnicianArrivedMessage,
   buildWorkCompletedMessage,
+  buildEstimateMessage,
 } from "./notification";
 import { dispatchLeakSms } from "./leak-sms";
 import { buildTechnicianDepartedMessage } from "./notification";
@@ -777,6 +778,30 @@ export const appRouter = router({
         const { repairRequests: rr } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
         await db2.update(rr).set({ estimateAmount: String(input.estimateAmount), status: "견적승인대기", workflowStage: "견적전달", estimateSentAt: new Date() }).where(eq(rr.id, input.id));
+        // 고객에게 견적 안내 SMS 발송
+        try {
+          const req = await db.getRepairRequestById(input.id);
+          if (req && req.phoneNumber) {
+            const message = buildEstimateMessage(
+              req.customerName,
+              req.requestNumber,
+              input.estimateAmount
+            );
+            const sendResult = await sendSms(req.phoneNumber, message);
+            await db.createNotificationLog({
+              requestId: req.id,
+              phoneNumber: req.phoneNumber,
+              channel: "SMS",
+              messageType: "견적전달",
+              content: message,
+              result: sendResult.result,
+              errorMessage: sendResult.errorMessage,
+            });
+          }
+        } catch (e) {
+          // 알림 실패해도 견적 등록은 성공
+          console.error("[견적 SMS 발송 오류]", e);
+        }
         return { success: true };
       }),
 
