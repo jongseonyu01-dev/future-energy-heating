@@ -1404,7 +1404,7 @@ export const appRouter = router({
         });
         if (!session) throw new Error("세션 생성 실패");
         // 고객용 전용 링크 생성
-        const baseUrl = (process.env.SITE_URL || "https://www.futureenergytech.co.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${token}`;
         // 워크플로우 단계: 기사출발
         try { await db.setWorkflowStage(input.requestId, "기사출발"); } catch {}
@@ -1479,7 +1479,7 @@ export const appRouter = router({
           expiresAt,
         });
         if (!session) throw new Error("세션 생성 실패");
-        const baseUrl = (process.env.SITE_URL || "https://www.futureenergytech.co.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${token}`;
         let smsSent = false;
         let smsError: string | undefined;
@@ -1558,7 +1558,7 @@ export const appRouter = router({
         if (session.status !== "이동중") {
           return { success: false, smsSent: false, smsError: "이미 종료된 세션입니다." };
         }
-        const baseUrl = (process.env.SITE_URL || "https://www.futureenergytech.co.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
         let smsSent = false;
         let smsError: string | undefined;
@@ -1587,7 +1587,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const session = await db.getLocationSessionByRequestId(input.requestId);
         if (!session) return null;
-        const baseUrl = (process.env.SITE_URL || "https://www.futureenergytech.co.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
         return { ...session, trackingUrl };
       }),

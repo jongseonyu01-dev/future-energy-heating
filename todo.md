@@ -361,3 +361,16 @@
 - [x] 위치 업데이트 → 고객 조회 → 도착 종료(410/ended) 흐름 검증
 - [x] track 페이지 ETA(예상도착) 표시 정상 확인
 - [ ] 네이버 지도 클라이언트 ID 재설정 (사용자 발급 필요) — 현재 환경변수에 도메인 URL이 잘못 입력됨
+
+
+## 25차 작업 (정식 도메인 통일 + 네이버 지도 Client ID 적용)
+
+- [x] NAVER_MAP_CLIENT_ID 환경변수에 실제 Client ID(8rfi2gmb9q) 적용
+- [x] SITE_URL = https://futureenergytech.co.kr 설정
+- [x] routers.ts 트래킹 링크 기본 도메인 4곳 www 제거 → 정식 도메인 통일
+- [x] lib/location-tracking.ts API_BASE_URL 기본값 정식 도메인으로 통일 (manus.space 제거)
+- [x] 트래킹 링크 생성 검증: https://futureenergytech.co.kr/track/{token} 확인 (vitest 5건 통과)
+- [x] 정식 도메인 실측: track 페이지(HTML)는 www로 연결됨 / /api/location 은 404 / 네이버ID 미주입 = 구 배포본
+- [ ] (사용자) UI Publish 버튼으로 재배포 → 새 코드/환경변수 반영
+- [ ] (배포 후) 정식 도메인에서 /api/location 정상 응답 확인
+- [ ] (배포 후) 정식 도메인 track 페이지에 네이버 지도/마커/ETA 표시 확인 후 캡처

@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://futureheat-htdx5kse.manus.space";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://futureenergytech.co.kr";
 
 // ─── 백그라운드 태스크 정의 (지연 로드 방식) ──────────────────────────────
 // 앱 시작 시 즉시 실행되지 않도록 함수 내부에서만 import
