@@ -30,7 +30,41 @@ import {
   createLocationConsent,
 } from "./db";
 
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+/**
+ * public 디렉터리 위치 탐색.
+ * 로컬(Node)에서는 process.cwd()/public 이지만,
+ * Vercel 서버리스 등 cwd가 다른 환경을 위해 여러 후보를 순회한다.
+ * PUBLIC_DIR_OVERRIDE 환경변수로 강제 지정도 가능.
+ */
+function resolvePublicDir(): string {
+  // ESM 번들에서 __dirname이 없을 수 있으므로 안전하게 참조
+  let dirName = "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dirName = typeof __dirname !== "undefined" ? __dirname : "";
+  } catch {
+    dirName = "";
+  }
+  const candidates = [
+    process.env.PUBLIC_DIR_OVERRIDE,
+    path.join(process.cwd(), "public"),
+    path.join(process.cwd(), "..", "public"),
+    dirName ? path.join(dirName, "..", "..", "public") : "",
+    dirName ? path.join(dirName, "..", "public") : "",
+    "/var/task/public",
+  ].filter(Boolean) as string[];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c, "web", "index.html"))) return c;
+    } catch {
+      // ignore
+    }
+  }
+  // 폴백: 첫 후보
+  return candidates[1] || path.join(process.cwd(), "public");
+}
+
+const PUBLIC_DIR = resolvePublicDir();
 
 export function registerWebRoutes(app: Express) {
   // 정적 파일 서빙 - /web 경로로 홈페이지 HTML 파일 제공

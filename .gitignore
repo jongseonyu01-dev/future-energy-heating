@@ -30,8 +30,12 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (비밀값 커밋 방지 - Vercel 환경변수로만 관리)
+.env
+.env.*
 .env*.local
+!.env.example
+!ENV_VARIABLES.txt
 
 # typescript
 *.tsbuildinfo
