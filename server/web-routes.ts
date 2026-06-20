@@ -137,7 +137,7 @@ export function registerWebRoutes(app: Express) {
       res.json({
         status: session.status,
         technicianName: session.technicianName,
-        technicianPhone: session.technicianPhone,
+        // technicianPhone는 개인정보 보호를 위해 고객에게 노출하지 않음 (문의는 회사 고객센터로 안내)
         customerAddress: session.customerAddress,
         customerLat: session.customerLat,
         customerLng: session.customerLng,

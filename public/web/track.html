@@ -352,7 +352,8 @@ function render(data) {
 
   // 이동 중
   const techName = data.technicianName || '담당 기사';
-  const techPhone = data.technicianPhone || '';
+  // 기사 직통번호는 노출하지 않고, 회사 고객센터로 문의 연결 (개인정보 보호)
+  const centerPhone = '031-8042-7310';
   const hasLocation = techLat && techLng;
 
   app.innerHTML = `
@@ -409,7 +410,7 @@ function render(data) {
           <div class="tech-name">${techName}</div>
           <div class="tech-company">퓨처에너지테크</div>
         </div>
-        ${techPhone ? `<a class="call-btn" href="tel:${techPhone.replace(/[^0-9]/g,'')}">📞 전화</a>` : ''}
+        <a class="call-btn" href="tel:${centerPhone.replace(/[^0-9]/g,'')}">📞 고객센터</a>
       </div>
     </div>
 

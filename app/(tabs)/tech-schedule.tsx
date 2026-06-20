@@ -11,7 +11,7 @@ import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
 import { openNavigation } from "@/lib/navigation";
-import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
+import { formatFullAddress, formatNavAddress, getApartmentCoords } from "@/constants/address-data";
 import {
   requestLocationPermissions,
   startLocationTracking,
@@ -118,9 +118,9 @@ export default function TechScheduleScreen() {
   const doDepart = async (work: any) => {
     setIsStartingTracking(true);
     try {
-      // 위치 권한 요청
+      // 위치 권한 요청 (웹은 geolocation 권한이 없어도 세션은 시작하고, 위치 전송만 생략)
       const { granted } = await requestLocationPermissions();
-      if (!granted) {
+      if (!granted && Platform.OS !== "web") {
         Alert.alert(
           "위치 권한 필요",
           "위치 공유를 위해 위치 권한이 필요합니다. 설정에서 허용해 주세요.",
@@ -128,6 +128,17 @@ export default function TechScheduleScreen() {
         );
         setIsStartingTracking(false);
         return;
+      }
+
+      // 목적지(아파트 대표) 좌표 - 접수건에 저장된 좌표가 없으면 주소 데이터에서 조회
+      let destLat = work.customerLat ? Number(work.customerLat) : undefined;
+      let destLng = work.customerLng ? Number(work.customerLng) : undefined;
+      if ((destLat === undefined || destLng === undefined) && work.sido && work.sigungu && work.eupmyeondong && work.apartmentName) {
+        const coords = getApartmentCoords(work.sido, work.sigungu, work.eupmyeondong, work.apartmentName);
+        if (coords) {
+          destLat = coords.lat;
+          destLng = coords.lng;
+        }
       }
 
       // 서버에 세션 시작 요청
@@ -139,8 +150,8 @@ export default function TechScheduleScreen() {
         customerName: work.customerName,
         customerPhone: work.phoneNumber,
         customerAddress: formatFullAddress(work),
-        customerLat: work.customerLat ? Number(work.customerLat) : undefined,
-        customerLng: work.customerLng ? Number(work.customerLng) : undefined,
+        customerLat: destLat,
+        customerLng: destLng,
         branchId: work.branchId ?? undefined,
         branchName: work.branchName ?? undefined,
         demoMode: false,
@@ -148,14 +159,18 @@ export default function TechScheduleScreen() {
 
       if (!result.success || !result.token) throw new Error("세션 시작 실패");
 
-      // 로컬 추적 시작
-      await startLocationTracking(result.token);
+      // 로컬 추적 시작 (상태는 항상 갱신하여 카드가 도착/취소 버튼으로 전환되도록 함)
+      try {
+        await startLocationTracking(result.token);
+      } catch (e) {
+        console.warn('[TechSchedule] 로컬 추적 시작 실패 (세션은 유지):', e);
+      }
       setTrackingToken(result.token);
       setTrackingRequestId(work.id);
       setTrackingUrl(result.trackingUrl);
       startForegroundInterval(result.token);
 
-      // 즉시 현재 위치 전송
+      // 즉시 현재 위치 전송 (권한 없으면 생략)
       const loc = await getCurrentLocation();
       if (loc) await sendLocationToServer(result.token, loc.lat, loc.lng);
 
