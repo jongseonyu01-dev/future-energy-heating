@@ -8,6 +8,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
@@ -102,7 +103,7 @@ export default function TechWorksScreen() {
                 <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
               </View>
               <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName}</Text>
-              <Text style={[s.address, { color: colors.muted }]}>{work.apartmentName} {work.dong}동 {work.ho}호</Text>
+              <Text style={[s.address, { color: colors.muted }]}>{formatFullAddress(work)}</Text>
               {(work.preferredDate || work.preferredTime) && (
                 <Text style={[s.schedLine, { color: colors.muted }]}>희망: {`${work.preferredDate || ""} ${work.preferredTime || ""}`.trim()}</Text>
               )}

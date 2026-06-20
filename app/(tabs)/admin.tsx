@@ -17,6 +17,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+import { formatFullAddress } from "@/constants/address-data";
 
 // 관리자 화면 탭 정의
 type AdminTab = "requests" | "leak" | "technicians" | "settings";
@@ -47,9 +48,13 @@ type RepairRequest = {
   requestNumber: string;
   customerName: string;
   phoneNumber: string;
+  sido?: string | null;
+  sigungu?: string | null;
+  eupmyeondong?: string | null;
   apartmentName: string;
   dong: string;
   ho: string;
+  roadAddress?: string | null;
   requestType: string;
   symptom: string;
   detailContent: string | null;
@@ -416,7 +421,7 @@ function RequestsTab({
                     {item.customerName}
                   </Text>
                   <Text style={[styles.listAddress, { color: colors.muted }]}>
-                    {item.apartmentName} {item.dong}동 {item.ho}호
+                    {formatFullAddress(item)}
                   </Text>
                   <Text style={[styles.listSymptom, { color: "#E84B2F" }]}>
                     {item.requestType} · {item.symptom.replace(/([가-힣])/g, "$1 ").trim()}
@@ -599,7 +604,7 @@ function DetailModal({
           <SectionCard title="👤 고객 정보" colors={colors}>
             <InfoRow label="이름" value={item.customerName} />
             <InfoRow label="전화번호" value={item.phoneNumber} />
-            <InfoRow label="주소" value={`${item.apartmentName} ${item.dong}동 ${item.ho}호`} />
+            <InfoRow label="주소" value={formatFullAddress(item)} />
           </SectionCard>
 
           {/* 증상 정보 */}

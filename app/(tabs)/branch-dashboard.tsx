@@ -7,6 +7,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
 
 export default function BranchDashboardScreen() {
   const colors = useColors();
@@ -96,7 +97,7 @@ export default function BranchDashboardScreen() {
                   <Text style={[s.requestTime, { color: "#FF6B35" }]}>{r.scheduledTime ?? "시간 미정"}</Text>
                 </View>
                 <Text style={[s.requestAddress, { color: colors.muted }]}>
-                  {r.apartmentName} {r.dong}동 {r.ho}호
+                  {formatFullAddress(r)}
                 </Text>
                 {r.technicianName && (
                   <Text style={[s.requestTech, { color: "#3B82F6" }]}>👷 {r.technicianName}</Text>

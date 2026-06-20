@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { CalendarPicker } from "@/components/calendar-picker";
+import { formatFullAddress } from "@/constants/address-data";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
@@ -122,7 +123,7 @@ export default function BranchRequestsScreen() {
                 <Text style={[s.requestNum, { color: colors.muted }]}>{r.requestNumber}</Text>
               </View>
               <Text style={[s.customerName, { color: colors.foreground }]}>{r.customerName}</Text>
-              <Text style={[s.address, { color: colors.muted }]}>{r.apartmentName} {r.dong}동 {r.ho}호</Text>
+              <Text style={[s.address, { color: colors.muted }]}>{formatFullAddress(r)}</Text>
               <Text style={[s.symptom, { color: "#FF6B35" }]}>
                 {r.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${r.symptom}`}
               </Text>

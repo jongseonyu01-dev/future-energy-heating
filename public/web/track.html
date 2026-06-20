@@ -499,8 +499,9 @@ async function loadSession() {
 // ─── 네이버 지도 API 로드 ──────────────────────────────────────────────────
 // 네이버 지도 API 키가 없으면 지도 없이 동작
 function loadNaverMapApi() {
-  const clientId = window.NAVER_MAP_CLIENT_ID || '';
-  if (!clientId) return; // API 키 없으면 지도 생략
+  const clientId = (window.NAVER_MAP_CLIENT_ID || '').trim();
+  // API 키가 없거나, URL/공백 등 비정상 값이면 지도 생략 (텍스트 정보는 그대로 표시)
+  if (!clientId || clientId.includes('://') || clientId.includes('.') || clientId.includes(' ')) return;
   const script = document.createElement('script');
   script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
   script.onload = () => {

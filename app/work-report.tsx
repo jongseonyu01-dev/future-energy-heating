@@ -16,6 +16,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
 
 const CHECK_ITEMS = [
@@ -175,7 +176,7 @@ export default function WorkReportScreen() {
         {/* 고객 정보 */}
         <View style={[s.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[s.infoTitle, { color: colors.foreground }]}>{request.customerName}</Text>
-          <Text style={[s.infoSub, { color: colors.muted }]}>{request.apartmentName} {request.dong}동 {request.ho}호</Text>
+          <Text style={[s.infoSub, { color: colors.muted }]}>{formatFullAddress(request)}</Text>
           <Text style={[s.infoSub, { color: "#FF6B35" }]}>
             {request.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${request.symptom}`}
           </Text>

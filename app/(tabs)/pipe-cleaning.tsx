@@ -15,6 +15,15 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import { CalendarPicker } from "@/components/calendar-picker";
+import { SelectField } from "@/components/select-field";
+import {
+  getSidoList,
+  getSigunguList,
+  getDongList,
+  getApartmentList,
+  getApartmentRoadAddress,
+  getApartmentCoords,
+} from "@/constants/address-data";
 
 const TIME_SLOTS = [
   "오전 9시 ~ 11시",
@@ -29,6 +38,9 @@ export default function PipeCleaningScreen() {
 
   const [customerName, setCustomerName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [sido, setSido] = useState("");
+  const [sigungu, setSigungu] = useState("");
+  const [eupmyeondong, setEupmyeondong] = useState("");
   const [apartmentName, setApartmentName] = useState("");
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
@@ -51,6 +63,9 @@ export default function PipeCleaningScreen() {
             onPress: () => {
               setCustomerName("");
               setPhoneNumber("");
+              setSido("");
+              setSigungu("");
+              setEupmyeondong("");
               setApartmentName("");
               setDong("");
               setHo("");
@@ -76,8 +91,20 @@ export default function PipeCleaningScreen() {
       Alert.alert("입력 오류", "올바른 휴대폰 번호를 입력해주세요.");
       return;
     }
-    if (!apartmentName.trim()) {
-      Alert.alert("입력 오류", "아파트명을 입력해주세요.");
+    if (!sido) {
+      Alert.alert("입력 오류", "시/도를 선택해주세요.");
+      return;
+    }
+    if (!sigungu) {
+      Alert.alert("입력 오류", "시/군/구를 선택해주세요.");
+      return;
+    }
+    if (!eupmyeondong) {
+      Alert.alert("입력 오류", "동/읍/면을 선택해주세요.");
+      return;
+    }
+    if (!apartmentName) {
+      Alert.alert("입력 오류", "아파트 단지를 선택해주세요.");
       return;
     }
     if (!dong.trim()) {
@@ -89,10 +116,19 @@ export default function PipeCleaningScreen() {
       return;
     }
 
+    const roadAddress = getApartmentRoadAddress(sido, sigungu, eupmyeondong, apartmentName);
+    const coords = getApartmentCoords(sido, sigungu, eupmyeondong, apartmentName);
+
     createMutation.mutate({
       customerName: customerName.trim(),
       phoneNumber: phoneNumber.trim(),
-      apartmentName: apartmentName.trim(),
+      sido,
+      sigungu,
+      eupmyeondong,
+      apartmentName,
+      roadAddress: roadAddress || `${sido} ${sigungu} ${eupmyeondong} ${apartmentName}`,
+      customerLat: coords?.lat,
+      customerLng: coords?.lng,
       dong: dong.trim(),
       ho: ho.trim(),
       requestType: "배관청소",
@@ -151,13 +187,52 @@ export default function PipeCleaningScreen() {
 
           {/* 주소 정보 */}
           <SectionTitle title="🏠 주소 정보" />
+          <Text style={styles.addressHint}>
+            시/도 → 시/군/구 → 동 → 아파트 단지를 차례로 선택한 뒤, 동/호수만 입력해주세요.
+          </Text>
 
-          <InputField
-            label="아파트명 *"
+          <SelectField
+            label="시/도 *"
+            value={sido}
+            options={getSidoList()}
+            placeholder="시/도를 선택하세요"
+            onSelect={(v) => {
+              setSido(v);
+              setSigungu("");
+              setEupmyeondong("");
+              setApartmentName("");
+            }}
+          />
+          <SelectField
+            label="시/군/구 *"
+            value={sigungu}
+            options={getSigunguList(sido)}
+            placeholder="시/군/구를 선택하세요"
+            disabled={!sido}
+            onSelect={(v) => {
+              setSigungu(v);
+              setEupmyeondong("");
+              setApartmentName("");
+            }}
+          />
+          <SelectField
+            label="동/읍/면 *"
+            value={eupmyeondong}
+            options={getDongList(sido, sigungu)}
+            placeholder="동/읍/면을 선택하세요"
+            disabled={!sigungu}
+            onSelect={(v) => {
+              setEupmyeondong(v);
+              setApartmentName("");
+            }}
+          />
+          <SelectField
+            label="아파트 단지 *"
             value={apartmentName}
-            onChangeText={setApartmentName}
-            placeholder="예) 한강아파트"
-            colors={colors}
+            options={getApartmentList(sido, sigungu, eupmyeondong).map((a) => a.name)}
+            placeholder="아파트 단지를 선택하세요"
+            disabled={!eupmyeondong}
+            onSelect={setApartmentName}
           />
 
           <View style={styles.rowInputs}>
@@ -417,6 +492,12 @@ const styles = StyleSheet.create({
   rowInputs: {
     flexDirection: "row",
     gap: 12,
+  },
+  addressHint: {
+    fontSize: 13,
+    color: "#0369A1",
+    marginBottom: 10,
+    lineHeight: 19,
   },
   textAreaContainer: {
     borderRadius: 10,

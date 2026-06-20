@@ -317,3 +317,20 @@
 - [x] 전체 워크플로우 API 검증 (접수→견적→승인→배정→일정→출발→도착→완료→결제→후기)
 - [x] 관리자 화면 실제 배정 동작 검증 (#120001 → 방문예정/일정확정/기사300002/06-09 14:00)
 - [x] 전체 테스트 54 passed, 1 skipped
+
+## 23차 작업 완료 (주소 선택 구조 + 네비게이션 + 위치공유 전체 점검)
+- [x] 주소 선택 데이터 구성 (경기 안산 단원구 초지동 주요 아파트 + 대표 좌표)
+- [x] 단계형 선택 컴포넌트(SelectField) 추가
+- [x] 고객 신청 화면(report.tsx) 주소 입력을 시/도 → 시군구 → 동 → 아파트 선택 + 동/호수 직접입력으로 변경
+- [x] 배관청소 신청 화면(pipe-cleaning.tsx) 동일 적용
+- [x] DB repair_requests에 sido/sigungu/eupmyeondong/roadAddress/customerLat/customerLng 컬럼 추가
+- [x] 서버 repair.create에서 신규 주소 필드 + 좌표 저장
+- [x] formatFullAddress / formatNavAddress / getApartmentCoords 헬퍼 추가
+- [x] 기사/관리자/지사/본사/점검표/예약확인 화면 주소 표시를 전체 주소로 통일
+- [x] 한국 지도앱 네비게이션 유틸(navigation.ts) - 카카오/네이버/T맵 선택 + 웹 폴백
+- [x] 기사앱 네비게이션 목적지를 동/호 제외 대표 주소로 연결
+- [x] 기사 출발 시 좌표를 location_sessions로 복사 (목적지 마커/ETA용)
+- [x] track 페이지에 네이버 지도 클라이언트 ID 주입 + 비정상값 방어 코드
+- [x] track 응답 노출 필드 제한 (내부 식별자/고객전화번호 미노출)
+- [x] 세션 만료 4시간 → 24시간 연장
+- [x] E2E 전체 시나리오 검증 (신청 → 배정 → 출발 → 세션생성 → track조회 → 위치갱신 → 도착)

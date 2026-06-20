@@ -13,6 +13,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
 import { HQFlowRate } from "@/components/hq-flow-rate";
 
 type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "flowrate" | "notices" | "materials" | "sms";
@@ -268,7 +269,7 @@ function HQRequests({ colors }: { colors: any }) {
                 <Text style={{ fontSize: 11, color: colors.muted }}>{r.requestNumber}</Text>
               </View>
               <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>{r.customerName}</Text>
-              <Text style={{ fontSize: 13, color: colors.muted }}>{r.apartmentName} {r.dong}동 {r.ho}호</Text>
+              <Text style={{ fontSize: 13, color: colors.muted }}>{formatFullAddress(r)}</Text>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 12, color: "#FF6B35", fontWeight: "600" }}>
                   {r.branchId ? branches.find(b => b.id === r.branchId)?.name ?? "지사" : "본사"}

@@ -108,9 +108,18 @@ export const repairRequests = mysqlTable("repair_requests", {
   // 고객 정보
   customerName: varchar("customerName", { length: 50 }).notNull(),
   phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  // 단계형 주소 (시/도 > 시/군/구 > 동/읍/면 > 아파트)
+  sido: varchar("sido", { length: 30 }),
+  sigungu: varchar("sigungu", { length: 40 }),
+  eupmyeondong: varchar("eupmyeondong", { length: 40 }),
   apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
   dong: varchar("dong", { length: 20 }).notNull(),
   ho: varchar("ho", { length: 20 }).notNull(),
+  // 네비게이션 목적지용 아파트 대표 도로명 주소 (동/호수 제외)
+  roadAddress: varchar("roadAddress", { length: 200 }),
+  // 아파트 대표 좌표 (고객 지도 목적지 마커 / ETA 계산용)
+  customerLat: decimal("customerLat", { precision: 10, scale: 7 }),
+  customerLng: decimal("customerLng", { precision: 10, scale: 7 }),
   // 접수 유형 및 증상
   requestType: requestTypeEnum.notNull().default("난방고장"),
   symptom: symptomEnum.notNull(),

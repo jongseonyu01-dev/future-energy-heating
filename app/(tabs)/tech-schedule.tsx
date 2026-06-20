@@ -10,6 +10,8 @@ import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
+import { openNavigation } from "@/lib/navigation";
+import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
 import {
   requestLocationPermissions,
   startLocationTracking,
@@ -136,7 +138,9 @@ export default function TechScheduleScreen() {
         technicianPhone: user?.phoneNumber || "",
         customerName: work.customerName,
         customerPhone: work.phoneNumber,
-        customerAddress: `${work.apartmentName} ${work.dong}동 ${work.ho}호`,
+        customerAddress: formatFullAddress(work),
+        customerLat: work.customerLat ? Number(work.customerLat) : undefined,
+        customerLng: work.customerLng ? Number(work.customerLng) : undefined,
         branchId: work.branchId ?? undefined,
         branchName: work.branchName ?? undefined,
         demoMode: false,
@@ -233,13 +237,8 @@ export default function TechScheduleScreen() {
   };
 
   const handleNav = (address: string) => {
-    const encoded = encodeURIComponent(address);
-    const url = Platform.OS === "ios"
-      ? `maps://?q=${encoded}`
-      : `geo:0,0?q=${encoded}`;
-    Linking.openURL(url).catch(() => {
-      Linking.openURL(`https://map.naver.com/search/${encoded}`);
-    });
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    openNavigation(address);
   };
 
   const s = styles(colors);
@@ -277,7 +276,7 @@ export default function TechScheduleScreen() {
 
         <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName} 고객님</Text>
         <Text style={[s.address, { color: colors.muted }]}>
-          {work.apartmentName} {work.dong}동 {work.ho}호
+          {formatFullAddress(work)}
         </Text>
         <Text style={[s.symptom, { color: "#FF6B35" }]}>
           {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
@@ -355,7 +354,7 @@ export default function TechScheduleScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: "#22C55E" }]}
-            onPress={() => handleNav(`${work.apartmentName} ${work.dong}동`)}
+            onPress={() => handleNav(formatNavAddress(work))}
             activeOpacity={0.8}
           >
             <Text style={s.actionBtnText}>🗺 내비게이션</Text>

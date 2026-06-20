@@ -515,7 +515,13 @@ export const appRouter = router({
       .input(z.object({
         customerName: z.string().min(1).max(50),
         phoneNumber: z.string().min(9).max(20),
+        sido: z.string().max(30).optional(),
+        sigungu: z.string().max(40).optional(),
+        eupmyeondong: z.string().max(40).optional(),
         apartmentName: z.string().min(1).max(100),
+        roadAddress: z.string().max(200).optional(),
+        customerLat: z.number().optional(),
+        customerLng: z.number().optional(),
         dong: z.string().min(1).max(20),
         ho: z.string().min(1).max(20),
         requestType: z.enum(["난방고장", "배관청소"]).default("난방고장"),
@@ -529,9 +535,11 @@ export const appRouter = router({
         isUrgent: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
-        // 주소 기반 지사 자동 배정
-        const address = `${input.apartmentName} ${input.dong}`;
-        const branch = await db.findBranchByAddress(address);
+        // 주소 기반 지사 자동 배정 (시군구/동/아파트 단서 모두 활용)
+        const branchLookup = [input.sigungu, input.eupmyeondong, input.apartmentName]
+          .filter(Boolean)
+          .join(" ");
+        const branch = await db.findBranchByAddress(branchLookup || input.apartmentName);
 
         // symptoms 배열을 JSON 문자열로 저장
         const symptomsJson = input.symptoms && input.symptoms.length > 0
@@ -539,6 +547,8 @@ export const appRouter = router({
           : null;
         const created = await db.createRepairRequest({
           ...input,
+          customerLat: input.customerLat !== undefined ? String(input.customerLat) : null,
+          customerLng: input.customerLng !== undefined ? String(input.customerLng) : null,
           symptoms: symptomsJson,
           branchId: branch?.id ?? null,
           // 주소 기반 자동 배정 성공 시 지사배정, 아니면 접수완료

@@ -12,6 +12,7 @@ import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -144,7 +145,7 @@ export default function InspectionResultScreen() {
                     <InfoRow label="접수 유형" value={item.requestType} />
                     <InfoRow
                       label="주소"
-                      value={`${item.apartmentName} ${item.dong}동 ${item.ho}호`}
+                      value={formatFullAddress(item)}
                     />
                     {item.technicianName && (
                       <InfoRow label="담당 기사" value={item.technicianName} />
@@ -203,7 +204,7 @@ export default function InspectionResultScreen() {
                       <InfoRow label="접수 유형" value={item.requestType} />
                       <InfoRow
                         label="주소"
-                        value={`${item.apartmentName} ${item.dong}동 ${item.ho}호`}
+                        value={formatFullAddress(item)}
                       />
                     </View>
 

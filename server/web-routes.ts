@@ -94,12 +94,22 @@ export function registerWebRoutes(app: Express) {
     // 공개 홈페이지 경로(web)를 우선 서빙, 없으면 preview 폴백
     const webPath = path.join(PUBLIC_DIR, "web", "track.html");
     const previewPath = path.join(PUBLIC_DIR, "preview", "track.html");
-    if (fs.existsSync(webPath)) {
-      res.sendFile(webPath);
-    } else if (fs.existsSync(previewPath)) {
-      res.sendFile(previewPath);
-    } else {
-      res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
+    const htmlPath = fs.existsSync(webPath) ? webPath : (fs.existsSync(previewPath) ? previewPath : null);
+    if (!htmlPath) {
+      return res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
+    }
+    try {
+      let html = fs.readFileSync(htmlPath, "utf-8");
+      // 네이버 지도 클라이언트 ID 주입 (없으면 지도 없이 동작)
+      const naverClientId = process.env.NAVER_MAP_CLIENT_ID || "";
+      html = html.replace(
+        "</head>",
+        `<script>window.NAVER_MAP_CLIENT_ID = ${JSON.stringify(naverClientId)};</script></head>`
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch {
+      res.sendFile(htmlPath);
     }
   });
 
