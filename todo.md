@@ -374,3 +374,14 @@
 - [ ] (사용자) UI Publish 버튼으로 재배포 → 새 코드/환경변수 반영
 - [ ] (배포 후) 정식 도메인에서 /api/location 정상 응답 확인
 - [ ] (배포 후) 정식 도메인 track 페이지에 네이버 지도/마커/ETA 표시 확인 후 캡처
+
+
+## 26차 작업 (www 완전 제거 + 정식 도메인/Vercel 연결 진단)
+
+- [x] HTML 12개 파일 메타태그(og:url, og:image, canonical)의 www.futureenergytech → futureenergytech 치환
+- [x] 전체 코드 www.futureenergytech 잔존 0건 확인
+- [x] SITE_URL = https://futureenergytech.co.kr (www 없음) 환경값 확인
+- [x] vitest 14건 통과 (site-url, naver-map-client-id, workflow.notification)
+- [x] TypeScript 0 errors
+- [x] 진단: Manus 배포본(manus.space)에는 네이버ID 주입+위치API 정상. 단 정식 도메인 futureenergytech.co.kr은 server=Vercel 응답 → 별도 Vercel 프로젝트 연결로 308 www 리다이렉트 + 구버전 노출
+- [ ] (사용자 결정 필요) 정식 도메인을 Manus 배포본으로 연결 OR Vercel 프로젝트 재배포
