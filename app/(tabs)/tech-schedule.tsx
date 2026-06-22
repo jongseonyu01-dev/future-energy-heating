@@ -39,6 +39,7 @@ export default function TechScheduleScreen() {
   const { user } = useAppAuth();
 
   const technicianId = user?.technicianId;
+  const userId = user?.userId;
   const today = new Date().toISOString().slice(0, 10);
 
   const [showConsentModal, setShowConsentModal] = useState(false);
@@ -49,14 +50,25 @@ export default function TechScheduleScreen() {
   const [isStartingTracking, setIsStartingTracking] = useState(false);
   const fgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { data: allWorks, isLoading, refetch } = trpc.repair.listByTechnician.useQuery(
+  // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
+  const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
     { technicianId: technicianId ?? 0 },
     { enabled: !!technicianId }
   );
+  const { data: worksByUserId, isLoading: loadingByUserId, refetch: refetchByUserId } = trpc.repair.listByTechnicianUserId.useQuery(
+    { userId: userId ?? 0 },
+    { enabled: !technicianId && !!userId }
+  );
+  const allWorks = technicianId ? worksById : worksByUserId;
+  const isLoading = technicianId ? loadingById : loadingByUserId;
+  const refetch = technicianId ? refetchById : refetchByUserId;
+
+  // technicianId가 없는 경우 userId로 조회된 기사 ID 사용
+  const resolvedTechnicianId = technicianId ?? (worksByUserId && worksByUserId.length > 0 ? worksByUserId[0].technicianId : null);
 
   const consentQuery = trpc.location.getConsent.useQuery(
-    { technicianId: technicianId ?? 0 },
-    { enabled: !!technicianId }
+    { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
+    { enabled: !!(resolvedTechnicianId ?? technicianId) }
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
@@ -137,7 +149,7 @@ export default function TechScheduleScreen() {
       // 서버에 세션 시작 요청
       const result = await startTrackingMutation.mutateAsync({
         requestId: work.id,
-        technicianId: technicianId!,
+        technicianId: (resolvedTechnicianId ?? technicianId)!,
         technicianName: user?.loginId || "기사",
         technicianPhone: user?.phoneNumber || "",
         customerName: work.customerName,
@@ -379,7 +391,7 @@ export default function TechScheduleScreen() {
     );
   };
 
-  if (!technicianId) {
+  if (!technicianId && !userId) {
     return (
       <ScreenContainer className="p-6">
         <Text style={[s.empty, { color: colors.muted }]}>기사 계정으로 로그인해주세요.</Text>
@@ -452,12 +464,13 @@ export default function TechScheduleScreen() {
         onConsent={async () => {
           setShowConsentModal(false);
           // 동의 저장
-          if (technicianId) {
+          const effectiveTechId = resolvedTechnicianId ?? technicianId;
+          if (effectiveTechId) {
             try {
               await fetch("/api/trpc/location.saveConsent", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ json: { technicianId } }),
+                body: JSON.stringify({ json: { technicianId: effectiveTechId } }),
               });
               consentQuery.refetch();
             } catch {}

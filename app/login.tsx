@@ -89,7 +89,7 @@ export default function LoginScreen() {
   const getRouteByRole = (appRole: string) => {
     switch (appRole) {
       case "technician": return "/(tabs)/tech-schedule";
-      case "branch_manager": return "/(tabs)/branch";
+      case "branch_manager": return "/(tabs)/branch-dashboard";
       case "hq_admin": return "/(tabs)/admin";
       default: return "/(tabs)";
     }
@@ -221,7 +221,7 @@ export default function LoginScreen() {
       {
         onSuccess: (r: any) => {
           if (r?.success) {
-            setInfo("기사 가입 신청이 완료되었습니다.\n본사 승인 후 로그인이 가능합니다.");
+            setInfo("기사 가입이 완료되었습니다. 바로 로그인하세요.");
             setTimeout(() => go("login"), 2000);
           } else setError(r?.error ?? "가입 신청에 실패했습니다.");
         },
@@ -258,7 +258,7 @@ export default function LoginScreen() {
       {
         onSuccess: (r: any) => {
           if (r?.success) {
-            setInfo("지사장 가입 신청이 완료되었습니다.\n본사 승인 후 로그인이 가능합니다.");
+            setInfo("지사장 가입이 완료되었습니다. 바로 로그인하세요.");
             setTimeout(() => go("login"), 2000);
           } else setError(r?.error ?? "가입 신청에 실패했습니다.");
         },
@@ -464,7 +464,7 @@ export default function LoginScreen() {
               {signupTab === "technician" && (
                 <>
                   <View style={s.noticeBox}>
-                    <Text style={s.noticeText}>🔧 기사 계정은 본사 승인 후 활성화됩니다.{"\n"}가입 신청 후 담당 지사에 문의해주세요.</Text>
+                    <Text style={s.noticeText}>🔧 기사 계정으로 가입하면 바로 로그인하여 배정된 작업을 확인할 수 있습니다.</Text>
                   </View>
                   <Text style={s.label}>이름</Text>
                   <TextInput style={s.input} value={techName} onChangeText={setTechName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
@@ -488,7 +488,7 @@ export default function LoginScreen() {
                   <TextInput style={s.input} value={techPw} onChangeText={setTechPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
                   <Msg />
                   <TouchableOpacity style={[s.loginBtn, { backgroundColor: "#FF6B35" }, registerTechMutation.isPending && s.loginBtnDisabled]} onPress={handleTechSignup} disabled={registerTechMutation.isPending} activeOpacity={0.8}>
-                    {registerTechMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>기사 가입 신청</Text>}
+                    {registerTechMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>기사 가입하기</Text>}
                   </TouchableOpacity>
                 </>
               )}
@@ -497,7 +497,7 @@ export default function LoginScreen() {
               {signupTab === "branch" && (
                 <>
                   <View style={s.noticeBox}>
-                    <Text style={s.noticeText}>🏢 지사장 계정은 본사 승인 후 활성화됩니다.{"\n"}가입 신청 후 본사에 문의해주세요.{"\n"}본사: 031-8042-7310</Text>
+                    <Text style={s.noticeText}>🏢 지사장 계정으로 가입하면 바로 로그인하여 지사 관리 화면에 접속할 수 있습니다.{"\n"}문의: 031-8042-7310</Text>
                   </View>
                   <Text style={s.label}>이름</Text>
                   <TextInput style={s.input} value={branchName} onChangeText={setBranchName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
@@ -521,7 +521,7 @@ export default function LoginScreen() {
                   <TextInput style={s.input} value={branchPw} onChangeText={setBranchPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
                   <Msg />
                   <TouchableOpacity style={[s.loginBtn, { backgroundColor: "#1A3A6B" }, registerBranchMutation.isPending && s.loginBtnDisabled]} onPress={handleBranchSignup} disabled={registerBranchMutation.isPending} activeOpacity={0.8}>
-                    {registerBranchMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>지사장 가입 신청</Text>}
+                    {registerBranchMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>지사장 가입하기</Text>}
                   </TouchableOpacity>
                 </>
               )}

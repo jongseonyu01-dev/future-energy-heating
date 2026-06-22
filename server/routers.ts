@@ -297,7 +297,7 @@ export const appRouter = router({
         return { success: true, userId };
       }),
 
-    // ── 기사 회원가입 (휴대폰 인증 완료 후, 본사 승인 대기) ──
+    // ── 기사 회원가입 (휴대폰 인증 완료 후, 즉시 로그인 가능) ──
     registerTechnician: publicProcedure
       .input(z.object({
         loginId: z.string().min(4).max(64),
@@ -322,20 +322,20 @@ export const appRouter = router({
           phoneNumber: phone,
           branchId: input.branchId,
           mustChangePassword: false,
-          isActive: false, // 본사 승인 대기
+          isActive: true, // 즉시 로그인 가능
         });
-        // technicians 테이블에도 등록 (비활성 상태)
+        // technicians 테이블에도 등록 (활성 상태)
         await db.createTechnician({
           name: input.name,
           phoneNumber: phone,
           branchId: input.branchId,
           userId,
-          isActive: false,
+          isActive: true,
         });
         return { success: true, userId };
       }),
 
-    // ── 지사장 회원가입 (휴대폰 인증 완료 후, 본사 승인 대기) ──
+    // ── 지사장 회원가입 (휴대폰 인증 완료 후, 즉시 로그인 가능) ──
     registerBranchManager: publicProcedure
       .input(z.object({
         loginId: z.string().min(4).max(64),
@@ -351,6 +351,20 @@ export const appRouter = router({
         const existing = await db.getAppRoleByLoginId(input.loginId.trim());
         if (existing) return { success: false, error: "이미 사용 중인 아이디입니다." };
         const userId = generateSafeUserId(input.loginId + phone + Date.now());
+        // 지사 자동 생성 (승인 없이 즉시 사용 가능)
+        const branchCode = "BRANCH_" + Date.now().toString(36).toUpperCase();
+        let resolvedBranchId = input.branchId;
+        if (!resolvedBranchId) {
+          const newBranch = await db.createBranch({
+            name: input.name + " 지사",
+            code: branchCode,
+            region: "미지정",
+            managerName: input.name,
+            phoneNumber: phone,
+            isActive: true,
+          });
+          resolvedBranchId = newBranch.id;
+        }
         await db.upsertAppRole({
           userId,
           appRole: "branch_manager",
@@ -358,11 +372,15 @@ export const appRouter = router({
           passwordHash: hashPassword(input.password),
           name: input.name,
           phoneNumber: phone,
-          branchId: input.branchId,
+          branchId: resolvedBranchId,
           mustChangePassword: false,
-          isActive: false, // 본사 승인 대기
+          isActive: true, // 즉시 로그인 가능
         });
-        return { success: true, userId };
+        // 지사의 managerUserId 연결
+        if (resolvedBranchId) {
+          try { await db.updateBranch(resolvedBranchId, { managerUserId: userId }); } catch {}
+        }
+        return { success: true, userId, branchId: resolvedBranchId };
       }),
 
     // ── 아이디 찾기 (휴대폰 인증 후 마스킹된 아이디 반환) ──
@@ -698,10 +716,18 @@ export const appRouter = router({
       .input(z.object({ branchId: z.number() }))
       .query(async ({ input }) => db.getRepairRequestsByBranch(input.branchId)),
 
-    // 기사별 배정 목록 (기사용)
+    // 기사별 배정 목록 (기사용 - technicianId 기준)
     listByTechnician: publicProcedure
       .input(z.object({ technicianId: z.number() }))
       .query(async ({ input }) => db.getRepairRequestsByTechnician(input.technicianId)),
+    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용)
+    listByTechnicianUserId: publicProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        const tech = await db.getTechnicianByUserId(input.userId);
+        if (!tech) return [];
+        return db.getRepairRequestsByTechnician(tech.id);
+      }),
 
     // 상태 변경
     updateStatus: publicProcedure
