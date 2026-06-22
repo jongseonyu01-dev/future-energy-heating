@@ -153,10 +153,15 @@ export const appRouter = router({
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          const tech = await db.getTechnicianByUserId(role.userId);
+          // userId로 먼저 조회, 없으면 phoneNumber로 fallback (앱 가입 기사 매칭)
+          const tech = await db.getTechnicianByUserIdOrPhone(role.userId, role.phoneNumber);
           if (tech) {
             technicianId = tech.id;
             branchId = tech.branchId ?? branchId;
+            // userId가 없는 technicians 레코드에 userId 연결 (최초 1회)
+            if (!tech.userId) {
+              try { await db.updateTechnicianUserId(tech.id, role.userId); } catch {}
+            }
           }
         } else if (role.appRole === "branch_manager") {
           const allBranches = await db.getAllBranches();
@@ -202,8 +207,14 @@ export const appRouter = router({
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          const tech = await db.getTechnicianByUserId(role.userId);
-          if (tech) { technicianId = tech.id; branchId = tech.branchId ?? branchId; }
+          const tech = await db.getTechnicianByUserIdOrPhone(role.userId, role.phoneNumber);
+          if (tech) {
+            technicianId = tech.id;
+            branchId = tech.branchId ?? branchId;
+            if (!tech.userId) {
+              try { await db.updateTechnicianUserId(tech.id, role.userId); } catch {}
+            }
+          }
         } else if (role.appRole === "branch_manager") {
           const allBranches = await db.getAllBranches();
           const branch = allBranches.find(b => b.managerUserId === role.userId);

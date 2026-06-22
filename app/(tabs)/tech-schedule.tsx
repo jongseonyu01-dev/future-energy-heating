@@ -426,6 +426,16 @@ export default function TechScheduleScreen() {
         <View style={s.center}>
           <Text style={s.emptyIcon}>📅</Text>
           <Text style={[s.empty, { color: colors.muted }]}>배정된 방문 일정이 없습니다.</Text>
+          {/* 디버그 정보 - 문제 진단용 */}
+          <View style={{ marginTop: 20, padding: 12, backgroundColor: '#1e2022', borderRadius: 8, width: '90%' }}>
+            <Text style={{ color: '#9BA1A6', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>기사 정보 진단</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>회원 userId: {userId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>technicianId: {technicianId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>resolvedTechId: {resolvedTechnicianId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>branchId: {user?.branchId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>조회 기준: {technicianId ? 'technicianId' : userId ? 'userId(fallback)' : '없음'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>오더 수: {(allWorks ?? []).length}건</Text>
+          </View>
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.list}>

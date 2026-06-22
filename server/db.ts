@@ -788,6 +788,36 @@ export async function getTechnicianByUserId(userId: number) {
   return rows[0] ?? null;
 }
 
+// phoneNumber로 기사 조회 (앱 가입 기사 매칭용 - userId 있는 것 우선)
+export async function getTechnicianByPhone(phoneNumber: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const normalized = phoneNumber.replace(/[^0-9]/g, "");
+  const rows = await db.select().from(technicians)
+    .where(eq(technicians.isActive, true))
+    .orderBy(desc(technicians.id));
+  // userId가 있는 레코드 우선
+  const withUserId = rows.filter((r: Technician) => r.userId !== null && r.phoneNumber?.replace(/[^0-9]/g, "") === normalized);
+  if (withUserId.length > 0) return withUserId[0];
+  const byPhone = rows.filter((r: Technician) => r.phoneNumber?.replace(/[^0-9]/g, "") === normalized);
+  return byPhone[0] ?? null;
+}
+
+// userId로 기사 조회 + 없으면 phoneNumber로 fallback
+export async function getTechnicianByUserIdOrPhone(userId: number, phoneNumber?: string | null) {
+  const byUserId = await getTechnicianByUserId(userId);
+  if (byUserId) return byUserId;
+  if (phoneNumber) return getTechnicianByPhone(phoneNumber);
+  return null;
+}
+
+// technicians 레코드에 userId 연결 (앱 가입 기사 매칭 후 최초 1회 업데이트)
+export async function updateTechnicianUserId(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(technicians).set({ userId }).where(eq(technicians.id, id));
+}
+
 // ─── 작업 보고서 ───────────────────────────────────────────────
 export async function getWorkReportByRequestId(requestId: number): Promise<WorkReport | null> {
   const db = await getDb();

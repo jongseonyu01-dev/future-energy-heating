@@ -56,6 +56,7 @@ export default function LoginScreen() {
   const [techVerified, setTechVerified] = useState(false);
   const [techLoginId, setTechLoginId] = useState("");
   const [techPw, setTechPw] = useState("");
+  const [techBranchId, setTechBranchId] = useState<number | null>(null);
 
   // 지사장 회원가입
   const [branchName, setBranchName] = useState("");
@@ -144,6 +145,8 @@ export default function LoginScreen() {
   const registerMutation = trpc.auth.registerCustomer.useMutation();
   const registerTechMutation = trpc.auth.registerTechnician.useMutation();
   const registerBranchMutation = trpc.auth.registerBranchManager.useMutation();
+  // 지사 목록 조회 (기사 가입 시 지사 선택용)
+  const { data: branchList = [] } = trpc.branch.listAll.useQuery(undefined, { enabled: signupTab === "technician" });
   const findIdMutation = trpc.auth.findLoginId.useMutation();
   const resetPwMutation = trpc.auth.resetPassword.useMutation();
 
@@ -217,7 +220,7 @@ export default function LoginScreen() {
     if (techPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     if (!techVerified) { setError("휴대폰 인증을 먼저 완료해주세요."); return; }
     registerTechMutation.mutate(
-      { loginId: techLoginId.trim(), password: techPw, name: techName.trim(), phoneNumber: techPhone.trim() },
+      { loginId: techLoginId.trim(), password: techPw, name: techName.trim(), phoneNumber: techPhone.trim(), branchId: techBranchId ?? undefined },
       {
         onSuccess: (r: any) => {
           if (r?.success) {
@@ -482,6 +485,28 @@ export default function LoginScreen() {
                       </View>
                     </>
                   )}
+                  <Text style={s.label}>소속 지사 (선택)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <TouchableOpacity
+                        style={[s.smallBtn, techBranchId === null && { backgroundColor: '#FF6B35' }]}
+                        onPress={() => setTechBranchId(null)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[s.smallBtnText, techBranchId === null && { color: '#fff' }]}>미선택</Text>
+                      </TouchableOpacity>
+                      {branchList.map((b: any) => (
+                        <TouchableOpacity
+                          key={b.id}
+                          style={[s.smallBtn, techBranchId === b.id && { backgroundColor: '#FF6B35' }]}
+                          onPress={() => setTechBranchId(b.id)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[s.smallBtnText, techBranchId === b.id && { color: '#fff' }]}>{b.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
                   <Text style={s.label}>아이디</Text>
                   <TextInput style={s.input} value={techLoginId} onChangeText={setTechLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
                   <Text style={s.label}>비밀번호</Text>
