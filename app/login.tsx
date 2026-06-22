@@ -267,8 +267,6 @@ export default function LoginScreen() {
                   <TouchableOpacity onPress={() => go("findId")}><Text style={s.link}>아이디 찾기</Text></TouchableOpacity>
                   <Text style={s.linkDot}>·</Text>
                   <TouchableOpacity onPress={() => go("resetPw")}><Text style={s.link}>비밀번호 재설정</Text></TouchableOpacity>
-                  <Text style={s.linkDot}>·</Text>
-                  <TouchableOpacity onPress={() => go("signup")}><Text style={s.link}>회원가입</Text></TouchableOpacity>
                 </View>
               </View>
 
@@ -299,39 +297,22 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* ── 회원가입 (고객) ── */}
+          {/* ── 회원가입 (공개 가입 비활성화) ── */}
           {view === "signup" && (
             <View style={s.form}>
-              <Text style={s.formTitle}>고객 회원가입</Text>
-              <Text style={s.label}>이름</Text>
-              <TextInput style={s.input} value={suName} onChangeText={setSuName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
-              <Text style={s.label}>휴대전화 번호</Text>
-              <View style={s.rowField}>
-                <TextInput style={[s.input, { flex: 1 }]} value={suPhone} onChangeText={setSuPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
-                <TouchableOpacity style={s.smallBtn} onPress={suSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
+              <Text style={s.formTitle}>회원가입</Text>
+              <View style={{ backgroundColor: "#fff7ed", borderWidth: 1.5, borderColor: "#fed7aa", borderRadius: 12, padding: 20, alignItems: "center", marginBottom: 16 }}>
+                <Text style={{ fontSize: 32, marginBottom: 10 }}>🔒</Text>
+                <Text style={{ fontWeight: "700", fontSize: 16, color: "#9a3412", marginBottom: 8, textAlign: "center" }}>공개 회원가입이 비활성화되어 있습니다</Text>
+                <Text style={{ fontSize: 14, color: "#7c3aed", lineHeight: 22, textAlign: "center" }}>계정 등록은 관리자 또는{"
+"}담당 지사장을 통해 진행됩니다.{"
+"}계정이 필요하신 경우 담당자에게{"
+"}문의해 주세요.</Text>
               </View>
-              {suCodeSent && (
-                <>
-                  <Text style={s.label}>인증번호</Text>
-                  <View style={s.rowField}>
-                    <TextInput style={[s.input, { flex: 1 }]} value={suCode} onChangeText={setSuCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
-                    <TouchableOpacity style={[s.smallBtn, { backgroundColor: "#6B7280" }]} onPress={suVerify}><Text style={s.smallBtnText}>확인</Text></TouchableOpacity>
-                  </View>
-                </>
-              )}
-              <Text style={s.label}>아이디</Text>
-              <TextInput style={s.input} value={suLoginId} onChangeText={setSuLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
-              <Text style={s.label}>비밀번호</Text>
-              <TextInput style={s.input} value={suPw} onChangeText={setSuPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
-              <Msg />
-              <TouchableOpacity style={[s.loginBtn, registerMutation.isPending && s.loginBtnDisabled]} onPress={handleSignup} disabled={registerMutation.isPending} activeOpacity={0.8}>
-                {registerMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>가입하기</Text>}
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => go("login")} style={{ marginTop: 14, alignItems: "center" }}><Text style={s.link}>← 로그인으로 돌아가기</Text></TouchableOpacity>
             </View>
           )}
-
-          {/* ── 아이디 찾기 ── */}
+                    {/* ── 아이디 찾기 ── */}
           {view === "findId" && (
             <View style={s.form}>
               <Text style={s.formTitle}>아이디 찾기</Text>
