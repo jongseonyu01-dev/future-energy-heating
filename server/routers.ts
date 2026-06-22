@@ -297,6 +297,74 @@ export const appRouter = router({
         return { success: true, userId };
       }),
 
+    // ── 기사 회원가입 (휴대폰 인증 완료 후, 본사 승인 대기) ──
+    registerTechnician: publicProcedure
+      .input(z.object({
+        loginId: z.string().min(4).max(64),
+        password: z.string().min(6).max(64),
+        name: z.string().min(1).max(50),
+        phoneNumber: z.string().min(10),
+        branchId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        const v = await db.getLatestPhoneVerification(phone, "signup");
+        if (!v || !v.verified) return { success: false, error: "휴대폰 인증을 먼저 완료하세요." };
+        const existing = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (existing) return { success: false, error: "이미 사용 중인 아이디입니다." };
+        const userId = generateSafeUserId(input.loginId + phone + Date.now());
+        await db.upsertAppRole({
+          userId,
+          appRole: "technician",
+          loginId: input.loginId.trim(),
+          passwordHash: hashPassword(input.password),
+          name: input.name,
+          phoneNumber: phone,
+          branchId: input.branchId,
+          mustChangePassword: false,
+          isActive: false, // 본사 승인 대기
+        });
+        // technicians 테이블에도 등록 (비활성 상태)
+        await db.createTechnician({
+          name: input.name,
+          phoneNumber: phone,
+          branchId: input.branchId,
+          userId,
+          isActive: false,
+        });
+        return { success: true, userId };
+      }),
+
+    // ── 지사장 회원가입 (휴대폰 인증 완료 후, 본사 승인 대기) ──
+    registerBranchManager: publicProcedure
+      .input(z.object({
+        loginId: z.string().min(4).max(64),
+        password: z.string().min(6).max(64),
+        name: z.string().min(1).max(50),
+        phoneNumber: z.string().min(10),
+        branchId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const phone = normalizePhone(input.phoneNumber);
+        const v = await db.getLatestPhoneVerification(phone, "signup");
+        if (!v || !v.verified) return { success: false, error: "휴대폰 인증을 먼저 완료하세요." };
+        const existing = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (existing) return { success: false, error: "이미 사용 중인 아이디입니다." };
+        const userId = generateSafeUserId(input.loginId + phone + Date.now());
+        await db.upsertAppRole({
+          userId,
+          appRole: "branch_manager",
+          loginId: input.loginId.trim(),
+          passwordHash: hashPassword(input.password),
+          name: input.name,
+          phoneNumber: phone,
+          branchId: input.branchId,
+          mustChangePassword: false,
+          isActive: false, // 본사 승인 대기
+        });
+        return { success: true, userId };
+      }),
+
     // ── 아이디 찾기 (휴대폰 인증 후 마스킹된 아이디 반환) ──
     findLoginId: publicProcedure
       .input(z.object({ phoneNumber: z.string(), code: z.string() }))

@@ -20,9 +20,6 @@ import {
   getSidoList,
   getSigunguList,
   getDongList,
-  getApartmentList,
-  getApartmentRoadAddress,
-  getApartmentCoords,
 } from "@/constants/address-data";
 
 const TIME_SLOTS = [
@@ -103,10 +100,6 @@ export default function PipeCleaningScreen() {
       Alert.alert("입력 오류", "동/읍/면을 선택해주세요.");
       return;
     }
-    if (!apartmentName) {
-      Alert.alert("입력 오류", "아파트 단지를 선택해주세요.");
-      return;
-    }
     if (!dong.trim()) {
       Alert.alert("입력 오류", "동을 입력해주세요.");
       return;
@@ -116,8 +109,8 @@ export default function PipeCleaningScreen() {
       return;
     }
 
-    const roadAddress = getApartmentRoadAddress(sido, sigungu, eupmyeondong, apartmentName);
-    const coords = getApartmentCoords(sido, sigungu, eupmyeondong, apartmentName);
+    const addrParts = [sido, sigungu, eupmyeondong, apartmentName.trim(), dong.trim() ? dong.trim() + '동' : '', ho.trim() ? ho.trim() + '호' : ''].filter(Boolean);
+    const fullAddress = addrParts.join(' ');
 
     createMutation.mutate({
       customerName: customerName.trim(),
@@ -125,10 +118,10 @@ export default function PipeCleaningScreen() {
       sido,
       sigungu,
       eupmyeondong,
-      apartmentName,
-      roadAddress: roadAddress || `${sido} ${sigungu} ${eupmyeondong} ${apartmentName}`,
-      customerLat: coords?.lat,
-      customerLng: coords?.lng,
+      apartmentName: apartmentName.trim(),
+      roadAddress: fullAddress,
+      customerLat: undefined,
+      customerLng: undefined,
       dong: dong.trim(),
       ho: ho.trim(),
       requestType: "배관청소",
@@ -188,7 +181,7 @@ export default function PipeCleaningScreen() {
           {/* 주소 정보 */}
           <SectionTitle title="🏠 주소 정보" />
           <Text style={styles.addressHint}>
-            시/도 → 시/군/구 → 동 → 아파트 단지를 차례로 선택한 뒤, 동/호수만 입력해주세요.
+            시/도 → 시/군/구 → 읍/면/동 순서로 선택 후, 아파트명/건물명·동·호수를 직접 입력해주세요.
           </Text>
 
           <SelectField
@@ -226,13 +219,12 @@ export default function PipeCleaningScreen() {
               setApartmentName("");
             }}
           />
-          <SelectField
-            label="아파트 단지 *"
+          <InputField
+            label="아파트명/건물명"
             value={apartmentName}
-            options={getApartmentList(sido, sigungu, eupmyeondong).map((a) => a.name)}
-            placeholder="아파트 단지를 선택하세요"
-            disabled={!eupmyeondong}
-            onSelect={setApartmentName}
+            onChangeText={setApartmentName}
+            placeholder="예: 안산그랑시티자이1차"
+            colors={colors}
           />
 
           <View style={styles.rowInputs}>

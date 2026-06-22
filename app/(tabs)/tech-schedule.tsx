@@ -11,7 +11,7 @@ import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
 import { openNavigation } from "@/lib/navigation";
-import { formatFullAddress, formatNavAddress, getApartmentCoords } from "@/constants/address-data";
+import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
 import {
   requestLocationPermissions,
   startLocationTracking,
@@ -130,16 +130,9 @@ export default function TechScheduleScreen() {
         return;
       }
 
-      // 목적지(아파트 대표) 좌표 - 접수건에 저장된 좌표가 없으면 주소 데이터에서 조회
-      let destLat = work.customerLat ? Number(work.customerLat) : undefined;
-      let destLng = work.customerLng ? Number(work.customerLng) : undefined;
-      if ((destLat === undefined || destLng === undefined) && work.sido && work.sigungu && work.eupmyeondong && work.apartmentName) {
-        const coords = getApartmentCoords(work.sido, work.sigungu, work.eupmyeondong, work.apartmentName);
-        if (coords) {
-          destLat = coords.lat;
-          destLng = coords.lng;
-        }
-      }
+      // 목적지 좌표 - 접수건에 저장된 좌표 사용 (카카오 지오코딩 연동 시 자동 저장됨)
+      const destLat = work.customerLat ? Number(work.customerLat) : undefined;
+      const destLng = work.customerLng ? Number(work.customerLng) : undefined;
 
       // 서버에 세션 시작 요청
       const result = await startTrackingMutation.mutateAsync({
