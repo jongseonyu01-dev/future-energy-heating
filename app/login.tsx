@@ -304,10 +304,7 @@ export default function LoginScreen() {
               <View style={{ backgroundColor: "#fff7ed", borderWidth: 1.5, borderColor: "#fed7aa", borderRadius: 12, padding: 20, alignItems: "center", marginBottom: 16 }}>
                 <Text style={{ fontSize: 32, marginBottom: 10 }}>🔒</Text>
                 <Text style={{ fontWeight: "700", fontSize: 16, color: "#9a3412", marginBottom: 8, textAlign: "center" }}>공개 회원가입이 비활성화되어 있습니다</Text>
-                <Text style={{ fontSize: 14, color: "#7c3aed", lineHeight: 22, textAlign: "center" }}>계정 등록은 관리자 또는{"
-"}담당 지사장을 통해 진행됩니다.{"
-"}계정이 필요하신 경우 담당자에게{"
-"}문의해 주세요.</Text>
+                <Text style={{ fontSize: 14, color: "#7c3aed", lineHeight: 22, textAlign: "center" }}>계정 등록은 관리자 또는{" "}담당 지사장을 통해 진행됩니다.{" "}계정이 필요하신 경우 담당자에게{" "}문의해 주세요.</Text>
               </View>
               <TouchableOpacity onPress={() => go("login")} style={{ marginTop: 14, alignItems: "center" }}><Text style={s.link}>← 로그인으로 돌아가기</Text></TouchableOpacity>
             </View>
