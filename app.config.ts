@@ -131,7 +131,7 @@ const config: ExpoConfig = {
       "expo-build-properties",
       {
         android: {
-          minSdkVersion: 21,
+          minSdkVersion: 24,
         },
       },
     ],
