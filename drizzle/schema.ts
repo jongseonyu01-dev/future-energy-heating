@@ -57,6 +57,10 @@ export const branches = mysqlTable("branches", {
   isActive: boolean("isActive").default(true).notNull(),
   // 지사장 userId (app_roles.userId)
   managerUserId: int("managerUserId"),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -184,6 +188,10 @@ export const repairRequests = mysqlTable("repair_requests", {
   // 재방문 여부
   needsRevisit: boolean("needsRevisit").default(false).notNull(),
   revisitReason: text("revisitReason"),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   // 타임스탬프
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -200,6 +208,10 @@ export const technicians = mysqlTable("technicians", {
   // 앱 로그인 userId 연결
   userId: int("userId"),
   isActive: boolean("isActive").default(true).notNull(),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

@@ -206,9 +206,25 @@ function HQRequests({ colors }: { colors: any }) {
   const [reassignId, setReassignId] = useState<number | null>(null);
   const [targetBranchId, setTargetBranchId] = useState<number | null>(null);
 
+  const { user } = useAppAuth();
   const utils = trpc.useUtils();
   const { data: requests = [], isLoading } = trpc.repair.listAll.useQuery();
   const { data: branches = [] } = trpc.branch.listActive.useQuery();
+
+  const deleteReqMutation = trpc.repair.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.success) { utils.repair.listAll.invalidate(); Alert.alert("삭제 완료", "접수가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteReq = (id: number, name: string) => {
+    if (!user) return;
+    Alert.alert("접수 삭제", `「${name}」 접수를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteReqMutation.mutate({ id, actorRole: user.appRole as any, actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
 
   const reassignMutation = trpc.repair.reassignBranch.useMutation({
     onSuccess: () => { utils.repair.listAll.invalidate(); setReassignId(null); Alert.alert("완료", "지사가 재배정되었습니다."); },
@@ -296,9 +312,14 @@ function HQRequests({ colors }: { colors: any }) {
                   </View>
                 </View>
               ) : (
-                <TouchableOpacity style={{ backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center", marginTop: 4 }} onPress={() => { setReassignId(r.id); setTargetBranchId(r.branchId ?? null); }} activeOpacity={0.8}>
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>지사 재배정</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                  <TouchableOpacity style={{ flex: 1, backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { setReassignId(r.id); setTargetBranchId(r.branchId ?? null); }} activeOpacity={0.8}>
+                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>지사 재배정</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteReq(r.id, r.customerName)} activeOpacity={0.8}>
+                    <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "700" }}>삭제</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           ))}
@@ -310,14 +331,35 @@ function HQRequests({ colors }: { colors: any }) {
 
 // ─── 지사 관리 ────────────────────────────────────────────────────
 function HQBranches({ colors }: { colors: any }) {
+  const { user } = useAppAuth();
   const [addModal, setAddModal] = useState(false);
   const [name, setName] = useState(""); const [code, setCode] = useState(""); const [region, setRegion] = useState("");
   const [managerName, setManagerName] = useState(""); const [phone, setPhone] = useState(""); const [address, setAddress] = useState("");
   const [keyword, setKeyword] = useState(""); const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const utils = trpc.useUtils();
   const { data: branches = [], isLoading } = trpc.branch.listAll.useQuery();
   const { data: mappings = [] } = trpc.branch.getRegionMappings.useQuery();
+
+  const deleteBranchMutation = trpc.branch.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      setDeleteTarget(null);
+      if (r?.success) {
+        utils.branch.listAll.invalidate();
+        utils.repair.listAll.invalidate();
+        Alert.alert("삭제 완료", r.mode === "cascade" ? "지사와 소속 데이터가 함께 삭제되었습니다." : "지사가 삭제되고 소속 데이터는 본사로 이관되었습니다.");
+      } else {
+        Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+      }
+    },
+    onError: () => { setDeleteTarget(null); Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."); },
+  });
+
+  const runDeleteBranch = (mode: "transfer" | "cascade") => {
+    if (!deleteTarget || !user) return;
+    deleteBranchMutation.mutate({ id: deleteTarget.id, actorRole: user.appRole as any, actorUserId: user.userId, mode });
+  };
 
   const createMutation = trpc.branch.create.useMutation({
     onSuccess: () => { utils.branch.listAll.invalidate(); setAddModal(false); setName(""); setCode(""); setRegion(""); setManagerName(""); setPhone(""); setAddress(""); Alert.alert("완료", "지사가 등록되었습니다."); },
@@ -348,6 +390,9 @@ function HQBranches({ colors }: { colors: any }) {
             <View style={{ flexDirection: "row", gap: 8 }}>
               <TouchableOpacity style={{ backgroundColor: b.isActive ? "#FEF2F2" : "#F0FDF4", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }} onPress={() => updateMutation.mutate({ id: b.id, isActive: !b.isActive })} activeOpacity={0.8}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: b.isActive ? "#EF4444" : "#22C55E" }}>{b.isActive ? "중지" : "활성화"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }} onPress={() => setDeleteTarget({ id: b.id, name: b.name })} activeOpacity={0.8}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>삭제</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -414,6 +459,29 @@ function HQBranches({ colors }: { colors: any }) {
           </View>
         </View>
       </Modal>
+
+      {/* 지사 삭제 옵션 모달 */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 20, gap: 12 }}>
+            <Text style={{ fontSize: 17, fontWeight: "800", color: colors.foreground }}>지사 삭제</Text>
+            <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }}>
+              「{deleteTarget?.name}」 지사를 삭제하시겠습니까? 해당 지사의 기사, 고객, 접수 데이터를 본사로 이관하거나 함께 삭제할 수 있습니다.
+            </Text>
+            <TouchableOpacity style={{ backgroundColor: "#FFF7ED", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#FB923C" }} onPress={() => runDeleteBranch("transfer")} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#EA580C" }}>지사만 삭제 (소속 데이터 본사로 이관)</Text>
+              <Text style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>기사/고객/접수는 유지되며 본사 관리로 전환됩니다.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => runDeleteBranch("cascade")} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#DC2626" }}>지사와 소속 데이터 함께 삭제</Text>
+              <Text style={{ fontSize: 12, color: "#991B1B", marginTop: 2 }}>기사/고객/접수 데이터가 모두 삭제됩니다.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ backgroundColor: "#6B7280", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setDeleteTarget(null)} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{deleteBranchMutation.isPending ? "처리 중..." : "취소"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -426,9 +494,26 @@ function HQAccounts({ colors }: { colors: any }) {
   const [techName, setTechName] = useState(""); const [phone, setPhone] = useState("");
   const [branchId, setBranchId] = useState<number | null>(null);
 
+  const { user } = useAppAuth();
   const utils = trpc.useUtils();
   const { data: accounts = [], isLoading } = trpc.auth.listAccounts.useQuery();
   const { data: branches = [] } = trpc.branch.listActive.useQuery();
+  const { data: allTechs = [] } = trpc.technicians.listAll.useQuery();
+
+  const deleteTechMutation = trpc.technicians.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.success) { utils.auth.listAccounts.invalidate(); Alert.alert("삭제 완료", "기사가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteTech = (techId: number, name: string) => {
+    if (!user) return;
+    Alert.alert("기사 삭제", `「${name}」 기사를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteTechMutation.mutate({ id: techId, actorRole: (user.appRole as any), actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
 
   const createMutation = trpc.auth.createAccount.useMutation({
     onSuccess: (data) => {
@@ -465,9 +550,19 @@ function HQAccounts({ colors }: { colors: any }) {
               </View>
               <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>ID: {a.loginId}</Text>
               {a.phoneNumber && <Text style={{ fontSize: 13, color: colors.muted }}>📞 {a.phoneNumber}</Text>}
-              <TouchableOpacity style={{ backgroundColor: a.isActive ? "#FEF2F2" : "#F0FDF4", borderRadius: 8, padding: 8, alignItems: "center", marginTop: 4 }} onPress={() => setActiveMutation.mutate({ userId: a.userId, isActive: !a.isActive })} activeOpacity={0.8}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: a.isActive ? "#EF4444" : "#22C55E" }}>{a.isActive ? "계정 정지" : "계정 활성화"}</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: a.isActive ? "#FEF2F2" : "#F0FDF4", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => setActiveMutation.mutate({ userId: a.userId, isActive: !a.isActive })} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: a.isActive ? "#EF4444" : "#22C55E" }}>{a.isActive ? "계정 정지" : "계정 활성화"}</Text>
+                </TouchableOpacity>
+                {a.appRole === "technician" && (() => {
+                  const tech = allTechs.find((t: any) => t.userId === a.userId || (a.phoneNumber && t.phoneNumber === a.phoneNumber));
+                  return tech ? (
+                    <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteTech(tech.id, tech.name)} activeOpacity={0.8}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>기사 삭제</Text>
+                    </TouchableOpacity>
+                  ) : null;
+                })()}
+              </View>
             </View>
           ))}
         </ScrollView>

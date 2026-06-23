@@ -166,6 +166,7 @@ export async function getAllRepairRequests(): Promise<RepairRequest[]> {
   return db
     .select()
     .from(repairRequests)
+    .where(eq(repairRequests.isDeleted, false))
     .orderBy(desc(repairRequests.createdAt));
 }
 
@@ -274,7 +275,7 @@ export async function getActiveTechnicians(): Promise<Technician[]> {
   return db
     .select()
     .from(technicians)
-    .where(eq(technicians.isActive, true))
+    .where(and(eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
     .orderBy(desc(technicians.createdAt));
 }
 
@@ -283,7 +284,7 @@ export async function getAllTechnicians(): Promise<Technician[]> {
   const db = await getDb();
   if (!db) return [];
 
-  return db.select().from(technicians).orderBy(desc(technicians.createdAt));
+  return db.select().from(technicians).where(eq(technicians.isDeleted, false)).orderBy(desc(technicians.createdAt));
 }
 
 // 기사 등록
@@ -672,13 +673,13 @@ export async function getAllAppRoles(): Promise<AppRole[]> {
 export async function getAllBranches(): Promise<Branch[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(branches).orderBy(branches.name);
+  return db.select().from(branches).where(eq(branches.isDeleted, false)).orderBy(branches.name);
 }
 
 export async function getActiveBranches(): Promise<Branch[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(branches).where(eq(branches.isActive, true)).orderBy(branches.name);
+  return db.select().from(branches).where(and(eq(branches.isActive, true), eq(branches.isDeleted, false))).orderBy(branches.name);
 }
 
 export async function getBranchById(id: number): Promise<Branch | null> {
@@ -747,7 +748,7 @@ export async function getRepairRequestsByBranch(branchId: number) {
   return db
     .select()
     .from(repairRequests)
-    .where(eq(repairRequests.branchId, branchId))
+    .where(and(eq(repairRequests.branchId, branchId), eq(repairRequests.isDeleted, false)))
     .orderBy(desc(repairRequests.createdAt));
 }
 
@@ -758,7 +759,7 @@ export async function getRepairRequestsByTechnician(technicianId: number) {
   return db
     .select()
     .from(repairRequests)
-    .where(eq(repairRequests.technicianId, technicianId))
+    .where(and(eq(repairRequests.technicianId, technicianId), eq(repairRequests.isDeleted, false)))
     .orderBy(desc(repairRequests.createdAt));
 }
 
@@ -776,8 +777,16 @@ export async function getTechniciansByBranch(branchId: number) {
   return db
     .select()
     .from(technicians)
-    .where(and(eq(technicians.branchId, branchId), eq(technicians.isActive, true)))
+    .where(and(eq(technicians.branchId, branchId), eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
     .orderBy(technicians.name);
+}
+
+// id로 기사 조회
+export async function getTechnicianById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(technicians).where(eq(technicians.id, id)).limit(1);
+  return rows[0] ?? null;
 }
 
 // userId로 기사 조회
@@ -816,6 +825,111 @@ export async function updateTechnicianUserId(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(technicians).set({ userId }).where(eq(technicians.id, id));
+}
+
+// ─── soft delete (삭제) ────────────────────────────────────────
+// 접수/오더 단건 soft delete
+export async function softDeleteRepairRequest(id: number, deletedBy: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(repairRequests)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+    .where(eq(repairRequests.id, id));
+}
+
+// 기사 soft delete
+export async function softDeleteTechnician(id: number, deletedBy: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(technicians)
+    .set({ isDeleted: true, isActive: false, deletedAt: new Date(), deletedBy })
+    .where(eq(technicians.id, id));
+}
+
+// 진행중(미완료) 배정 작업 수 (기사 삭제 전 체크용)
+export async function countActiveAssignmentsByTechnician(technicianId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select().from(repairRequests)
+    .where(and(
+      eq(repairRequests.technicianId, technicianId),
+      eq(repairRequests.isDeleted, false),
+    ));
+  return rows.filter((r: RepairRequest) => r.status !== "작업완료").length;
+}
+
+// 고객(전화번호 기준) 접수 전체 soft delete → 고객 삭제
+export async function softDeleteCustomerByPhone(phoneNumber: string, deletedBy: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const normalized = phoneNumber.replace(/[^0-9]/g, "");
+  const all = await db.select().from(repairRequests).where(eq(repairRequests.isDeleted, false));
+  const targets = all.filter((r: RepairRequest) => r.phoneNumber?.replace(/[^0-9]/g, "") === normalized);
+  for (const t of targets) {
+    await db.update(repairRequests)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+      .where(eq(repairRequests.id, t.id));
+  }
+  return targets.length;
+}
+
+// 지사 soft delete (옵션: transfer = 소속 데이터 본사 이관 / cascade = 함께 삭제)
+export async function softDeleteBranch(
+  id: number,
+  deletedBy: number,
+  mode: "transfer" | "cascade",
+): Promise<{ technicians: number; requests: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // 소속 기사
+  const techs = await db.select().from(technicians)
+    .where(and(eq(technicians.branchId, id), eq(technicians.isDeleted, false)));
+  // 소속 접수
+  const reqs = await db.select().from(repairRequests)
+    .where(and(eq(repairRequests.branchId, id), eq(repairRequests.isDeleted, false)));
+  if (mode === "transfer") {
+    // 기사/접수를 본사 직속(branchId=null)으로 이관
+    for (const t of techs) {
+      await db.update(technicians).set({ branchId: null }).where(eq(technicians.id, t.id));
+    }
+    for (const r of reqs) {
+      await db.update(repairRequests).set({ branchId: null }).where(eq(repairRequests.id, r.id));
+    }
+  } else {
+    // cascade: 소속 기사/접수 함께 soft delete
+    for (const t of techs) {
+      await db.update(technicians)
+        .set({ isDeleted: true, isActive: false, deletedAt: new Date(), deletedBy })
+        .where(eq(technicians.id, t.id));
+    }
+    for (const r of reqs) {
+      await db.update(repairRequests)
+        .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+        .where(eq(repairRequests.id, r.id));
+    }
+  }
+  // 지사 본체 soft delete
+  await db.update(branches)
+    .set({ isDeleted: true, isActive: false, deletedAt: new Date(), deletedBy })
+    .where(eq(branches.id, id));
+  return { technicians: techs.length, requests: reqs.length };
+}
+
+// 삭제 항목 복구 (본사 전용)
+export async function restoreBranch(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(branches).set({ isDeleted: false, isActive: true, deletedAt: null, deletedBy: null }).where(eq(branches.id, id));
+}
+export async function restoreTechnician(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(technicians).set({ isDeleted: false, isActive: true, deletedAt: null, deletedBy: null }).where(eq(technicians.id, id));
+}
+export async function restoreRepairRequest(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(repairRequests).set({ isDeleted: false, deletedAt: null, deletedBy: null }).where(eq(repairRequests.id, id));
 }
 
 // ─── 작업 보고서 ───────────────────────────────────────────────

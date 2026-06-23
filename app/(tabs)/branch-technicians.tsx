@@ -39,6 +39,21 @@ export default function BranchTechniciansScreen() {
     onSuccess: () => utils.technicians.listByBranch.invalidate(),
   });
 
+  const deleteTechMutation = trpc.technicians.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.success) { utils.technicians.listByBranch.invalidate(); Alert.alert("삭제 완료", "기사가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteTech = (id: number, name: string) => {
+    if (!user) return;
+    Alert.alert("기사 삭제", `「${name}」 기사를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteTechMutation.mutate({ id, actorRole: (user.appRole as any), actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
+
   // 기사별 작업 통계
   const getStats = (techId: number) => {
     const works = allRequests.filter(r => r.technicianId === techId);
@@ -133,6 +148,13 @@ export default function BranchTechniciansScreen() {
                     activeOpacity={0.8}
                   >
                     <Text style={s.actionBtnText}>{tech.isActive ? "비활성화" : "활성화"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.actionBtn, { backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#F87171" }]}
+                    onPress={() => confirmDeleteTech(tech.id, tech.name)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.actionBtnText, { color: "#DC2626" }]}>삭제</Text>
                   </TouchableOpacity>
                 </View>
               </View>

@@ -18,6 +18,8 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import { formatFullAddress } from "@/constants/address-data";
+import { useAppAuth } from "@/lib/auth-context";
+import { useRouter } from "expo-router";
 
 // 관리자 화면 탭 정의
 type AdminTab = "requests" | "leak" | "technicians" | "settings";
@@ -74,50 +76,31 @@ type RepairRequest = {
 
 export default function AdminScreen() {
   const colors = useColors();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [password, setPassword] = useState("");
+  const router = useRouter();
+  const { user, logout } = useAppAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [selectedStatus, setSelectedStatus] = useState("전체");
   const [selectedItem, setSelectedItem] = useState<RepairRequest | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
-  const verifyMutation = trpc.admin.verifyPassword.useMutation({
-    onSuccess: (res) => {
-      if (res.valid) {
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-        setIsLoggedIn(true);
-        setPassword("");
-      } else {
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
-        Alert.alert("오류", "비밀번호가 올바르지 않습니다.");
-      }
-    },
-    onError: () => {
-      Alert.alert("오류", "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.");
-    },
-  });
-
-  const handleLogin = () => {
-    if (!password.trim()) {
-      Alert.alert("입력 오류", "비밀번호를 입력해주세요.");
-      return;
-    }
-    verifyMutation.mutate({ password });
-  };
-
-  if (!isLoggedIn) {
+  // 본사 관리자만 접근 가능 (role 기반 - 별도 비밀번호 입력 없음)
+  if (!user || user.appRole !== "hq_admin") {
     return (
-      <AdminLoginScreen
-        password={password}
-        setPassword={setPassword}
-        onLogin={handleLogin}
-        isLoading={verifyMutation.isPending}
-        colors={colors}
-      />
+      <ScreenContainer className="items-center justify-center p-8">
+        <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text, marginBottom: 8 }}>
+          본사 관리자 전용 화면입니다
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", marginBottom: 24 }}>
+          본사 관리자 계정으로 로그인하면{"\n"}이 화면을 이용할 수 있습니다.
+        </Text>
+        <Pressable
+          style={{ backgroundColor: "#E84B2F", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12 }}
+          onPress={() => router.replace("/login")}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>로그인 화면으로</Text>
+        </Pressable>
+      </ScreenContainer>
     );
   }
 
@@ -131,9 +114,9 @@ export default function AdminScreen() {
         </View>
         <Pressable
           style={[styles.logoutButton, { borderColor: "rgba(255,255,255,0.3)" }]}
-          onPress={() => {
-            setIsLoggedIn(false);
-            setActiveTab("requests");
+          onPress={async () => {
+            await logout();
+            router.replace("/login");
           }}
         >
           <Text style={styles.logoutText}>로그아웃</Text>
@@ -187,70 +170,6 @@ export default function AdminScreen() {
       {activeTab === "leak" && <LeakMonitorTab colors={colors} />}
       {activeTab === "technicians" && <TechniciansTab colors={colors} />}
       {activeTab === "settings" && <SettingsTab colors={colors} />}
-    </ScreenContainer>
-  );
-}
-
-// ─── 로그인 화면 ───────────────────────────────────────────────
-function AdminLoginScreen({
-  password,
-  setPassword,
-  onLogin,
-  isLoading,
-  colors,
-}: {
-  password: string;
-  setPassword: (v: string) => void;
-  onLogin: () => void;
-  isLoading: boolean;
-  colors: any;
-}) {
-  return (
-    <ScreenContainer containerClassName="bg-background">
-      <View style={styles.loginContainer}>
-        <View style={styles.loginCard}>
-          <Text style={styles.loginIcon}>🔐</Text>
-          <Text style={[styles.loginTitle, { color: colors.foreground }]}>
-            관리자 로그인
-          </Text>
-          <Text style={[styles.loginSubtitle, { color: colors.muted }]}>
-            관리자 비밀번호를 입력해주세요
-          </Text>
-
-          <TextInput
-            style={[
-              styles.loginInput,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                color: colors.foreground,
-              },
-            ]}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="비밀번호"
-            placeholderTextColor={colors.muted}
-            secureTextEntry
-            returnKeyType="done"
-            onSubmitEditing={onLogin}
-          />
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.loginButton,
-              { backgroundColor: "#E84B2F", opacity: pressed || isLoading ? 0.9 : 1 },
-            ]}
-            onPress={onLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.loginButtonText}>로그인</Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
     </ScreenContainer>
   );
 }
@@ -491,6 +410,73 @@ function DetailModal({
   const [showTechnicianPicker, setShowTechnicianPicker] = useState(false);
 
   const { data: technicians } = trpc.technicians.list.useQuery();
+  const { user } = useAppAuth();
+
+  const deleteMutation = trpc.repair.softDelete.useMutation({
+    onSuccess: (res) => {
+      if (res.success) {
+        Alert.alert("삭제 완료", "접수가 삭제되었습니다.");
+        onUpdate();
+      } else {
+        Alert.alert("삭제 실패", res.error || "삭제할 수 없습니다.");
+      }
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+
+  const deleteCustomerMutation = trpc.repair.softDeleteCustomer.useMutation({
+    onSuccess: (res) => {
+      if (res.success) {
+        Alert.alert("삭제 완료", `고객의 접수 ${res.deletedCount ?? 0}건이 삭제되었습니다.`);
+        onUpdate();
+      } else {
+        Alert.alert("삭제 실패", res.error || "삭제할 수 없습니다.");
+      }
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+
+  const handleDeleteRequest = () => {
+    if (!user) return;
+    Alert.alert(
+      "접수 삭제",
+      `이 접수(${item.requestNumber})를 삭제하시겠습니까?\n삭제된 접수는 목록에서 숨겨집니다.`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: () => deleteMutation.mutate({
+            id: item.id,
+            actorRole: user.appRole as "hq_admin" | "branch_manager",
+            actorUserId: user.userId,
+            actorBranchId: user.branchId ?? null,
+          }),
+        },
+      ],
+    );
+  };
+
+  const handleDeleteCustomer = () => {
+    if (!user) return;
+    Alert.alert(
+      "고객 삭제",
+      `${item.customerName}(${item.phoneNumber}) 고객의 모든 접수 내역을 삭제하시겠습니까?`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "전체 삭제",
+          style: "destructive",
+          onPress: () => deleteCustomerMutation.mutate({
+            phoneNumber: item.phoneNumber,
+            actorRole: user.appRole as "hq_admin" | "branch_manager",
+            actorUserId: user.userId,
+            actorBranchId: user.branchId ?? null,
+          }),
+        },
+      ],
+    );
+  };
 
   const updateStatusMutation = trpc.repair.updateStatus.useMutation({
     onSuccess: () => {
@@ -828,6 +814,45 @@ function DetailModal({
               )}
             </Pressable>
           </SectionCard>
+
+          {/* 삭제 영역 (본사 관리자 = 전체, 지사장 = 자기 지사 접수만) */}
+          {(user?.appRole === "hq_admin" || user?.appRole === "branch_manager") && (
+            <SectionCard title="🗑️ 데이터 삭제" colors={colors}>
+              <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 12, lineHeight: 18 }}>
+                {user?.appRole === "hq_admin"
+                  ? "본사 관리자는 모든 접수/고객을 삭제할 수 있습니다."
+                  : "지사장은 자기 지사 소속 접수/고객만 삭제할 수 있습니다."}
+              </Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: "#DC2626", opacity: pressed ? 0.85 : 1, marginBottom: 10 },
+                ]}
+                onPress={handleDeleteRequest}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.actionButtonText}>이 접수 삭제</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: "#991B1B", opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={handleDeleteCustomer}
+                disabled={deleteCustomerMutation.isPending}
+              >
+                {deleteCustomerMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.actionButtonText}>이 고객의 전체 접수 삭제</Text>
+                )}
+              </Pressable>
+            </SectionCard>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -874,12 +899,46 @@ type Technician = {
 function TechniciansTab({ colors }: { colors: any }) {
   const { data: technicians, isLoading, refetch } =
     trpc.technicians.listAll.useQuery();
+  const { user } = useAppAuth();
   const [showFormModal, setShowFormModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Technician | null>(null);
 
   const setActiveMutation = trpc.technicians.setActive.useMutation({
     onSuccess: () => refetch(),
   });
+
+  const deleteTechMutation = trpc.technicians.softDelete.useMutation({
+    onSuccess: (res) => {
+      if (res.success) {
+        Alert.alert("삭제 완료", "기사가 삭제되었습니다.");
+        refetch();
+      } else {
+        Alert.alert("삭제 실패", res.error || "삭제할 수 없습니다.");
+      }
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+
+  const handleDeleteTech = (tech: Technician) => {
+    if (!user) return;
+    Alert.alert(
+      "기사 삭제",
+      `${tech.name} 기사를 삭제하시겠습니까?\n삭제된 기사는 목록과 배정 대상에서 제외됩니다.`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: () => deleteTechMutation.mutate({
+            id: tech.id,
+            actorRole: user.appRole as "hq_admin" | "branch_manager",
+            actorUserId: user.userId,
+            actorBranchId: user.branchId ?? null,
+          }),
+        },
+      ],
+    );
+  };
 
   const openCreate = () => {
     setEditTarget(null);
@@ -1009,6 +1068,17 @@ function TechniciansTab({ colors }: { colors: any }) {
                     {item.isActive ? "비활성" : "활성화"}
                   </Text>
                 </Pressable>
+                {user?.appRole === "hq_admin" && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.techSmallBtn,
+                      { borderColor: "#991B1B", backgroundColor: "#FEF2F2", opacity: pressed ? 0.7 : 1 },
+                    ]}
+                    onPress={() => handleDeleteTech(item)}
+                  >
+                    <Text style={{ color: "#991B1B", fontWeight: "700", fontSize: 13 }}>삭제</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           )}

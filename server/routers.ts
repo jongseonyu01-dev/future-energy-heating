@@ -603,6 +603,37 @@ export const appRouter = router({
     stats: publicProcedure
       .input(z.object({ branchId: z.number().optional() }))
       .query(async ({ input }) => db.getBranchStats(input.branchId)),
+
+    // 지사 삭제 (본사 전용). mode=transfer(본사 이관) | cascade(함께 삭제)
+    softDelete: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        actorRole: z.enum(["hq_admin", "branch_manager"]),
+        actorUserId: z.number(),
+        mode: z.enum(["transfer", "cascade"]),
+      }))
+      .mutation(async ({ input }) => {
+        if (input.actorRole !== "hq_admin") {
+          return { success: false, error: "지사 삭제 권한은 본사 관리자에게만 있습니다." };
+        }
+        const branch = await db.getBranchById(input.id);
+        if (!branch || branch.isDeleted) {
+          return { success: false, error: "존재하지 않는 지사입니다." };
+        }
+        const result = await db.softDeleteBranch(input.id, input.actorUserId, input.mode);
+        return { success: true, ...result, mode: input.mode };
+      }),
+
+    // 지사 복구 (본사 전용)
+    restore: publicProcedure
+      .input(z.object({ id: z.number(), actorRole: z.enum(["hq_admin", "branch_manager"]) }))
+      .mutation(async ({ input }) => {
+        if (input.actorRole !== "hq_admin") {
+          return { success: false, error: "복구 권한은 본사 관리자에게만 있습니다." };
+        }
+        await db.restoreBranch(input.id);
+        return { success: true };
+      }),
   }),
 
   // ─── 접수 관련 ─────────────────────────────────────────────────
@@ -731,13 +762,73 @@ export const appRouter = router({
     listByTechnician: publicProcedure
       .input(z.object({ technicianId: z.number() }))
       .query(async ({ input }) => db.getRepairRequestsByTechnician(input.technicianId)),
-    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용)
+    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용, phone fallback 포함)
     listByTechnicianUserId: publicProcedure
-      .input(z.object({ userId: z.number() }))
+      .input(z.object({ userId: z.number(), phoneNumber: z.string().optional() }))
       .query(async ({ input }) => {
-        const tech = await db.getTechnicianByUserId(input.userId);
+        const tech = await db.getTechnicianByUserIdOrPhone(input.userId, input.phoneNumber ?? null);
         if (!tech) return [];
+        // 앱 가입 기사 최초 조회 시 userId 자동 연결
+        if (tech.userId === null) {
+          try { await db.updateTechnicianUserId(tech.id, input.userId); } catch {}
+        }
         return db.getRepairRequestsByTechnician(tech.id);
+      }),
+
+    // 접수/오더 삭제 (본사=전체, 지사=자기 지사 접수만)
+    softDelete: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        actorRole: z.enum(["hq_admin", "branch_manager"]),
+        actorUserId: z.number(),
+        actorBranchId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const req = await db.getRepairRequestById(input.id);
+        if (!req || req.isDeleted) {
+          return { success: false, error: "존재하지 않는 접수입니다." };
+        }
+        if (input.actorRole === "branch_manager") {
+          if (!input.actorBranchId || req.branchId !== input.actorBranchId) {
+            return { success: false, error: "자기 지사 접수만 삭제할 수 있습니다." };
+          }
+        }
+        await db.softDeleteRepairRequest(input.id, input.actorUserId);
+        return { success: true };
+      }),
+
+    // 고객 삭제 (전화번호 기준 전체 접수 삭제). 본사=전체, 지사=자기 지사 고객만
+    softDeleteCustomer: publicProcedure
+      .input(z.object({
+        phoneNumber: z.string().min(9),
+        actorRole: z.enum(["hq_admin", "branch_manager"]),
+        actorUserId: z.number(),
+        actorBranchId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // 지사는 자기 지사 소속 고객인지 확인
+        if (input.actorRole === "branch_manager") {
+          const normalized = input.phoneNumber.replace(/[^0-9]/g, "");
+          const all = await db.getAllRepairRequests();
+          const mine = all.filter((r) => r.phoneNumber?.replace(/[^0-9]/g, "") === normalized);
+          const outside = mine.find((r) => r.branchId !== input.actorBranchId);
+          if (!input.actorBranchId || outside || mine.length === 0) {
+            return { success: false, error: "자기 지사 소속 고객만 삭제할 수 있습니다." };
+          }
+        }
+        const count = await db.softDeleteCustomerByPhone(input.phoneNumber, input.actorUserId);
+        return { success: true, deletedCount: count };
+      }),
+
+    // 접수 복구 (본사 전용)
+    restore: publicProcedure
+      .input(z.object({ id: z.number(), actorRole: z.enum(["hq_admin", "branch_manager"]) }))
+      .mutation(async ({ input }) => {
+        if (input.actorRole !== "hq_admin") {
+          return { success: false, error: "복구 권한은 본사 관리자에게만 있습니다." };
+        }
+        await db.restoreRepairRequest(input.id);
+        return { success: true };
       }),
 
     // 상태 변경
@@ -993,6 +1084,34 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), isActive: z.boolean() }))
       .mutation(async ({ input }) => {
         await db.setTechnicianActive(input.id, input.isActive);
+        return { success: true };
+      }),
+
+    // 기사 삭제 (본사=전체, 지사=자기 소속만). 진행중 작업 있으면 차단
+    softDelete: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        actorRole: z.enum(["hq_admin", "branch_manager"]),
+        actorUserId: z.number(),
+        actorBranchId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const tech = await db.getTechnicianById(input.id);
+        if (!tech || tech.isDeleted) {
+          return { success: false, error: "존재하지 않는 기사입니다." };
+        }
+        // 권한: 지사는 자기 소속 기사만 삭제 가능
+        if (input.actorRole === "branch_manager") {
+          if (!input.actorBranchId || tech.branchId !== input.actorBranchId) {
+            return { success: false, error: "자기 지사 소속 기사만 삭제할 수 있습니다." };
+          }
+        }
+        // 진행중(미완료) 배정 작업 체크
+        const active = await db.countActiveAssignmentsByTechnician(input.id);
+        if (active > 0) {
+          return { success: false, error: `진행 중인 작업이 ${active}건 있습니다. 작업을 완료하거나 다른 기사에게 재배정한 후 삭제해 주세요.` };
+        }
+        await db.softDeleteTechnician(input.id, input.actorUserId);
         return { success: true };
       }),
   }),

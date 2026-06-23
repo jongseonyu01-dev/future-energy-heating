@@ -385,3 +385,32 @@
 - [x] TypeScript 0 errors
 - [x] 진단: Manus 배포본(manus.space)에는 네이버ID 주입+위치API 정상. 단 정식 도메인 futureenergytech.co.kr은 server=Vercel 응답 → 별도 Vercel 프로젝트 연결로 308 www 리다이렉트 + 구버전 노출
 - [ ] (사용자 결정 필요) 정식 도메인을 Manus 배포본으로 연결 OR Vercel 프로젝트 재배포
+
+
+## 권한/삭제 기능 (22차)
+- [x] 앱: 관리자 비밀번호 입력 로그인 화면 제거, ID/전화번호+비밀번호로 통합
+- [x] 앱: 로그인 후 role별 자동 이동 (본사/지사/기사/고객)
+- [x] 웹: 관리자 비밀번호 로그인 화면 제거 및 통합
+- [x] DB: branches/technicians/repairRequests/customers에 isDeleted, deletedAt, deletedBy 추가
+- [x] DB 마이그레이션 적용
+- [x] 서버: 지사 삭제 API (이관/함께삭제 옵션, 본사만)
+- [x] 서버: 기사 삭제 API (본사 전체, 지사 자기소속, 진행중 오더 체크)
+- [x] 서버: 고객 삭제 API (본사 전체, 지사 자기소속, 접수 삭제/보관)
+- [x] 서버: 접수/오더 삭제 API (본사 전체, 지사 자기소속)
+- [x] 서버: 목록 조회 시 isDeleted=false 필터
+- [x] 앱 UI: 지사/기사/고객/접수 삭제 버튼 + 확인창, 권한별 분기
+- [x] 웹 UI: 본사/지사 화면 삭제 버튼 + 확인창
+- [x] 웹: GitHub main 푸시
+- [x] 테스트: 로그인 분기, 삭제 권한 (전체 59 passed, 1 skipped)
+- [x] 체크포인트 저장
+
+## 홈페이지·앱 삭제/회원가입 동기화 (25차)
+- [x] 홈페이지 서버 삭제 API 추가 (branch/repair/technicians softDelete)
+- [x] 홈페이지 회원가입 활성화 (registerCustomer/registerTechnician/registerBranch)
+- [x] 홈페이지 login.html 회원가입 폼(고객/기사/지사 탭) 활성화
+- [x] 본사 대시보드(dashboard.html) 접수/기사/지사 삭제 버튼 + 지사 삭제 모달(이관/함께삭제)
+- [x] 지사 대시보드(branch.html) 접수 삭제 버튼 (본인 지사만)
+- [x] dashboard.html buildAuthHeaders → authHeaders 통일 (기존 ReferenceError 수정)
+- [x] listAccounts 응답에 technicianId 매핑 추가
+- [x] 홈페이지 TypeScript 검증 통과 + GitHub main 푸시 (커밋 da62578)
+- [x] 모바일 앱 전체 테스트 59 passed, 1 skipped

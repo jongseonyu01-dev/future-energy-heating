@@ -91,7 +91,7 @@ export default function LoginScreen() {
     switch (appRole) {
       case "technician": return "/(tabs)/tech-schedule";
       case "branch_manager": return "/(tabs)/branch-dashboard";
-      case "hq_admin": return "/(tabs)/admin";
+      case "hq_admin": return "/hq-admin";
       default: return "/(tabs)";
     }
   };

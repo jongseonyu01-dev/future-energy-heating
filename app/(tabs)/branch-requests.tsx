@@ -61,6 +61,21 @@ export default function BranchRequestsScreen() {
     onSuccess: () => utils.repair.listByBranch.invalidate(),
   });
 
+  const deleteReqMutation = trpc.repair.softDelete.useMutation({
+    onSuccess: (res: any) => {
+      if (res?.success) { utils.repair.listByBranch.invalidate(); Alert.alert("삭제 완료", "접수가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", res?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteReq = (id: number, name: string) => {
+    if (!user) return;
+    Alert.alert("접수 삭제", `「${name}」 접수를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteReqMutation.mutate({ id, actorRole: (user.appRole as any), actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
+
   const filtered = requests.filter((r) => {
     const matchFilter = activeFilter === "전체" || r.status === activeFilter;
     const matchSearch = !search || r.customerName.includes(search) || r.apartmentName.includes(search) || r.requestNumber.includes(search);
@@ -175,6 +190,13 @@ export default function BranchRequestsScreen() {
                     <Text style={s.actionBtnText}>완료 승인</Text>
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity
+                  style={[s.actionBtn, { backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#F87171" }]}
+                  onPress={() => confirmDeleteReq(r.id, r.customerName)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.actionBtnText, { color: "#DC2626" }]}>삭제</Text>
+                </TouchableOpacity>
               </View>
 
               {/* 견적 입력 (선택된 항목) */}
