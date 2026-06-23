@@ -1,4 +1,4 @@
-import { eq, desc, or, and } from "drizzle-orm";
+import { eq, desc, or, and, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -581,7 +581,7 @@ import {
   MaterialOrder,
   InsertMaterialOrder,
 } from "../drizzle/schema";
-import { like, isNull, sql } from "drizzle-orm";
+import { like, sql } from "drizzle-orm";
 
 // 앱 권한 조회 (userId 기준)
 export async function getAppRole(userId: number): Promise<AppRole | null> {
@@ -768,6 +768,40 @@ export async function reassignBranch(requestId: number, branchId: number | null)
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(repairRequests).set({ branchId }).where(eq(repairRequests.id, requestId));
+}
+
+// ─── 본사 직속 기사 조회 (branchId=null) ──────────────────────
+export async function getHQTechnicians() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(technicians)
+    .where(and(isNull(technicians.branchId), eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
+    .orderBy(technicians.name);
+}
+
+// ─── ownerType 기반 배정 ──────────────────────────────────────
+export async function assignToHeadquarters(requestId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(repairRequests).set({
+    ownerType: "headquarters",
+    branchId: null,
+    status: "본사배정",
+    workflowStage: "현장확인",
+  }).where(eq(repairRequests.id, requestId));
+}
+
+export async function assignToBranch(requestId: number, branchId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(repairRequests).set({
+    ownerType: "branch",
+    branchId,
+    status: "지사배정",
+    workflowStage: "지사배정",
+  }).where(eq(repairRequests.id, requestId));
 }
 
 // ─── 기사 지사별 조회 ──────────────────────────────────────────

@@ -43,6 +43,13 @@
       "when": 1780909618039,
       "tag": "0005_material_quasimodo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1782201556496,
+      "tag": "0006_noisy_solo",
+      "breakpoints": true
     }
   ]
 }

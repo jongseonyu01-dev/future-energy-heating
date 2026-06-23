@@ -663,24 +663,19 @@ export const appRouter = router({
         isUrgent: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
-        // 주소 기반 지사 자동 배정 (시군구/동/아파트 단서 모두 활용)
-        const branchLookup = [input.sigungu, input.eupmyeondong, input.apartmentName]
-          .filter(Boolean)
-          .join(" ");
-        const branch = await db.findBranchByAddress(branchLookup || input.apartmentName);
-
         // symptoms 배열을 JSON 문자열로 저장
         const symptomsJson = input.symptoms && input.symptoms.length > 0
           ? JSON.stringify(input.symptoms)
           : null;
+        // 신규접수 기본값: ownerType=unassigned, branchId=null (본사가 수동 배정)
         const created = await db.createRepairRequest({
           ...input,
           customerLat: input.customerLat !== undefined ? String(input.customerLat) : null,
           customerLng: input.customerLng !== undefined ? String(input.customerLng) : null,
           symptoms: symptomsJson,
-          branchId: branch?.id ?? null,
-          // 주소 기반 자동 배정 성공 시 지사배정, 아니면 접수완료
-          workflowStage: branch?.id ? "지사배정" : "접수완료",
+          branchId: null,
+          ownerType: "unassigned",
+          workflowStage: "접수완료",
         });
 
         // 실제 증상 목록 (복수 선택 우선, 없으면 단일 symptom 사용)
@@ -729,15 +724,15 @@ export const appRouter = router({
         }
 
         // ③ 긴급 접수인 경우 담당 지사장에게도 긴급 SMS 발송
-        if (input.isUrgent && branch) {
-          const branchInfo = await db.getBranchById(branch.id);
-          if (branchInfo?.phoneNumber && branchInfo.phoneNumber.trim().length >= 9) {
-            const urgentMsg = `[\uae34\uae09\ucd9c\ub3d9] ${input.customerName} \uace0\uac1d\n\ud734\ub300: ${input.phoneNumber}\n${input.apartmentName} ${input.dong}\ub3d9 ${input.ho}\ud638\n\uc99d\uc0c1: ${symptomsForSms.join(", ")}\n\u2605 \uae34\uae09\ucd9c\ub3d9 \uc694\uccad\uc785\ub2c8\ub2e4. \uc989\uc2dc \uc5f0\ub77d \ubc14\ub78d\ub2c8\ub2e4.`;
-            await sendSms(branchInfo.phoneNumber.trim(), urgentMsg);
-          }
-        }
 
-        return { ...created, branchId: branch?.id ?? null, branchName: branch?.name ?? "본사" };
+
+
+
+
+
+
+
+        return { ...created, branchId: null, branchName: "본사" };
       }),
 
     // 접수 조회 (접수번호 또는 전화번호)
@@ -1045,12 +1040,48 @@ export const appRouter = router({
         }
         return { success: true };
       }),
+
+    // 본사 처리 선택 (본사 관리자용) – ownerType=headquarters
+    assignToHeadquarters: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        actorUserId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.assignToHeadquarters(input.id, input.actorUserId);
+        return { success: true };
+      }),
+
+    // 지사 배정 (본사 관리자용) – ownerType=branch
+    assignToBranch: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        branchId: z.number(),
+        actorUserId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.assignToBranch(input.id, input.branchId, input.actorUserId);
+        try {
+          const req = await db.getRepairRequestById(input.id);
+          const branch = await db.getBranchById(input.branchId);
+          if (req && branch?.phoneNumber && branch.phoneNumber.trim().length >= 9) {
+            const msg = `[지사배정] ${req.customerName} 고객\n휴대: ${req.phoneNumber}\n${req.apartmentName} ${req.dong}동 ${req.ho}호\n접수번호: ${req.requestNumber}\n→ ${branch.name}으로 배정되었습니다.`;
+            await sendSms(branch.phoneNumber.trim(), msg);
+          }
+        } catch (e) {
+          console.error("[지사배정 SMS 오류]", e);
+        }
+        return { success: true };
+      }),
   }),
 
   // ─── 기사 관리 ─────────────────────────────────────────────────
   technicians: router({
     list: publicProcedure.query(async () => db.getActiveTechnicians()),
     listAll: publicProcedure.query(async () => db.getAllTechnicians()),
+
+    // 본사 직속 기사 목록 (branchId=null)
+    listHQ: publicProcedure.query(async () => db.getHQTechnicians()),
 
     listByBranch: publicProcedure
       .input(z.object({ branchId: z.number() }))

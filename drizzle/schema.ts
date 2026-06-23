@@ -134,9 +134,17 @@ export const repairRequests = mysqlTable("repair_requests", {
   // 방문 희망 일정
   preferredDate: varchar("preferredDate", { length: 20 }),
   preferredTime: varchar("preferredTime", { length: 20 }),
+  // 처리 주체 (unassigned=미배정, headquarters=본사처리, branch=지사배정)
+  ownerType: mysqlEnum("ownerType", [
+    "unassigned",
+    "headquarters",
+    "branch",
+  ]).notNull().default("unassigned"),
   // 처리 상태
   status: mysqlEnum("status", [
     "신규접수",
+    "본사배정",
+    "지사배정",
     "기사배정대기",
     "방문예정",
     "작업진행중",

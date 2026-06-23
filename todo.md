@@ -414,3 +414,34 @@
 - [x] listAccounts 응답에 technicianId 매핑 추가
 - [x] 홈페이지 TypeScript 검증 통과 + GitHub main 푸시 (커밋 da62578)
 - [x] 모바일 앱 전체 테스트 59 passed, 1 skipped
+
+## 본사처리/지사배정 흐름 분리 (26차)
+- [ ] DB: repair_requests에 ownerType(unassigned/headquarters/branch) 컬럼 추가
+- [ ] DB 마이그레이션 적용 (pnpm db:push)
+- [ ] 서버: 신규접수 기본값 ownerType=unassigned, branchId=null
+- [ ] 서버: assignToHeadquarters API (ownerType=headquarters, status=본사배정)
+- [ ] 서버: assignToBranch API (ownerType=branch, branchId, status=지사배정)
+- [ ] 서버: listHQTechnicians API (본사 소속 기사 목록)
+- [ ] 서버: 기사 일정 조회 ownerType 기반 분기 (본사기사: ownerType=headquarters, 지사기사: ownerType=branch+branchId)
+- [ ] 서버: 지사 접수 목록 ownerType=branch 필터
+- [ ] 앱 본사 관리자(hq-admin.tsx): 신규접수 건마다 "본사처리/지사배정" 버튼 추가
+- [ ] 앱 본사 관리자: 본사처리 선택 시 본사 기사 배정 모달 (기사선택/방문일시/저장)
+- [ ] 앱 본사 관리자: 지사배정 선택 시 지사 선택 드롭다운 + 배정 버튼
+- [ ] 앱 기사 화면(tech-schedule.tsx): ownerType 기반 일정 조회 수정
+- [ ] 홈페이지 dashboard.html: 신규접수 본사처리/지사배정 선택 UI
+- [ ] 홈페이지 dashboard.html: 본사 기사 배정 모달 추가
+- [ ] 홈페이지 branch.html: ownerType=branch 접수만 표시
+- [ ] 테스트 A: 본사처리 전체 흐름 (신규접수→본사처리→본사기사배정→기사출발→고객문자)
+- [ ] 테스트 B: 지사배정 전체 흐름 (신규접수→지사배정→지사기사배정→기사출발→고객문자)
+- [ ] GitHub main 푸시 + 체크포인트 저장
+
+## 기사 등록 소속 선택 개선 (27차)
+- [x] 앱 admin.tsx: TechnicianFormModal에 소속 선택 UI 추가 (본사/지사 칩 버튼, ✓ 선택됨 표시)
+- [x] 앱 admin.tsx: 기사 등록 시 selectedBranchId(null=본사) 저장
+- [x] 앱 admin.tsx: 기사 배정 picker를 listAll로 변경, 본사/지사별 그룹 표시
+- [x] 홈페이지 login.html: 기사 등록 폼 소속 선택을 칩 버튼 방식으로 변경
+- [x] 홈페이지 login.html: '지사 미지정' 제거, '본사' 기본 선택 (branchId=null)
+- [x] 홈페이지 login.html: 선택된 소속 요약 표시 박스 추가
+- [x] 홈페이지 dashboard.html: 기사 배정 모달 본사/지사별 그룹 표시
+- [x] 홈페이지 GitHub main 푸시 (커밋 f19d6c3)
+- [x] 모바일 앱 체크포인트 저장

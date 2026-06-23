@@ -409,7 +409,8 @@ function DetailModal({
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showTechnicianPicker, setShowTechnicianPicker] = useState(false);
 
-  const { data: technicians } = trpc.technicians.list.useQuery();
+  const { data: technicians } = trpc.technicians.listAll.useQuery();
+  const { data: branches } = trpc.branch.listActive.useQuery();
   const { user } = useAppAuth();
 
   const deleteMutation = trpc.repair.softDelete.useMutation({
@@ -677,10 +678,16 @@ function DetailModal({
               </Text>
             </Pressable>
 
-            {/* 기사 선택 목록 */}
+            {/* 기사 선택 목록 - 본사/지사 그룹 */}
             {showTechnicianPicker && (
               <View style={[styles.techPickerList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                {technicians?.map((tech) => (
+                {/* 본사 직속 기사 */}
+                {(technicians?.filter(t => t.branchId === null || t.branchId === undefined) ?? []).length > 0 && (
+                  <View style={{ backgroundColor: "#FFF7F0", paddingHorizontal: 12, paddingVertical: 6 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#FF6B35" }}>🏢 본사 직속 기사</Text>
+                  </View>
+                )}
+                {technicians?.filter(t => t.branchId === null || t.branchId === undefined).map((tech) => (
                   <Pressable
                     key={tech.id}
                     style={[styles.techPickerItem, { borderBottomColor: colors.border }]}
@@ -696,6 +703,34 @@ function DetailModal({
                     )}
                   </Pressable>
                 ))}
+                {/* 지사 소속 기사 (지사별 그룹) */}
+                {branches?.map(branch => {
+                  const branchTechs = technicians?.filter(t => t.branchId === branch.id) ?? [];
+                  if (branchTechs.length === 0) return null;
+                  return (
+                    <View key={branch.id}>
+                      <View style={{ backgroundColor: "#EFF6FF", paddingHorizontal: 12, paddingVertical: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#3B82F6" }}>📍 {branch.name}</Text>
+                      </View>
+                      {branchTechs.map(tech => (
+                        <Pressable
+                          key={tech.id}
+                          style={[styles.techPickerItem, { borderBottomColor: colors.border }]}
+                          onPress={() => handleAssignTechnician(tech)}
+                        >
+                          <Text style={[styles.techPickerName, { color: colors.foreground }]}>
+                            👷 {tech.name}
+                          </Text>
+                          {tech.phoneNumber && (
+                            <Text style={[styles.techPickerPhone, { color: colors.muted }]}>
+                              {tech.phoneNumber}
+                            </Text>
+                          )}
+                        </Pressable>
+                      ))}
+                    </View>
+                  );
+                })}
               </View>
             )}
           </SectionCard>
@@ -1118,6 +1153,9 @@ function TechnicianFormModal({
   const [name, setName] = useState(editTarget?.name || "");
   const [phoneNumber, setPhoneNumber] = useState(editTarget?.phoneNumber || "");
   const [specialty, setSpecialty] = useState(editTarget?.specialty || "");
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>((editTarget as any)?.branchId ?? null);
+
+  const { data: branches = [] } = trpc.branch.listActive.useQuery();
 
   const createMutation = trpc.technicians.create.useMutation({
     onSuccess: () => {
@@ -1149,6 +1187,7 @@ function TechnicianFormModal({
         name: name.trim(),
         phoneNumber: phoneNumber.trim() || undefined,
         specialty: specialty.trim() || undefined,
+        branchId: selectedBranchId ?? undefined,
       });
     }
   };
@@ -1190,6 +1229,49 @@ function TechnicianFormModal({
             placeholder="예: 분배기/배관, 온도조절기"
             placeholderTextColor={colors.muted}
           />
+
+          {/* 소속 선택 */}
+          <Text style={[styles.inputLabel, { color: colors.foreground }]}>소속 *</Text>
+          <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 6 }}>본사 선택 시 본사 직속 기사로 등록됩니다</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+            {/* 본사 옵션 */}
+            <Pressable
+              style={({ pressed }) => [{
+                paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                backgroundColor: selectedBranchId === null ? "#FF6B35" : colors.surface,
+                borderWidth: selectedBranchId === null ? 2 : 1,
+                borderColor: selectedBranchId === null ? "#FF6B35" : colors.border,
+                flexDirection: "row" as const, alignItems: "center" as const, gap: 4,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+              onPress={() => setSelectedBranchId(null)}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "700", color: selectedBranchId === null ? "#fff" : colors.muted }}>본사{selectedBranchId === null ? " ✓ 선택됨" : ""}</Text>
+            </Pressable>
+            {/* 지사 목록 */}
+            {branches.map(b => (
+              <Pressable
+                key={b.id}
+                style={({ pressed }) => [{
+                  paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                  backgroundColor: selectedBranchId === b.id ? "#3B82F6" : colors.surface,
+                  borderWidth: selectedBranchId === b.id ? 2 : 1,
+                  borderColor: selectedBranchId === b.id ? "#3B82F6" : colors.border,
+                  flexDirection: "row" as const, alignItems: "center" as const, gap: 4,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+                onPress={() => setSelectedBranchId(b.id)}
+              >
+                <Text style={{ fontSize: 13, fontWeight: selectedBranchId === b.id ? "700" : "400", color: selectedBranchId === b.id ? "#fff" : colors.muted }}>{b.name}{selectedBranchId === b.id ? " ✓ 선택됨" : ""}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {/* 선택된 소속 표시 */}
+          <View style={{ backgroundColor: selectedBranchId === null ? "#FFF7F0" : "#EFF6FF", borderRadius: 8, padding: 8, borderWidth: 1, borderColor: selectedBranchId === null ? "#FF6B35" : "#3B82F6", marginBottom: 8 }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: selectedBranchId === null ? "#FF6B35" : "#3B82F6" }}>
+              선택된 소속: {selectedBranchId === null ? "본사 (본사 직속 기사)" : (branches.find(b => b.id === selectedBranchId)?.name ?? "지사 미선택")}
+            </Text>
+          </View>
 
           <View style={styles.formModalButtons}>
             <Pressable

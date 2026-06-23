@@ -31,7 +31,8 @@ const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
+  "신규접수": "#6B7280", "본사배정": "#FF6B35", "지사배정": "#8B5CF6",
+  "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
   "작업진행중": "#FF6B35", "견적승인대기": "#8B5CF6", "작업완료": "#22C55E", "재방문필요": "#EF4444",
 };
 
@@ -596,14 +597,50 @@ function HQAccounts({ colors }: { colors: any }) {
                 <>
                   <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>기사 이름 *</Text>
                   <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground }} value={techName} onChangeText={setTechName} placeholder="기사 성함" placeholderTextColor={colors.muted} />
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>소속 지사</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>소속 선택 *</Text>
+                  <Text style={{ fontSize: 11, color: colors.muted, marginTop: -4 }}>본사 선택 시 본사 직속 기사로 등록됩니다</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                    {/* 본사 옵션 (본사 직속 = branchId null) */}
+                    <TouchableOpacity
+                      key="hq"
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                        backgroundColor: branchId === null ? "#FF6B35" : colors.surface,
+                        borderWidth: branchId === null ? 2 : 1,
+                        borderColor: branchId === null ? "#FF6B35" : colors.border,
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                      }}
+                      onPress={() => setBranchId(null)}
+                      activeOpacity={0.7}
+                    >
+                      {branchId === null && <Text style={{ fontSize: 12, color: "#fff" }}>✓</Text>}
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: branchId === null ? "#fff" : colors.muted }}>본사{branchId === null ? " ✓ 선택됨" : ""}</Text>
+                    </TouchableOpacity>
+                    {/* 지사 목록 */}
                     {branches.map(b => (
-                      <TouchableOpacity key={b.id} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginRight: 6, backgroundColor: branchId === b.id ? "#3B82F6" : colors.surface, borderWidth: 1, borderColor: branchId === b.id ? "#3B82F6" : colors.border }} onPress={() => setBranchId(b.id)} activeOpacity={0.7}>
-                        <Text style={{ fontSize: 12, color: branchId === b.id ? "#fff" : colors.muted }}>{b.name}</Text>
+                      <TouchableOpacity
+                        key={b.id}
+                        style={{
+                          paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                          backgroundColor: branchId === b.id ? "#3B82F6" : colors.surface,
+                          borderWidth: branchId === b.id ? 2 : 1,
+                          borderColor: branchId === b.id ? "#3B82F6" : colors.border,
+                          flexDirection: "row", alignItems: "center", gap: 4,
+                        }}
+                        onPress={() => setBranchId(b.id)}
+                        activeOpacity={0.7}
+                      >
+                        {branchId === b.id && <Text style={{ fontSize: 12, color: "#fff" }}>✓</Text>}
+                        <Text style={{ fontSize: 13, fontWeight: branchId === b.id ? "700" : "400", color: branchId === b.id ? "#fff" : colors.muted }}>{b.name}{branchId === b.id ? " ✓ 선택됨" : ""}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                  {/* 선택된 소속 표시 */}
+                  <View style={{ backgroundColor: branchId === null ? "#FFF7F0" : "#EFF6FF", borderRadius: 8, padding: 8, borderWidth: 1, borderColor: branchId === null ? "#FF6B35" : "#3B82F6" }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: branchId === null ? "#FF6B35" : "#3B82F6" }}>
+                      선택된 소속: {branchId === null ? "본사 (본사 직속 기사)" : (branches.find(b => b.id === branchId)?.name ?? "지사 미선택")}
+                    </Text>
+                  </View>
                 </>
               )}
               <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
