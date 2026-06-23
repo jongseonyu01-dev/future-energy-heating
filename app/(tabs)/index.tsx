@@ -90,7 +90,7 @@ export default function HomeScreen() {
               </View>
               {/* 로그인/로그아웃 버튼 */}
               {user ? (
-                <TouchableOpacity style={styles.authBtn} onPress={logout} activeOpacity={0.8}>
+                <TouchableOpacity style={styles.authBtn} onPress={async () => { await logout(); router.replace("/login"); }} activeOpacity={0.8}>
                   <Text style={styles.authBtnText}>로그아웃</Text>
                 </TouchableOpacity>
               ) : (

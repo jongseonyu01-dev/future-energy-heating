@@ -445,3 +445,14 @@
 - [x] 홈페이지 dashboard.html: 기사 배정 모달 본사/지사별 그룹 표시
 - [x] 홈페이지 GitHub main 푸시 (커밋 f19d6c3)
 - [x] 모바일 앱 체크포인트 저장
+
+## 자동 로그인 제거 및 보안 강화 (28차)
+- [x] 하드코딩된 계정/기본 role/자동 세션 복원 코드 탐색
+- [x] 자동 로그인 코드 완전 제거 (auth-context.tsx rememberMe 기본값 false로 변경)
+- [x] 앱 시작 시 저장된 토큰 유효성 서버 검증 강화 (verifyToken API 호출, 실패 시 강제 로그아웃)
+- [x] 세션 버전 관리 추가 (CURRENT_SESSION_VERSION=v3, 버전 불일치 시 기존 세션 무효화)
+- [x] 로그아웃 시 모든 저장소(AsyncStorage, SecureStore) 완전 초기화
+- [x] Android allowBackup=false 설정 (app.config.ts)
+- [x] 홈페이지 localStorage 자동 로그인 복원 코드 제거 (login.html, dashboard.html, branch.html, tech.html)
+- [x] 전체 테스트 59 passed, 1 skipped 통과
+- [x] 체크포인트 저장
