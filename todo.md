@@ -456,3 +456,21 @@
 - [x] 홈페이지 localStorage 자동 로그인 복원 코드 제거 (login.html, dashboard.html, branch.html, tech.html)
 - [x] 전체 테스트 59 passed, 1 skipped 통과
 - [x] 체크포인트 저장
+
+## 견적서 발송→승인/거절→오더→기사배정→위치확인 전체 흐름 (29차)
+- [ ] DB: estimates 테이블 추가 (token, status, validUntil, ownerType, branchId 등)
+- [ ] DB: messageLog 테이블 추가 (messageType, sendStatus, linkUrl 등)
+- [ ] DB: repairRequests에 estimateId, estimateAmount 컬럼 추가
+- [ ] DB 마이그레이션 적용
+- [ ] 서버: estimates CRUD API (create, getByToken, approve, reject, list)
+- [ ] 서버: 고객 방문정보 입력 후 오더 생성 API
+- [ ] 서버: 메시지 로그 저장 API
+- [ ] 서버: track 토큰 기반 위치확인 API (기존 활용)
+- [ ] 고객용 웹: /estimate/{token} 견적 확인/승인/거절 페이지
+- [ ] 고객용 웹: /estimate/{token}/visit 방문정보 입력 페이지
+- [ ] 홈페이지: 본사/지사 관리자 화면에 견적 발송 모달 추가
+- [ ] 홈페이지: 메시지 발송 내역 패널 추가
+- [ ] 앱: 본사/지사 관리자 화면에 견적 발송 UI 추가
+- [ ] 앱: 기사 화면에 견적금액/요청사항 표시
+- [ ] 전체 테스트 통과
+- [ ] GitHub 푸시 및 체크포인트 저장
