@@ -1862,5 +1862,162 @@ export const appRouter = router({
         return db.getActiveLocationSessionsByBranch(input.branchId);
       }),
   }),
+
+  // ─── 견적서 라우터 ───────────────────────────────────────────────────────────────
+  estimates: router({
+
+    // 견적 생성 + 고객 SMS 발송
+    create: publicProcedure
+      .input(z.object({
+        requestId: z.number(),
+        amount: z.number().positive(),
+        description: z.string().optional(),
+        sentBy: z.number().optional(), // 관리자 userId
+      }))
+      .mutation(async ({ input }) => {
+        // 접수 건 조회
+        const req = await db.getRepairRequestById(input.requestId);
+        if (!req) throw new Error("접수 건을 찾을 수 없습니다.");
+
+        // 일회용 토큰 생성
+        const token = crypto.randomBytes(24).toString("base64url");
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
+        const estimateUrl = `${baseUrl}/estimate/${token}`;
+
+        // 견적 유효기간: 72시간
+        const validUntil = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+        // DB 저장
+        const estimateId = await db.createEstimate({
+          requestId: input.requestId,
+          token,
+          amount: String(input.amount),
+          description: input.description ?? null,
+          ownerType: req.ownerType,
+          branchId: req.branchId ?? null,
+          status: "pending",
+          sentAt: new Date(),
+          validUntil,
+          sentBy: input.sentBy ?? null,
+        });
+
+        // repairRequests 업데이트: 견적 금액 + 발송 시각 + workflowStage
+        await db.updateRepairEstimateInfo(input.requestId, {
+          estimateAmount: String(input.amount),
+          estimateSentAt: new Date(),
+          workflowStage: "견적전달",
+          status: "견적승인대기",
+        });
+
+        // 고객 SMS 발송
+        let smsSent = false;
+        let smsError: string | undefined;
+        try {
+          const msg = buildEstimateMessage(
+            req.customerName,
+            req.requestNumber,
+            input.amount,
+            estimateUrl
+          );
+          const r = await notifyAndLog({
+            requestId: input.requestId,
+            phoneNumber: req.phoneNumber,
+            messageType: "ESTIMATE_SENT",
+            content: msg,
+          });
+          smsSent = r.result === "SUCCESS";
+          if (!smsSent) smsError = r.errorMessage;
+        } catch (e) {
+          smsError = e instanceof Error ? e.message : String(e);
+        }
+
+        return { success: true, estimateId, token, estimateUrl, smsSent, smsError };
+      }),
+
+    // 토큰으로 견적 조회 (고객용, 인증 불요)
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        await db.expireOldEstimates();
+        const estimate = await db.getEstimateByToken(input.token);
+        if (!estimate) return null;
+        // 접수 건 정보도 함께 반환
+        const req = await db.getRepairRequestById(estimate.requestId);
+        return {
+          ...estimate,
+          customerName: req?.customerName,
+          requestNumber: req?.requestNumber,
+          apartmentName: req?.apartmentName,
+          dong: req?.dong,
+          ho: req?.ho,
+          symptom: req?.symptom,
+          detailContent: req?.detailContent,
+        };
+      }),
+
+    // 견적 승인 (고객)
+    approve: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        visitDate: z.string().optional(),
+        visitTime: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const estimate = await db.getEstimateByToken(input.token);
+        if (!estimate) throw new Error("견적서를 찾을 수 없습니다.");
+        if (estimate.status !== "pending") {
+          return { success: false, message: "이미 응답된 견적입니다." };
+        }
+        if (estimate.validUntil && new Date(estimate.validUntil) < new Date()) {
+          await db.rejectEstimate(input.token, "유효기간 만료");
+          return { success: false, message: "견적 유효기간이 만료되었습니다." };
+        }
+
+        await db.approveEstimate(input.token, input.visitDate, input.visitTime);
+
+        // repairRequests 업데이트: 승인 시각 + workflowStage + 방문 일정
+        const updateData: Record<string, unknown> = {
+          estimateApprovedAt: new Date(),
+          workflowStage: "견적승인",
+          status: "기사배정대기",
+        };
+        if (input.visitDate) updateData.preferredDate = input.visitDate;
+        if (input.visitTime) updateData.preferredTime = input.visitTime;
+        await db.updateRepairEstimateInfo(estimate.requestId, updateData);
+
+        return { success: true, message: "견적을 승인했습니다. 배정된 기사가 방문할 예정입니다." };
+      }),
+
+    // 견적 거절 (고객)
+    reject: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        rejectReason: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const estimate = await db.getEstimateByToken(input.token);
+        if (!estimate) throw new Error("견적서를 찾을 수 없습니다.");
+        if (estimate.status !== "pending") {
+          return { success: false, message: "이미 응답된 견적입니다." };
+        }
+
+        await db.rejectEstimate(input.token, input.rejectReason);
+
+        // repairRequests 업데이트: 거절 시 workflowStage 되돌리기
+        await db.updateRepairEstimateInfo(estimate.requestId, {
+          workflowStage: "견적작성",
+          status: "견적승인대기",
+        });
+
+        return { success: true, message: "견적을 거절했습니다." };
+      }),
+
+    // 접수 건별 견적 목록 조회 (관리자용)
+    listByRequest: publicProcedure
+      .input(z.object({ requestId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getEstimatesByRequestId(input.requestId);
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

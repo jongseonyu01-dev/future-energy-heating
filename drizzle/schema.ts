@@ -456,6 +456,39 @@ export const locationConsents = mysqlTable("location_consents", {
   isActive: boolean("isActive").default(true).notNull(),
 });
 
+// ─── 견적서 테이블 (토큰 기반 고객 승인/거절) ──────────────────────
+export const estimates = mysqlTable("estimates", {
+  id: int("id").autoincrement().primaryKey(),
+  // 연결된 접수 건
+  requestId: int("requestId").notNull(),
+  // 일회용 토큰 (고객 링크용)
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  // 견적 금액
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  // 견적 내용 (작업 내역 설명)
+  description: text("description"),
+  // 처리 주체 (unassigned/headquarters/branch)
+  ownerType: mysqlEnum("ownerType", ["unassigned", "headquarters", "branch"]).notNull().default("headquarters"),
+  branchId: int("branchId"),
+  // 상태
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "expired"]).notNull().default("pending"),
+  // 고객 방문 희망 일정 (승인 시 입력)
+  visitDate: varchar("visitDate", { length: 20 }),
+  visitTime: varchar("visitTime", { length: 20 }),
+  // 거절 사유
+  rejectReason: text("rejectReason"),
+  // 발송 / 만료 시각
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+  validUntil: timestamp("validUntil").notNull(),
+  // 고객 응답 시각
+  approvedAt: timestamp("approvedAt"),
+  rejectedAt: timestamp("rejectedAt"),
+  // 발송자 (관리자 userId)
+  sentBy: int("sentBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // ─── 휴대폰 인증코드 테이블 (고객 회원가입/비밀번호 재설정) ──────────
 export const phoneVerifications = mysqlTable("phone_verifications", {
   id: int("id").autoincrement().primaryKey(),
@@ -506,3 +539,5 @@ export type LocationSession = typeof locationSessions.$inferSelect;
 export type InsertLocationSession = typeof locationSessions.$inferInsert;
 export type LocationConsent = typeof locationConsents.$inferSelect;
 export type InsertLocationConsent = typeof locationConsents.$inferInsert;
+export type Estimate = typeof estimates.$inferSelect;
+export type InsertEstimate = typeof estimates.$inferInsert;

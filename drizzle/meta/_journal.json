@@ -50,6 +50,13 @@
       "when": 1782201556496,
       "tag": "0006_noisy_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1782702398865,
+      "tag": "0007_bumpy_quicksilver",
+      "breakpoints": true
     }
   ]
 }

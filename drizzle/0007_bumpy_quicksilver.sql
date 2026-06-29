@@ -1,0 +1,22 @@
+CREATE TABLE `estimates` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`requestId` int NOT NULL,
+	`token` varchar(64) NOT NULL,
+	`amount` decimal(12,2) NOT NULL,
+	`description` text,
+	`ownerType` enum('unassigned','headquarters','branch') NOT NULL DEFAULT 'headquarters',
+	`branchId` int,
+	`status` enum('pending','approved','rejected','expired') NOT NULL DEFAULT 'pending',
+	`visitDate` varchar(20),
+	`visitTime` varchar(20),
+	`rejectReason` text,
+	`sentAt` timestamp NOT NULL DEFAULT (now()),
+	`validUntil` timestamp NOT NULL,
+	`approvedAt` timestamp,
+	`rejectedAt` timestamp,
+	`sentBy` int,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `estimates_id` PRIMARY KEY(`id`),
+	CONSTRAINT `estimates_token_unique` UNIQUE(`token`)
+);

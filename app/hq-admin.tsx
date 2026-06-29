@@ -206,6 +206,11 @@ function HQRequests({ colors }: { colors: any }) {
   const [filterBranch, setFilterBranch] = useState<number | null>(null);
   const [reassignId, setReassignId] = useState<number | null>(null);
   const [targetBranchId, setTargetBranchId] = useState<number | null>(null);
+  // 견적 발송 모달
+  const [estimateModalId, setEstimateModalId] = useState<number | null>(null);
+  const [estimateAmount, setEstimateAmount] = useState("");
+  const [estimateDesc, setEstimateDesc] = useState("");
+  const [estimateSending, setEstimateSending] = useState(false);
 
   const { user } = useAppAuth();
   const utils = trpc.useUtils();
@@ -234,6 +239,36 @@ function HQRequests({ colors }: { colors: any }) {
   const statusMutation = trpc.repair.updateStatus.useMutation({
     onSuccess: () => utils.repair.listAll.invalidate(),
   });
+
+  const estimateMutation = trpc.estimates.create.useMutation({
+    onSuccess: (result: any) => {
+      setEstimateSending(false);
+      setEstimateModalId(null);
+      setEstimateAmount("");
+      setEstimateDesc("");
+      utils.repair.listAll.invalidate();
+      Alert.alert(
+        "견적서 발송 완료",
+        result.smsSent
+          ? `고객에게 SMS가 발송되었습니다.\n견적 확인 링크:\n${result.estimateUrl}`
+          : `견적서가 저장되었습니다. (SMS 발송 실패: ${result.smsError || "알 수 없는 오류"})\n링크: ${result.estimateUrl}`
+      );
+    },
+    onError: (e: any) => {
+      setEstimateSending(false);
+      Alert.alert("발송 실패", e?.message || "견적서 발송 중 오류가 발생했습니다.");
+    },
+  });
+
+  const handleSendEstimate = () => {
+    const amt = parseFloat(estimateAmount);
+    if (!estimateModalId || !amt || amt <= 0) {
+      Alert.alert("입력 오류", "견적 금액을 입력하세요.");
+      return;
+    }
+    setEstimateSending(true);
+    estimateMutation.mutate({ requestId: estimateModalId, amount: amt, description: estimateDesc || undefined });
+  };
 
   const filtered = requests.filter(r => {
     const matchStatus = filterStatus === "전체" || r.status === filterStatus;
@@ -313,19 +348,93 @@ function HQRequests({ colors }: { colors: any }) {
                   </View>
                 </View>
               ) : (
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
-                  <TouchableOpacity style={{ flex: 1, backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { setReassignId(r.id); setTargetBranchId(r.branchId ?? null); }} activeOpacity={0.8}>
-                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>지사 재배정</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteReq(r.id, r.customerName)} activeOpacity={0.8}>
-                    <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "700" }}>삭제</Text>
-                  </TouchableOpacity>
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: "#1D4ED8", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { setEstimateModalId(r.id); setEstimateAmount(r.estimateAmount ? String(r.estimateAmount) : ""); setEstimateDesc(""); }} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>💰 견적 발송</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { setReassignId(r.id); setTargetBranchId(r.branchId ?? null); }} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>지사 재배정</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 10, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteReq(r.id, r.customerName)} activeOpacity={0.8}>
+                      <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "700" }}>삭제</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {r.estimateAmount && (
+                    <View style={{ backgroundColor: "#EFF6FF", borderRadius: 8, padding: 8, flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ fontSize: 12, color: "#1D4ED8", fontWeight: "600" }}>💰 발송된 견적: {Number(r.estimateAmount).toLocaleString('ko-KR')}원</Text>
+                      <Text style={{ fontSize: 11, color: r.status === "견적승인대기" ? "#F59E0B" : "#6B7280" }}>{r.status === "견적승인대기" ? "⏳ 승인 대기" : r.status}</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
           ))}
         </ScrollView>
       )}
+
+      {/* 견적 발송 모달 */}
+      <Modal visible={estimateModalId !== null} transparent animationType="slide" onRequestClose={() => setEstimateModalId(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: "#111" }}>💰 견적서 발송</Text>
+              <TouchableOpacity onPress={() => setEstimateModalId(null)} activeOpacity={0.7}>
+                <Text style={{ fontSize: 22, color: "#6B7280" }}>×</Text>
+              </TouchableOpacity>
+            </View>
+            {estimateModalId && (() => {
+              const r = requests.find(x => x.id === estimateModalId);
+              return r ? (
+                <View style={{ backgroundColor: "#F9FAFB", borderRadius: 12, padding: 12, gap: 4 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#111" }}>{r.customerName} ({r.phoneNumber || '-'})</Text>
+                  <Text style={{ fontSize: 13, color: "#6B7280" }}>{formatFullAddress(r)}</Text>
+                  <Text style={{ fontSize: 13, color: "#374151" }}>🔧 {r.symptom || '-'}</Text>
+                  <Text style={{ fontSize: 13, color: "#374151" }}>📌 현재 상태: {r.status}</Text>
+                </View>
+              ) : null;
+            })()}
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151" }}>견적 금액 (원) *</Text>
+              <TextInput
+                value={estimateAmount}
+                onChangeText={setEstimateAmount}
+                keyboardType="numeric"
+                placeholder="예: 150000"
+                style={{ borderWidth: 1.5, borderColor: "#D1D5DB", borderRadius: 10, padding: 12, fontSize: 16, fontWeight: "700" }}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151" }}>상세 내용 (선택)</Text>
+              <TextInput
+                value={estimateDesc}
+                onChangeText={setEstimateDesc}
+                placeholder="수리 내용, 부품명 등"
+                multiline
+                numberOfLines={3}
+                style={{ borderWidth: 1.5, borderColor: "#D1D5DB", borderRadius: 10, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: "top" }}
+              />
+            </View>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity style={{ flex: 1, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setEstimateModalId(null)} activeOpacity={0.8}>
+                <Text style={{ fontSize: 15, fontWeight: "700", color: "#374151" }}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 2, backgroundColor: estimateSending ? "#93C5FD" : "#1D4ED8", borderRadius: 12, padding: 14, alignItems: "center" }}
+                onPress={handleSendEstimate}
+                disabled={estimateSending}
+                activeOpacity={0.8}
+              >
+                {estimateSending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff" }}>견적서 발송 (SMS)</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

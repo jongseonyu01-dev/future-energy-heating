@@ -373,14 +373,16 @@ export function buildScheduleConfirmedMessage(
   return `[퓨처에너지테크]\n${customerName}님, ${head}.\n방문 일정: ${scheduledDate} ${scheduledTime}${reasonPart}\n문의: 031-8042-7310`;
 }
 
-/** 견적 안내 (고객용) */
+/** 견적 안내 (고객용, 링크 포함) */
 export function buildEstimateMessage(
   customerName: string,
   requestNumber: string,
-  estimateAmount: number
+  estimateAmount: number,
+  estimateUrl?: string
 ): string {
   const amountStr = estimateAmount.toLocaleString("ko-KR");
-  return `[퓨처에너지테크]\n${customerName}님, 접수번호 ${requestNumber} 건의 견적이 도착했습니다.\n견적 금액: ${amountStr}원\n앱 > 방문 예약 확인 화면에서 견적을 확인하고 승인 또는 거절해 주세요.\n문의: 031-8042-7310`;
+  const linkPart = estimateUrl ? `\n견적 확인/승인: ${estimateUrl}` : "";
+  return `[퓨처에너지테크]\n${customerName}님, 접수번호 ${requestNumber} 건의 견적이 도착했습니다.\n견적 금액: ${amountStr}원${linkPart}\n승인 후 방문 일정을 선택하실 수 있습니다.\n문의: 031-8042-7310`;
 }
 
 /** 기사 도착 안내 (고객용) */

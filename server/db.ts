@@ -1277,3 +1277,74 @@ export async function createLocationConsent(technicianId: number): Promise<void>
     isActive: true,
   });
 }
+
+// ─── 견적서 (estimates) ────────────────────────────────────────────────────
+import { estimates, Estimate, InsertEstimate } from "../drizzle/schema";
+
+export async function createEstimate(data: InsertEstimate): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(estimates).values(data);
+  return (result[0] as { insertId: number }).insertId;
+}
+
+export async function getEstimateByToken(token: string): Promise<Estimate | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(estimates).where(eq(estimates.token, token)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getEstimatesByRequestId(requestId: number): Promise<Estimate[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(estimates)
+    .where(eq(estimates.requestId, requestId))
+    .orderBy(desc(estimates.createdAt));
+}
+
+export async function approveEstimate(token: string, visitDate?: string, visitTime?: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(estimates).set({
+    status: "approved",
+    approvedAt: new Date(),
+    visitDate: visitDate ?? null,
+    visitTime: visitTime ?? null,
+  } as Record<string, unknown>).where(eq(estimates.token, token));
+}
+
+export async function rejectEstimate(token: string, rejectReason?: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(estimates).set({
+    status: "rejected",
+    rejectedAt: new Date(),
+    rejectReason: rejectReason ?? null,
+  } as Record<string, unknown>).where(eq(estimates.token, token));
+}
+
+export async function expireOldEstimates(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  const pendingRows = await db.select({ id: estimates.id, validUntil: estimates.validUntil })
+    .from(estimates)
+    .where(eq(estimates.status, "pending"));
+  for (const row of pendingRows) {
+    if (row.validUntil && new Date(row.validUntil) < now) {
+      await db.update(estimates).set({ status: "expired" } as Record<string, unknown>)
+        .where(eq(estimates.id, row.id));
+    }
+  }
+}
+
+// ─── 견적 관련 repairRequests 업데이트 ─────────────────────────────────────
+export async function updateRepairEstimateInfo(
+  id: number,
+  data: Record<string, unknown>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(repairRequests).set(data).where(eq(repairRequests.id, id));
+}
