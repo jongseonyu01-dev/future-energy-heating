@@ -124,10 +124,15 @@
     <div class="nav-item" onclick="showPanel('sms')"><span class="icon">💬</span> 문자 발송 이력</div>
     <div class="nav-item" onclick="showPanel('materials')"><span class="icon">📦</span> 자재 주문</div>
     <div class="nav-item" onclick="showPanel('complaints')"><span class="icon">⚠️</span> 고객 불만</div>
-    <div class="nav-section">견적</div>
-    <div class="nav-item" onclick="showPanel('estimates')"><span class="icon">🧾</span> 견적서 전송하기</div>
+    <div class="nav-section">견적서</div>
+    <div class="nav-item" id="nav-estimate-send" onclick="showPanel('estimate-send')"><span class="icon">📤</span> 견적서 전송하기</div>
+    <div class="nav-item" id="nav-estimate-manage" onclick="showPanel('estimate-manage')"><span class="icon">🧾</span> 견적서 관리</div>
     <div class="nav-section">실시간</div>
     <div class="nav-item" id="nav-tracking" onclick="showPanel('tracking')"><span class="icon">📍</span> 기사 이동 현황</div>
+    <div class="nav-section">모집 관리</div>
+    <div class="nav-item" onclick="showPanel('branch-apply')"><span class="icon">🏢</span> 지사 모집 신청</div>
+    <div class="nav-section">계정 관리</div>
+    <div class="nav-item" id="nav-accounts" onclick="showPanel('accounts');loadPendingAccounts()"><span class="icon">👤</span> 계정 승인 관리 <span id="pending-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></div>
   </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" onclick="doLogout()">🚪 로그아웃</button>
@@ -142,8 +147,9 @@
       <h1 id="pageTitle">전체 현황</h1>
     </div>
     <div class="topbar-actions">
+      <button class="refresh-btn" onclick="showPanel('requests')" style="background:#e85d04;color:#fff;border:none">📋 전국 접수 현황</button>
       <button class="refresh-btn" onclick="loadCurrentPanel()">🔄 새로고침</button>
-      <a href="/web/index.html" style="font-size:13px;color:#6b7280">홈페이지 →</a>
+      <a href="/web/index.html" target="_blank" class="refresh-btn" style="text-decoration:none;display:inline-flex;align-items:center">🏠 고객용 홈페이지</a>
     </div>
   </div>
 
@@ -178,15 +184,20 @@
       <div class="inline-form">
         <select id="filterStatus" onchange="loadRequests()">
           <option value="">전체 상태</option>
-          <option value="pending">대기</option>
-          <option value="assigned">배정됨</option>
-          <option value="in_progress">진행 중</option>
-          <option value="completed">완료</option>
+          <option value="대기">대기 (신규접수·배정대기)</option>
+          <option value="배정">배정 (방문예정)</option>
+          <option value="진행">진행 (작업진행중·견적승인대기)</option>
+          <option value="완료">완료 (작업완료)</option>
+          <option value="재방문필요">재방문필요</option>
         </select>
         <select id="filterBranch" onchange="loadRequests()"><option value="">전체 지사</option></select>
-        <input type="date" id="filterDate" onchange="loadRequests()" />
+        <input type="date" id="filterDateFrom" onchange="loadRequests()" title="시작일" />
+        <span style="color:#9ca3af">~</span>
+        <input type="date" id="filterDateTo" onchange="loadRequests()" title="종료일" />
         <button onclick="loadRequests()">🔍 검색</button>
+        <button onclick="resetRequestFilters()" style="background:#f3f4f6;color:#374151">↺ 초기화</button>
         <button class="excel-btn" onclick="exportExcel('requests')">📥 엑셀 다운로드</button>
+        <span id="requestsCount" style="margin-left:auto;font-size:13px;color:#6b7280;align-self:center"></span>
       </div>
       <div class="section-card">
         <h3>📋 전국 접수 현황</h3>
@@ -252,8 +263,100 @@
       </div>
     </div>
 
+    <!-- 견적서 전송하기 패널 -->
+    <div class="panel" id="panel-estimate-send">
+      <div class="section-card">
+        <h3>📤 견적서 전송하기</h3>
+        <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">견적서 파일(PDF/이미지)를 업로드하고 고객에게 문자로 발송합니다. 고객이 승인하면 자동으로 접수가 생성됩니다.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label>
+            <input id="es-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label>
+            <input id="es-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label>
+            <input id="es-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 금액(원)</label>
+            <input id="es-amount" type="number" placeholder="선택 입력" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label>
+          <textarea id="es-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">견적서 파일 (PDF / JPG / PNG) *</label><br/>
+          <input id="es-file" type="file" accept=".pdf,image/*" style="margin-top:6px" />
+          <span id="es-file-status" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">유효기간</label>
+          <select id="es-valid" style="width:200px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px">
+            <option value="3">3일</option>
+            <option value="7" selected>7일</option>
+            <option value="14">14일</option>
+            <option value="30">30일</option>
+          </select>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="es-send-btn" onclick="submitEstimate()" style="padding:12px 24px;background:#e85d04;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">📤 견적서 문자 발송</button>
+          <button onclick="showPanel('estimate-manage')" style="padding:12px 20px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;cursor:pointer">🧾 발송 내역 보기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 견적서 관리 패널 -->
+    <div class="panel" id="panel-estimate-manage">
+      <div class="section-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0">🧾 견적서 관리</h3>
+            <p style="font-size:13px;color:#6b7280;margin:4px 0 0">전체 지사 견적서 조회 및 상태 관리</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="es-filter" onchange="loadEstimates()" style="padding:8px;border:1px solid #e5e8ec;border-radius:8px;font-size:13px">
+              <option value="">전체 상태</option>
+              <option value="pending">발송됨</option>
+              <option value="viewed">고객 확인</option>
+              <option value="approved">승인</option>
+              <option value="rejected">거절</option>
+              <option value="expired">만료</option>
+            </select>
+            <button onclick="loadEstimates()" style="padding:8px 14px;background:#e85d04;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+            <button onclick="showPanel('estimate-send')" style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">📤 견적서 전송하기</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>견적번호</th><th>고객</th><th>연락처</th><th>금액</th><th>상태</th><th>발송일</th><th>관리</th></tr></thead>
+            <tbody id="esTbody"><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:#6b7280">
+          🟡 발송됨 &nbsp;🟣 고객 확인 &nbsp;🟢 승인 &nbsp;🔴 거절 &nbsp;⚪ 만료
+        </div>
+      </div>
+    </div>
+
     <!-- 문자 발송 이력 -->
     <div class="panel" id="panel-sms">
+      <!-- 운영시간 설정 카드 -->
+      <div class="section-card" style="margin-bottom:16px">
+        <h3>⏰ 운영시간 안내 문구</h3>
+        <p style="font-size:13px;color:#6b7280;margin:6px 0 10px">고객용 홈페이지(접수 완료 화면 등)에 표시되는 운영시간 안내 문구입니다. 평일/토요일 시간 등을 자유롭게 수정할 수 있습니다.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="text" id="operatingHoursInput" placeholder="예: 평일 09:00 ~ 18:00 / 토요일 09:00 ~ 13:00 / 일·공휴일 휴무" style="flex:1;min-width:280px;height:40px;border:1.5px solid #e5e7eb;border-radius:8px;padding:0 12px;font-size:14px" />
+          <button id="btnSaveOperatingHours" onclick="saveOperatingHours()" style="background:#e85d04;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">저장</button>
+        </div>
+        <div id="operatingHoursResult" style="display:none;margin-top:8px;font-size:13px"></div>
+      </div>
+
       <!-- SOLAPI 연동 상태 카드 -->
       <div id="smsStatusCard" class="section-card" style="margin-bottom:16px">
         <h3>📡 SOLAPI 연동 상태</h3>
@@ -512,74 +615,128 @@
         </div>
       </div>
     </div>
+    </div>
+  </div>
 
-    <!-- 견적서 전송하기 -->
-    <div class="panel" id="panel-estimates">
-      <div class="section-card">
-        <h3>🧾 새 견적서 전송</h3>
-        <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">견적서 파일(PDF/이미지)를 업로드하고 고객에게 문자로 발송합니다. 고객이 승인하면 자동으로 접수가 생성됩니다.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label>
-            <input id="es-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label>
-            <input id="es-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label>
-            <input id="es-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">견적 금액(원)</label>
-            <input id="es-amount" type="number" placeholder="선택 입력" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label>
-          <textarea id="es-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">견적서 파일 (PDF / JPG / PNG) *</label><br/>
-          <input id="es-file" type="file" accept=".pdf,image/*" style="margin-top:6px" />
-          <span id="es-file-status" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">유효기간</label>
-          <select id="es-valid" style="width:200px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px">
-            <option value="3">3일</option>
-            <option value="7" selected>7일</option>
-            <option value="14">14일</option>
-            <option value="30">30일</option>
-          </select>
-        </div>
-        <button id="es-send-btn" onclick="submitEstimate()" style="margin-top:16px;padding:12px 24px;background:#e85d04;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">📤 견적서 문자 발송</button>
+  <!-- 지사 모집 신청 패널 -->
+  <div class="panel" id="panel-branch-apply">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">🏢 지사 모집 신청 관리</h1>
+        <p class="page-subtitle">웹사이트를 통해 접수된 지사 모집 상담 신청 목록</p>
       </div>
-      <div class="section-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h3 style="margin:0">📋 견적서 관리</h3>
-          <select id="es-filter" onchange="loadEstimates()" style="padding:8px;border:1px solid #e5e8ec;border-radius:8px;font-size:13px">
-            <option value="">전체 상태</option>
-            <option value="pending">발송됨</option>
-            <option value="viewed">열람</option>
-            <option value="approved">승인</option>
-            <option value="rejected">거절</option>
-            <option value="expired">만료</option>
-          </select>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>견적번호</th><th>고객</th><th>연락처</th><th>금액</th><th>상태</th><th>발송일</th><th>관리</th></tr></thead>
-            <tbody id="esTbody"><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">불러오는 중...</td></tr></tbody>
-          </table>
-        </div>
+      <div style="display:flex;gap:8px">
+        <button class="excel-btn" onclick="downloadBranchApplyCSV()">&#128190; CSV 다운로드</button>
+        <button class="refresh-btn" onclick="loadBranchApply()">&#128260; 새로고침</button>
       </div>
     </div>
 
-  </div>
-</div>
+    <!-- 필터 -->
+    <div class="section-card" style="margin-bottom:16px">
+      <div class="inline-form">
+        <select id="ba-status-filter" onchange="loadBranchApply()">
+          <option value="">&#128202; 전체 상태</option>
+          <option value="신규접수">ퟠ 신규 접수</option>
+          <option value="연락완료">✅ 연락 완료</option>
+          <option value="상담진행">💬 상담 진행</option>
+          <option value="보류">⏸️ 보류</option>
+          <option value="계약완료">🎉 계약 완료</option>
+        </select>
+        <input type="text" id="ba-search" placeholder="이름 또는 연락처 검색" style="min-width:200px" oninput="loadBranchApply()" />
+      </div>
+    </div>
 
+    <!-- 목록 -->
+    <div class="section-card">
+      <h3>신청 목록 <span class="badge" id="ba-count">0건</span></h3>
+      <div id="ba-table-wrap" style="overflow-x:auto">
+        <table class="data-table" id="ba-table">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>신청일시</th>
+              <th>이름</th>
+              <th>연락처</th>
+              <th>상담 상태</th>
+              <th>관리자 메모</th>
+              <th>수정</th>
+            </tr>
+          </thead>
+          <tbody id="ba-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:40px;color:#6b7280">데이터를 불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 수정 모달 -->
+    <div id="ba-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <h3 style="font-size:18px;font-weight:700;margin-bottom:20px">📝 신청 정보 수정</h3>
+        <input type="hidden" id="ba-edit-id" />
+        <div style="margin-bottom:14px">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">신청일시</label>
+          <div id="ba-edit-date" style="padding:10px;background:#f9fafb;border-radius:8px;font-size:14px;color:#6b7280"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">이름</label>
+          <div id="ba-edit-name" style="padding:10px;background:#f9fafb;border-radius:8px;font-size:14px"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">연락처</label>
+          <div id="ba-edit-phone" style="padding:10px;background:#f9fafb;border-radius:8px;font-size:14px"></div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">상담 상태</label>
+          <select id="ba-edit-status" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px">
+            <option value="신규접수">신규 접수</option>
+            <option value="연락완료">연락 완료</option>
+            <option value="상담진행">상담 진행</option>
+            <option value="보류">보류</option>
+            <option value="계약완료">계약 완료</option>
+          </select>
+        </div>
+        <div style="margin-bottom:20px">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">관리자 메모</label>
+          <textarea id="ba-edit-memo" rows="3" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical" placeholder="메모를 입력하세요"></textarea>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button onclick="closeBaModal()" style="flex:1;padding:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px;font-size:15px;cursor:pointer">취소</button>
+          <button onclick="saveBaEdit()" style="flex:2;padding:12px;border:none;background:#e85d04;color:#fff;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">저장</button>
+        </div>
+            </div>
+    </div>
+  </div>
+
+  <!-- 계정 승인 관리 패널 -->
+  <div class="panel" id="panel-accounts">
+    <div class="section-card">
+      <h3>👤 가입 승인 대기 계정 <span class="badge" id="accounts-count">0건</span></h3>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:16px">기사/지사가 자스로 가입한 계정입니다. 승인 후 로그인이 가능합니다.</p>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>역할</th><th>이름</th><th>아이디</th><th>휴대폰</th><th>지사/담당지역</th><th>가입신청일</th><th>상태</th><th>처리</th></tr></thead>
+          <tbody id="accounts-tbody"><tr class="loading-row"><td colspan="8">데이터를 불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section-card" style="margin-top:20px">
+      <h3>✅ 활성 계정 목록</h3>
+      <div class="tab-bar">
+        <button class="tab-btn active" id="acc-tab-all" onclick="filterActiveAccounts('all')">전체</button>
+        <button class="tab-btn" id="acc-tab-tech" onclick="filterActiveAccounts('technician')">기사</button>
+        <button class="tab-btn" id="acc-tab-branch" onclick="filterActiveAccounts('branch_manager')">지사</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>역할</th><th>이름</th><th>아이디</th><th>휴대폰</th><th>지사/담당지역</th><th>상태</th><th>처리</th></tr></thead>
+          <tbody id="active-accounts-tbody"><tr class="loading-row"><td colspan="7">데이터를 불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
 <script>
   // 개발 미리보기(8081)에서는 Express 서버(3000 포트)로 직접 요청
   function getApiBase() {
@@ -608,6 +765,15 @@
     document.getElementById('sidebarUsername').textContent = user.name || user.username || '관리자';
   }
 
+  // 센서 API 호출용 인증 헤더 (HMAC 토큰: Bearer <userId>:<token>)
+  function authHeaders(extra) {
+    const h = Object.assign({}, extra || {});
+    if (user && user.userId && user.token) {
+      h['Authorization'] = 'Bearer ' + user.userId + ':' + user.token;
+    }
+    return h;
+  }
+
   function doLogout() {
     sessionStorage.removeItem('adminUser');
     sessionStorage.removeItem('authUser');
@@ -631,7 +797,7 @@
     document.querySelectorAll('.nav-item').forEach(n => {
       if (n.getAttribute('onclick')?.includes("'" + name + "'")) n.classList.add('active');
     });
-    const titles = { overview:'전체 현황', requests:'전국 접수 현황', assign:'기사 배정 현황', branches:'지사 목록', regions:'담당 지역 설정', stats:'월별 통계', sales:'지사별 매출', sensors:'누수센서 관제', flowrate:'난방 유량 관제', sms:'문자 발송 이력', materials:'자재 주문', complaints:'고객 불만', estimates:'견적서 전송하기' };
+    const titles = { overview:'전체 현황', requests:'전국 접수 현황', assign:'기사 배정 현황', branches:'지사 목록', regions:'담당 지역 설정', stats:'월별 통계', sales:'지사별 매출', sensors:'누수센서 관제', flowrate:'난방 유량 관제', estimates:'견적서 전송', 'estimate-send':'견적서 전송하기', 'estimate-manage':'견적서 관리', sms:'문자 발송 이력', materials:'자재 주문', complaints:'고객 불만', 'branch-apply':'지사 모집 신청 관리' };
     document.getElementById('pageTitle').textContent = titles[name] || name;
     currentPanel = name;
     loadCurrentPanel();
@@ -650,7 +816,10 @@
     else if (currentPanel === 'assign') loadAssign();
     else if (currentPanel === 'regions') loadRegions();
     else if (currentPanel === 'materials') loadMaterials();
-    else if (currentPanel === 'estimates') { if (window.loadEstimates) window.loadEstimates(); }
+    else if (currentPanel === 'branch-apply') loadBranchApply();
+    else if (currentPanel === 'estimates') loadEstimates();
+    else if (currentPanel === 'estimate-send') { /* 전송 폼 - 자동 로드 불필요 */ }
+    else if (currentPanel === 'estimate-manage') { if (window.loadEstimates) window.loadEstimates(); }
   }
 
   // 서버 라우터 실제 명칭으로 보정 (목록 조회는 listAll)
@@ -714,7 +883,10 @@
         <td>${Array.isArray(r.symptoms) ? r.symptoms.slice(0,2).join(', ') + (r.symptoms.length > 2 ? '...' : '') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,16).replace('T',' ') : '-'}</td>
         <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
-        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
+        <td style="white-space:nowrap">
+          <button class="action-btn btn-assign" onclick="openAssignModal(${r.id})" style="margin-right:4px">${isUnassigned(r) ? '배정' : '재배정'}</button>
+          <button class="action-btn" onclick="openEstimateModal(${r.id})" style="background:#dbeafe;color:#1e40af">견적</button>
+        </td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="7">접수 데이터가 없습니다</td></tr>';
 
@@ -771,11 +943,71 @@
     return !r.technicianId;
   }
 
+  // 상태 그룹 매핑 (필터용): UI 그룹 → 서버 status 값 집합
+  const STATUS_GROUP = {
+    '대기': ['신규접수', '기사배정대기'],
+    '배정': ['방문예정'],
+    '진행': ['작업진행중', '견적승인대기'],
+    '완료': ['작업완료'],
+    '재방문필요': ['재방문필요'],
+  };
+  // 지사 id → 이름 캐시
+  let _branchNameMap = {};
+  async function ensureBranchNameMap() {
+    if (Object.keys(_branchNameMap).length) return _branchNameMap;
+    const branches = await trpc('branch.list', {}) || [];
+    _branchNameMap = {};
+    branches.forEach(b => { _branchNameMap[b.id] = b.name; });
+    // 지사 필터 드롭다운 채우기 (비어있을 때만)
+    const sel = document.getElementById('filterBranch');
+    if (sel && sel.options.length <= 1) {
+      branches.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = String(b.id); opt.textContent = b.name;
+        sel.appendChild(opt);
+      });
+    }
+    return _branchNameMap;
+  }
+  function resetRequestFilters() {
+    const s = document.getElementById('filterStatus'); if (s) s.value = '';
+    const b = document.getElementById('filterBranch'); if (b) b.value = '';
+    const f = document.getElementById('filterDateFrom'); if (f) f.value = '';
+    const t = document.getElementById('filterDateTo'); if (t) t.value = '';
+    loadRequests();
+  }
+
+  let _currentRequests = [];
   async function loadRequests() {
+    await ensureBranchNameMap();
     const data = await trpc('repair.list', {});
-    const list = data || [];
+    let list = data || [];
+    // 필터 값 읽기
+    const fStatus = document.getElementById('filterStatus')?.value || '';
+    const fBranch = document.getElementById('filterBranch')?.value || '';
+    const fFrom = document.getElementById('filterDateFrom')?.value || '';
+    const fTo = document.getElementById('filterDateTo')?.value || '';
+    // 상태 그룹 필터
+    if (fStatus) {
+      const allowed = STATUS_GROUP[fStatus] || [fStatus];
+      list = list.filter(r => allowed.includes(r.status));
+    }
+    // 지사 필터
+    if (fBranch) {
+      list = list.filter(r => String(r.branchId || '') === String(fBranch));
+    }
+    // 날짜 범위 필터 (createdAt YYYY-MM-DD 기준)
+    if (fFrom) list = list.filter(r => (r.createdAt || '').slice(0,10) >= fFrom);
+    if (fTo) list = list.filter(r => (r.createdAt || '').slice(0,10) <= fTo);
+    // 최신순 정렬
+    list = list.slice().sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    // 건수 표시
+    const countEl = document.getElementById('requestsCount');
+    if (countEl) countEl.textContent = `총 ${list.length}건`;
+    // 엑셀 다운로드용: 필터/정렬이 적용된 현재 목록을 그대로 보관 (DOM 경합 방지)
+    _currentRequests = list;
     const tbody = document.getElementById('requestsTbody');
-    tbody.innerHTML = list.length ? list.reverse().map(r => `
+    tbody.innerHTML = list.length ? list.map(r => `
       <tr>
         <td>#${r.id}</td>
         <td>${r.customerName || '-'}</td>
@@ -783,11 +1015,19 @@
         <td>${addrText(r)}</td>
         <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
         <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
-        <td>${r.branchId ? '지사 #' + r.branchId : '본사'}</td>
+        <td>${branchLabel(r.branchId)}</td>
         <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
-        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
+        <td style="white-space:nowrap">
+          <button class="action-btn btn-assign" onclick="openAssignModal(${r.id})" style="margin-right:4px">${isUnassigned(r) ? '배정' : '재배정'}</button>
+          <button class="action-btn" onclick="openEstimateModal(${r.id})" style="background:#dbeafe;color:#1e40af">견적</button>
+        </td>
       </tr>
-    `).join('') : '<tr class="loading-row"><td colspan="9">접수 데이터가 없습니다</td></tr>';
+    `).join('') : '<tr class="loading-row"><td colspan="9">조건에 맞는 접수 데이터가 없습니다</td></tr>';
+  }
+  // 지사 id → 지사명 표시 (명칭 없으면 본사/번호)
+  function branchLabel(branchId) {
+    if (!branchId) return '본사';
+    return _branchNameMap[branchId] || ('지사 #' + branchId);
   }
 
   async function loadBranches() {
@@ -844,6 +1084,10 @@
 
   async function loadSmsStatus() {
     const el = document.getElementById('smsStatusContent');
+    // 운영시간 문구 로드
+    const ohData = await trpc('admin.getOperatingHours', {});
+    const ohInput = document.getElementById('operatingHoursInput');
+    if (ohInput && ohData?.text != null) ohInput.value = ohData.text;
     const data = await trpc('admin.smsStatus', {});
     const adminPhoneData = await trpc('admin.getAdminPhone', {});
     const configured = data?.configured;
@@ -864,6 +1108,23 @@
           : 'SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.'}
       </div>
     `;
+  }
+
+  async function saveOperatingHours() {
+    const input = document.getElementById('operatingHoursInput');
+    const btn = document.getElementById('btnSaveOperatingHours');
+    const resultEl = document.getElementById('operatingHoursResult');
+    const text = (input?.value || '').trim();
+    if (!text) { alert('운영시간 안내 문구를 입력해 주세요.'); return; }
+    btn.disabled = true; btn.textContent = '저장 중...';
+    const res = await trpc('admin.setOperatingHours', { text, _mutation: true });
+    btn.disabled = false; btn.textContent = '저장';
+    resultEl.style.display = 'block';
+    if (res?.success) {
+      resultEl.innerHTML = '<span style="color:#15803d;font-weight:700">✅ 저장되었습니다. 고객용 홈페이지에 반영됩니다.</span>';
+    } else {
+      resultEl.innerHTML = '<span style="color:#dc2626;font-weight:700">❌ 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.</span>';
+    }
   }
 
   async function runSmsTest() {
@@ -980,7 +1241,10 @@
         <td>${r.technicianName ? r.technicianName : (r.technicianId ? '기사 #' + r.technicianId : '<span style=\"color:#ef4444\">미배정</span>')}</td>
         <td>${r.scheduledDate ? (r.scheduledDate + (r.scheduledTime ? ' ' + r.scheduledTime : '')) : (r.preferredDate ? '희망:' + r.preferredDate : '-')}</td>
         <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
-        <td><button class="action-btn btn-assign" onclick="openAssignModal(${r.id})">${isUnassigned(r) ? '배정' : '재배정'}</button></td>
+        <td style="white-space:nowrap">
+          <button class="action-btn btn-assign" onclick="openAssignModal(${r.id})" style="margin-right:4px">${isUnassigned(r) ? '배정' : '재배정'}</button>
+          <button class="action-btn" onclick="openEstimateModal(${r.id})" style="background:#dbeafe;color:#1e40af">견적</button>
+        </td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="7">진행 중인 작업이 없습니다</td></tr>';
   }
@@ -1042,8 +1306,67 @@
     alert('저장되었습니다.');
   }
 
+  // 현재 화면의 데이터를 CSV로 다운로드 (필터 적용된 결과 그대로)
   function exportExcel(type) {
-    alert('엑셀 다운로드 기능은 준비 중입니다.\n(서버에서 xlsx 파일 생성 후 다운로드 제공 예정)');
+    // 접수현황은 DOM 대신 보관된 원본 데이터 배열을 사용 (실시간 재렌더 경합로 인한 행 누락 방지)
+    if (type === 'requests') {
+      const list = _currentRequests || [];
+      if (!list.length) { alert('다운로드할 데이터가 없습니다.'); return; }
+      const header = ['접수번호','고객명','전화번호','주소','증상','접수일','담당지사','상태'];
+      const rows = [header];
+      list.forEach(r => {
+        rows.push([
+          '#' + r.id,
+          r.customerName || '-',
+          r.phoneNumber || r.customerPhone || '-',
+          addrText(r),
+          Array.isArray(r.symptoms) ? r.symptoms.join(', ') : (r.symptom || '-'),
+          r.createdAt ? r.createdAt.slice(0,10) : '-',
+          branchLabel(r.branchId),
+          r.status || '신규접수',
+        ]);
+      });
+      downloadCsv(rows, '전국접수현황');
+      return;
+    }
+    const panelId = type === 'requests' ? 'panel-requests'
+      : type === 'sms' ? 'panel-sms'
+      : type === 'stats' ? 'panel-stats'
+      : type === 'sales' ? 'panel-sales'
+      : null;
+    const panel = panelId ? document.getElementById(panelId) : null;
+    const table = panel ? panel.querySelector('table.data-table') : null;
+    if (!table) { alert('다운로드할 표 데이터를 찾을 수 없습니다.'); return; }
+    const rows = [];
+    // 헤더 (마지막 "처리" 열은 제외)
+    const ths = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    const headerCount = ths.length;
+    rows.push(ths.filter(h => h !== '처리'));
+    const dropLastCol = ths[ths.length - 1] === '처리';
+    // 본문
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.classList.contains('loading-row')) return;
+      let cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim().replace(/\s+/g, ' '));
+      if (cells.length === 0) return;
+      if (dropLastCol && cells.length === headerCount) cells = cells.slice(0, -1);
+      rows.push(cells);
+    });
+    if (rows.length <= 1) { alert('다운로드할 데이터가 없습니다.'); return; }
+    const nameMap = { requests: '전국접수현황', sms: '문자발송이력', stats: '월별통계', sales: '지사별매출' };
+    downloadCsv(rows, nameMap[type] || type);
+  }
+
+  // 행 배열을 BOM 포함 UTF-8 CSV로 다운로드
+  function downloadCsv(rows, baseName) {
+    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `${baseName}_${today}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // 지사 추가 폼 표시
@@ -1153,10 +1476,14 @@
     const _apiBase = getApiBase();
     document.getElementById('webhookUrl').textContent = (_apiBase || window.location.origin) + '/api/webhook/flow-rate';
 
-    const [settings, logs] = await Promise.all([
-      fetch(_apiBase + '/api/flow-rate/settings').then(r => r.json()).catch(() => []),
-      fetch(_apiBase + '/api/flow-rate/logs?limit=50').then(r => r.json()).catch(() => []),
+    const [settingsRes, logsRes] = await Promise.all([
+      fetch(_apiBase + '/api/flow-rate/settings', { headers: authHeaders() }).then(r => r.json()).catch(() => ({})),
+      fetch(_apiBase + '/api/flow-rate/logs?limit=50', { headers: authHeaders() }).then(r => r.json()).catch(() => ({})),
     ]);
+
+    // 응답이 {success, data} 래퍼면 data를, 배열이면 그대로 사용. 권한 없으면(401/403) 빈 배열.
+    const settings = Array.isArray(settingsRes) ? settingsRes : (settingsRes && settingsRes.data) || [];
+    const logs = Array.isArray(logsRes) ? logsRes : (logsRes && logsRes.data) || [];
 
     flowRateData = settings || [];
 
@@ -1312,7 +1639,7 @@
     try {
       const r = await fetch(getApiBase() + '/api/flow-rate/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ sensorId, apartmentName: aptName, buildingNumber: building, roomNumber: room, baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
       });
       if (!r.ok) throw new Error(await r.text());
@@ -1332,7 +1659,7 @@
     try {
       const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ baseFlowRateLpm: base, warningRangePercent: warn, cautionRangePercent: caution, alertDurationMinutes: alertMin }),
       });
       if (!r.ok) throw new Error(await r.text());
@@ -1346,7 +1673,7 @@
     if (!s) return;
     if (!confirm(s.apartmentName + ' ' + s.buildingNumber + '동 ' + s.roomNumber + '호 설정을 삭제하시겠습니까?')) return;
     try {
-      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, { method: 'DELETE' });
+      const r = await fetch(getApiBase() + '/api/flow-rate/settings/' + id, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
       await loadFlowRate();
     } catch(e) { alert('오류: ' + e.message); }
@@ -1590,12 +1917,81 @@
     }
   }
 
+  // ── 견적 발송 모달 ──
+  let _estimateReqId = null;
+
+  async function openEstimateModal(reqId) {
+    _estimateReqId = reqId;
+    document.getElementById('estimateAmount').value = '';
+    document.getElementById('estimateDescription').value = '';
+    document.getElementById('estimateResult').style.display = 'none';
+    document.getElementById('estimateError').style.display = 'none';
+    document.getElementById('estimateHistory').style.display = 'none';
+    document.getElementById('estimateSubmitBtn').disabled = false;
+    document.getElementById('estimateSubmitBtn').textContent = '견적서 발송 (SMS)';
+
+    const reqs = _allRequests.length ? _allRequests : (await trpc('repair.list', {}) || []);
+    const r = reqs.find(x => x.id === reqId);
+    if (!r) { alert('접수 정보를 찾을 수 없습니다.'); return; }
+
+    document.getElementById('estimateReqInfo').innerHTML =
+      `<div><b>${r.customerName || '-'}</b> (${r.phoneNumber || '-'})</div>` +
+      `<div>📍 ${addrText(r)}</div>` +
+      `<div>🔧 ${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : (r.symptom || '-')}</div>` +
+      `<div>📌 현재 상태: <b>${r.status || '신규접수'}</b></div>` +
+      (r.estimateAmount ? `<div style="color:#1d4ed8">💰 기존 견적: <b>${Number(r.estimateAmount).toLocaleString('ko-KR')}원</b></div>` : '');
+
+    // 발송 이력 로드
+    try {
+      const history = await trpc('estimates.listByRequest', { requestId: reqId });
+      if (history && history.length) {
+        document.getElementById('estimateHistory').style.display = 'block';
+        document.getElementById('estimateHistoryList').innerHTML = history.map(e =>
+          `<div style="padding:6px 0;border-bottom:1px solid #f3f4f6">
+            📅 ${e.sentAt ? e.sentAt.slice(0,16).replace('T',' ') : '-'} | 
+            💰 ${Number(e.amount).toLocaleString('ko-KR')}원 | 
+            <span style="color:${e.status==='approved'?'#22c55e':e.status==='rejected'?'#ef4444':'#f59e0b'}">${{pending:'대기중',approved:'승인',rejected:'거절',expired:'만료'}[e.status]||e.status}</span>
+          </div>`
+        ).join('');
+      }
+    } catch(e) {}
+
+    document.getElementById('estimateModal').style.display = 'flex';
+  }
+
+  function closeEstimateModal() {
+    document.getElementById('estimateModal').style.display = 'none';
+    _estimateReqId = null;
+  }
+
+  async function submitEstimate() {
+    const amount = parseFloat(document.getElementById('estimateAmount').value || '0');
+    const description = document.getElementById('estimateDescription').value.trim();
+    if (!amount || amount <= 0) { alert('견적 금액을 입력하세요.'); return; }
+    const btn = document.getElementById('estimateSubmitBtn');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    document.getElementById('estimateResult').style.display = 'none';
+    document.getElementById('estimateError').style.display = 'none';
+    try {
+      const result = await trpc('estimates.create', { requestId: _estimateReqId, amount, description: description || undefined });
+      const resultEl = document.getElementById('estimateResult');
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `✅ 견적서가 고객에게 SMS로 발송되었습니다.<br>🔗 견적 확인 링크: <a href="${result.estimateUrl || '#'}" target="_blank" style="color:#1d4ed8">${result.estimateUrl || '-'}</a>`;
+      btn.textContent = '발송 완료';
+      loadCurrentPanel();
+    } catch(e) {
+      const errEl = document.getElementById('estimateError');
+      errEl.style.display = 'block';
+      errEl.textContent = '발송 실패: ' + (e?.message || '알 수 없는 오류');
+      btn.disabled = false;
+      btn.textContent = '견적서 발송 (SMS)';
+    }
+  }
+
   checkAuth();
   initYearSelects();
-  loadOverview();
-
   // ===== 견적서 전송 =====
-  let esUploadedFile = null;
+  let esUploadedFile = null; // { fileUrl, fileName, fileType }
   const esFileInput = document.getElementById('es-file');
   if (esFileInput) {
     esFileInput.addEventListener('change', async (e) => {
@@ -1628,6 +2024,7 @@
       }
     });
   }
+
   window.submitEstimate = async function () {
     const name = document.getElementById('es-name').value.trim();
     const phone = document.getElementById('es-phone').value.trim();
@@ -1658,17 +2055,16 @@
       ['es-name','es-phone','es-title','es-amount','es-memo'].forEach(id => document.getElementById(id).value = '');
       esFileInput.value = ''; esUploadedFile = null;
       document.getElementById('es-file-status').textContent = '';
-      window.loadEstimates();
+      loadEstimates();
     } else {
       alert((r && r.message) || '발송에 실패했습니다. 다시 시도해 주세요.');
     }
   };
+
   const ES_STATUS = { pending:{t:'발송됨',c:'#2563eb'}, viewed:{t:'열람',c:'#7c3aed'}, approved:{t:'승인',c:'#16a34a'}, rejected:{t:'거절',c:'#dc2626'}, expired:{t:'만료',c:'#9ca3af'} };
   window.loadEstimates = async function () {
-    const filterEl = document.getElementById('es-filter');
-    const status = filterEl ? filterEl.value : '';
+    const status = document.getElementById('es-filter').value;
     const tbody = document.getElementById('esTbody');
-    if (!tbody) return;
     const list = await trpc('estimates.list', { _query: true, status: status || undefined });
     const rows = list || [];
     if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">견적서가 없습니다.</td></tr>'; return; }
@@ -1690,17 +2086,292 @@
       </tr>`;
     }).join('');
   };
+
   window.copyEstimateLink = function (token) {
     const url = window.location.origin + '/estimate/' + token;
     navigator.clipboard?.writeText(url).then(() => alert('견적서 링크가 복사되었습니다.\n' + url), () => prompt('아래 링크를 복사하세요', url));
   };
+
   window.resendEstimate = async function (id) {
     if (!confirm('견적서를 다시 발송하시겠습니까?')) return;
     const r = await trpc('estimates.resend', { _mutation: true, id });
-    if (r && r.success) { alert('견적서를 재전송했습니다.'); window.loadEstimates(); }
+    if (r && r.success) { alert('견적서를 재전송했습니다.'); loadEstimates(); }
     else alert((r && r.message) || '재전송에 실패했습니다.');
   };
+
+  loadOverview();
+
+  // ── 지사 모집 신청 관리 ──
+  let _baAllData = [];
+
+  async function loadBranchApply() {
+    const tbody = document.getElementById('ba-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#6b7280">불러오는 중...</td></tr>';
+    try {
+      const res = await fetch(getApiBase() + '/api/branch-application/list', {
+        headers: authHeaders({ 'Content-Type': 'application/json' })
+      });
+      const json = await res.json();
+      _baAllData = json.data || [];
+      renderBaTable();
+    } catch(e) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#ef4444">불러오기 실패: ' + e.message + '</td></tr>';
+    }
+  }
+
+  function renderBaTable() {
+    const statusFilter = document.getElementById('ba-status-filter').value;
+    const search = (document.getElementById('ba-search').value || '').trim().toLowerCase();
+    let rows = _baAllData;
+    if (statusFilter) rows = rows.filter(r => r.consultStatus === statusFilter);
+    if (search) rows = rows.filter(r =>
+      (r.applicantName || '').toLowerCase().includes(search) ||
+      (r.phoneNumber || '').toLowerCase().includes(search)
+    );
+    document.getElementById('ba-count').textContent = rows.length + '건';
+    const tbody = document.getElementById('ba-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#6b7280">신청 내역이 없습니다.</td></tr>';
+      return;
+    }
+    const statusColors = {
+      '신규접수': 'status-pending',
+      '연락완료': 'status-assigned',
+      '상담진행': 'status-assigned',
+      '보류': 'status-cancelled',
+      '계약완료': 'status-completed'
+    };
+    tbody.innerHTML = rows.map((r, i) => {
+      const dt = r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-';
+      const cls = statusColors[r.consultStatus] || 'status-pending';
+      const memo = r.adminMemo ? r.adminMemo.substring(0, 20) + (r.adminMemo.length > 20 ? '...' : '') : '-';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td style="white-space:nowrap">${dt}</td>
+        <td><strong>${r.applicantName || '-'}</strong></td>
+        <td>${r.phoneNumber || '-'}</td>
+        <td><span class="status-badge ${cls}">${r.consultStatus || '신규접수'}</span></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.adminMemo || ''}">${memo}</td>
+        <td><button onclick="openBaModal(${r.id})" style="padding:5px 12px;border:1px solid #e85d04;color:#e85d04;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">수정</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openBaModal(id) {
+    const r = _baAllData.find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('ba-edit-id').value = r.id;
+    document.getElementById('ba-edit-date').textContent = r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-';
+    document.getElementById('ba-edit-name').textContent = r.applicantName || '-';
+    document.getElementById('ba-edit-phone').textContent = r.phoneNumber || '-';
+    document.getElementById('ba-edit-status').value = r.consultStatus || '신규접수';
+    document.getElementById('ba-edit-memo').value = r.adminMemo || '';
+    const modal = document.getElementById('ba-modal');
+    modal.style.display = 'flex';
+  }
+
+  function closeBaModal() {
+    document.getElementById('ba-modal').style.display = 'none';
+  }
+
+  async function saveBaEdit() {
+    const id = parseInt(document.getElementById('ba-edit-id').value);
+    const status = document.getElementById('ba-edit-status').value;
+    const memo = document.getElementById('ba-edit-memo').value;
+    try {
+      const res = await fetch(getApiBase() + '/api/branch-application/update', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ id, consultStatus: status, adminMemo: memo })
+      });
+      const json = await res.json();
+      if (json.success) {
+        closeBaModal();
+        loadBranchApply();
+      } else {
+        alert('저장 실패: ' + (json.error || '알 수 없는 오류'));
+      }
+    } catch(e) {
+      alert('저장 중 오류: ' + e.message);
+    }
+  }
+
+  async function downloadBranchApplyCSV() {
+    window.location.href = getApiBase() + '/api/branch-application/csv';
+  }
+
+  // ─── 계정 승인 관리 ───────────────────────────────────────────
+  var _allAccounts = [];
+  var _activeAccounts = [];
+  var _activeAccountFilter = 'all';
+
+  async function loadPendingAccounts() {
+    try {
+      const res = await fetch(API + '/auth.listAccounts', {
+        method: 'GET',
+        headers: buildAuthHeaders()
+      });
+      const data = await res.json();
+      const accounts = (data?.result?.data?.json || []);
+      _allAccounts = accounts;
+      const pending = accounts.filter(a => !a.isActive);
+      const active = accounts.filter(a => a.isActive && (a.appRole === 'technician' || a.appRole === 'branch_manager'));
+      _activeAccounts = active;
+
+      // 배지 업데이트
+      const badge = document.getElementById('pending-badge');
+      if (badge) {
+        badge.textContent = pending.length;
+        badge.style.display = pending.length > 0 ? 'inline-block' : 'none';
+      }
+      document.getElementById('accounts-count').textContent = pending.length + '건';
+
+      // 승인 대기 테이블
+      const tbody = document.getElementById('accounts-tbody');
+      if (pending.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#6b7280">승인 대기 계정이 없습니다.</td></tr>';
+      } else {
+        tbody.innerHTML = pending.map(a => {
+          const roleLabel = a.appRole === 'technician' ? '🔧 기사' : a.appRole === 'branch_manager' ? '🏢 지사' : a.appRole;
+          const branchInfo = a.branchName || a.serviceArea || '-';
+          const createdAt = a.createdAt ? new Date(a.createdAt).toLocaleDateString('ko-KR') : '-';
+          return `<tr>
+            <td><span class="status-badge status-pending">${roleLabel}</span></td>
+            <td>${a.name || '-'}</td>
+            <td>${a.loginId || '-'}</td>
+            <td>${a.phoneNumber || '-'}</td>
+            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${branchInfo}</td>
+            <td>${createdAt}</td>
+            <td><span style="color:#f59e0b;font-weight:600">승인 대기</span></td>
+            <td style="display:flex;gap:6px">
+              <button class="action-btn btn-complete" onclick="approveAccount('${a.userId}')">✅ 승인</button>
+              <button class="action-btn" style="background:#fee2e2;color:#991b1b" onclick="rejectAccount('${a.userId}')">❌ 거절</button>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+
+      // 활성 계정 테이블
+      renderActiveAccounts();
+    } catch (err) {
+      document.getElementById('accounts-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#ef4444">데이터 로드 실패: ' + err.message + '</td></tr>';
+    }
+  }
+
+  function renderActiveAccounts() {
+    const filtered = _activeAccountFilter === 'all'
+      ? _activeAccounts
+      : _activeAccounts.filter(a => a.appRole === _activeAccountFilter);
+    const tbody = document.getElementById('active-accounts-tbody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#6b7280">활성 계정이 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = filtered.map(a => {
+      const roleLabel = a.appRole === 'technician' ? '🔧 기사' : a.appRole === 'branch_manager' ? '🏢 지사' : a.appRole;
+      const branchInfo = a.branchName || a.serviceArea || '-';
+      return `<tr>
+        <td><span class="status-badge status-assigned">${roleLabel}</span></td>
+        <td>${a.name || '-'}</td>
+        <td>${a.loginId || '-'}</td>
+        <td>${a.phoneNumber || '-'}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${branchInfo}</td>
+        <td><span style="color:#22c55e;font-weight:600">활성</span></td>
+        <td><button class="action-btn" style="background:#fee2e2;color:#991b1b" onclick="deactivateAccount('${a.userId}')">⏸ 비활성화</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function filterActiveAccounts(role) {
+    _activeAccountFilter = role;
+    ['all','tech','branch'].forEach(t => {
+      const btn = document.getElementById('acc-tab-' + t);
+      if (btn) btn.classList.toggle('active', (t === 'tech' ? 'technician' : t === 'branch' ? 'branch_manager' : 'all') === role);
+    });
+    renderActiveAccounts();
+  }
+
+  async function approveAccount(userId) {
+    if (!confirm('이 계정을 승인하시겠습니까?')) return;
+    try {
+      const res = await fetch(API + '/auth.setActive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+        body: JSON.stringify({ json: { userId: parseInt(userId), isActive: true } })
+      });
+      const data = await res.json();
+      if (data.result?.data?.json?.success) {
+        alert('승인되었습니다.');
+        loadPendingAccounts();
+      } else throw new Error(data.error?.json?.message || '승인 실패');
+    } catch (err) { alert('오류: ' + err.message); }
+  }
+
+  async function rejectAccount(userId) {
+    if (!confirm('이 계정 신청을 거절(비활성 유지)하시겠습니까?')) return;
+    alert('거절 처리되었습니다. (계정은 비활성 상태로 유지됩니다.)');
+    loadPendingAccounts();
+  }
+
+  async function deactivateAccount(userId) {
+    if (!confirm('이 계정을 비활성화하시겠습니까?')) return;
+    try {
+      const res = await fetch(API + '/auth.setActive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+        body: JSON.stringify({ json: { userId: parseInt(userId), isActive: false } })
+      });
+      const data = await res.json();
+      if (data.result?.data?.json?.success) {
+        alert('비활성화되었습니다.');
+        loadPendingAccounts();
+      } else throw new Error(data.error?.json?.message || '처리 실패');
+    } catch (err) { alert('오류: ' + err.message); }
+  }
+
+  // 페이지 로드 시 승인 대기 배지 업데이트
+  (function checkPendingBadge() {
+    fetch(API + '/auth.listAccounts', { method: 'GET', headers: buildAuthHeaders() })
+      .then(r => r.json())
+      .then(data => {
+        const accounts = data?.result?.data?.json || [];
+        const pending = accounts.filter(a => !a.isActive && (a.appRole === 'technician' || a.appRole === 'branch_manager')).length;
+        const badge = document.getElementById('pending-badge');
+        if (badge && pending > 0) { badge.textContent = pending; badge.style.display = 'inline-block'; }
+      })
+      .catch(() => {});
+  })();
+
 </script>
+<!-- 견적 발송 모달 -->
+<div id="estimateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">💰 견적서 발송</h3>
+      <button onclick="closeEstimateModal()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">×</button>
+    </div>
+    <div id="estimateReqInfo" style="background:#f9fafb;border-radius:10px;padding:12px;font-size:14px;margin-bottom:16px;line-height:1.7"></div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">견적 금액 (원) <span style="color:#ef4444">*</span></label>
+      <input type="number" id="estimateAmount" placeholder="예: 150000" min="1" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:16px;font-weight:600" />
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">상세 내용 (선택)</label>
+      <textarea id="estimateDescription" placeholder="수리 내용, 부품명 등 상세 내용을 입력하세요" rows="3" style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical"></textarea>
+    </div>
+    <div id="estimateHistory" style="display:none;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#374151">발송 이력</div>
+      <div id="estimateHistoryList" style="font-size:13px;color:#6b7280"></div>
+    </div>
+    <div id="estimateResult" style="display:none;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:12px;font-size:14px;margin-bottom:12px"></div>
+    <div id="estimateError" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:14px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button onclick="closeEstimateModal()" style="flex:1;padding:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px;font-size:15px;cursor:pointer">취소</button>
+      <button id="estimateSubmitBtn" onclick="submitEstimate()" style="flex:2;padding:12px;border:none;background:#1d4ed8;color:#fff;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">견적서 발송 (SMS)</button>
+    </div>
+  </div>
+</div>
+
 <!-- 기사 배정 모달 -->
 <div id="assignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px">
   <div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:24px">

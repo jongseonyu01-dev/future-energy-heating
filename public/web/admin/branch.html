@@ -151,11 +151,12 @@
     <div class="nav-item" onclick="showPanel('technicians')"><span>🔧</span> 기사 목록</div>
     <div class="nav-section">통계</div>
     <div class="nav-item" onclick="showPanel('sales')"><span>💰</span> 월 매출</div>
+    <div class="nav-section">견적서</div>
+    <div class="nav-item" id="nav-bes-send" onclick="showPanel('estimate-send')"><span>📤</span> 견적서 전송하기</div>
+    <div class="nav-item" id="nav-bes-manage" onclick="showPanel('estimate-manage')"><span>🧾</span> 견적서 관리</div>
     <div class="nav-section">기타</div>
     <div class="nav-item" onclick="showPanel('sensors')"><span>📡</span> 누수센서 알림</div>
     <div class="nav-item" onclick="showPanel('materials')"><span>📦</span> 자재 주문</div>
-    <div class="nav-section">견적</div>
-    <div class="nav-item" onclick="showPanel('estimates')"><span>🧾</span> 견적서 전송하기</div>
     <div class="nav-section">실시간</div>
     <div class="nav-item" onclick="showPanel('tracking')"><span>📍</span> 기사 이동 현황</div>
   </nav>
@@ -272,6 +273,88 @@
       </div>
     </div>
 
+    <!-- 견적서 전송 -->
+    <!-- 견적서 전송하기 패널 (지사) -->
+    <div class="panel" id="panel-estimate-send">
+      <div class="section-card">
+        <h3>📤 견적서 전송하기</h3>
+        <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">견적서 파일(PDF/이미지)를 업로드하고 고객에게 문자로 발송합니다. 고객이 승인하면 자동으로 접수가 생성됩니다.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label>
+            <input id="bes-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label>
+            <input id="bes-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label>
+            <input id="bes-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 금액(원)</label>
+            <input id="bes-amount" type="number" placeholder="선택 입력" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label>
+          <textarea id="bes-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">견적서 파일 (PDF / JPG / PNG) *</label><br/>
+          <input id="bes-file" type="file" accept=".pdf,image/*" style="margin-top:6px" />
+          <span id="bes-file-status" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">유효기간</label>
+          <select id="bes-valid" style="width:200px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px">
+            <option value="3">3일</option>
+            <option value="7" selected>7일</option>
+            <option value="14">14일</option>
+            <option value="30">30일</option>
+          </select>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="bes-send-btn" onclick="submitBranchEstimate()" style="padding:12px 24px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">📤 견적서 문자 발송</button>
+          <button onclick="showPanel('estimate-manage')" style="padding:12px 20px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;cursor:pointer">🧾 발송 내역 보기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 견적서 관리 패널 (지사) -->
+    <div class="panel" id="panel-estimate-manage">
+      <div class="section-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0">🧾 견적서 관리</h3>
+            <p style="font-size:13px;color:#6b7280;margin:4px 0 0">우리 지사 견적서 조회 및 상태 관리</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="bes-filter" onchange="loadBranchEstimates()" style="padding:8px;border:1px solid #e5e8ec;border-radius:8px;font-size:13px">
+              <option value="">전체 상태</option>
+              <option value="pending">발송됨</option>
+              <option value="viewed">고객 확인</option>
+              <option value="approved">승인</option>
+              <option value="rejected">거절</option>
+              <option value="expired">만료</option>
+            </select>
+            <button onclick="loadBranchEstimates()" style="padding:8px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+            <button onclick="showPanel('estimate-send')" style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">📤 견적서 전송하기</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>견적번호</th><th>고객</th><th>연락처</th><th>금액</th><th>상태</th><th>발송일</th><th>관리</th></tr></thead>
+            <tbody id="besTbody"><tr class="loading-row"><td colspan="7">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:#6b7280">
+          🟡 발송됨 &nbsp;🟣 고객 확인 &nbsp;🟢 승인 &nbsp;🔴 거절 &nbsp;⚪ 만료
+        </div>
+      </div>
+    </div>    </div>
+
     <!-- 누수센서 -->
     <div class="panel" id="panel-sensors">
       <div class="section-card">
@@ -346,71 +429,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 견적서 전송하기 (지사) -->
-    <div class="panel" id="panel-estimates">
-      <div class="section-card">
-        <h3>🧾 새 견적서 전송</h3>
-        <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">견적서 파일(PDF/이미지)를 업로드하고 고객에게 문자로 발송합니다. 고객이 승인하면 자동으로 접수가 생성됩니다.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label>
-            <input id="bes-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label>
-            <input id="bes-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label>
-            <input id="bes-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151">견적 금액(원)</label>
-            <input id="bes-amount" type="number" placeholder="선택 입력" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
-          </div>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label>
-          <textarea id="bes-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">견적서 파일 (PDF / JPG / PNG) *</label><br/>
-          <input id="bes-file" type="file" accept=".pdf,image/*" style="margin-top:6px" />
-          <span id="bes-file-status" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
-        </div>
-        <div style="margin-top:12px;max-width:680px">
-          <label style="font-size:12px;font-weight:600;color:#374151">유효기간</label>
-          <select id="bes-valid" style="width:200px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px">
-            <option value="3">3일</option>
-            <option value="7" selected>7일</option>
-            <option value="14">14일</option>
-            <option value="30">30일</option>
-          </select>
-        </div>
-        <button id="bes-send-btn" onclick="submitBranchEstimate()" style="margin-top:16px;padding:12px 24px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">📤 견적서 문자 발송</button>
-      </div>
-      <div class="section-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h3 style="margin:0">📋 우리 지사 견적서</h3>
-          <select id="bes-filter" onchange="loadBranchEstimates()" style="padding:8px;border:1px solid #e5e8ec;border-radius:8px;font-size:13px">
-            <option value="">전체 상태</option>
-            <option value="pending">발송됨</option>
-            <option value="viewed">열람</option>
-            <option value="approved">승인</option>
-            <option value="rejected">거절</option>
-            <option value="expired">만료</option>
-          </select>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>견적번호</th><th>고객</th><th>연락처</th><th>금액</th><th>상태</th><th>발송일</th><th>관리</th></tr></thead>
-            <tbody id="besTbody"><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">불러오는 중...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 
@@ -453,7 +471,7 @@
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
     document.querySelectorAll('.nav-item').forEach(n => { if (n.getAttribute('onclick')?.includes("'" + name + "'")) n.classList.add('active'); });
-    const titles = { overview:'지사 현황', requests:'접수 목록', assign:'기사 배정', schedule:'방문 일정', technicians:'기사 목록', sales:'월 매출', sensors:'누수센서 알림', materials:'자재 주문', estimates:'견적서 전송하기' };
+    const titles = { overview:'지사 현황', requests:'접수 목록', assign:'기사 배정', schedule:'방문 일정', technicians:'기사 목록', sales:'월 매출', estimates:'견적서 전송', 'estimate-send':'견적서 전송하기', 'estimate-manage':'견적서 관리', sensors:'누수센서 알림', materials:'자재 주문' };
     document.getElementById('pageTitle').textContent = titles[name] || name;
     currentPanel = name;
     loadCurrentPanel();
@@ -468,7 +486,9 @@
     else if (currentPanel === 'technicians') loadTechnicians();
     else if (currentPanel === 'sales') loadSales();
     else if (currentPanel === 'sensors') loadSensors();
-    else if (currentPanel === 'estimates') { if (window.loadBranchEstimates) window.loadBranchEstimates(); }
+    else if (currentPanel === 'estimates') loadBranchEstimates();
+    else if (currentPanel === 'estimate-send') { /* 전송 폼 - 자동 로드 불필요 */ }
+    else if (currentPanel === 'estimate-manage') { if (window.loadBranchEstimates) window.loadBranchEstimates(); else loadBranchEstimates(); }
   }
 
   // 프론트에서 사용하는 간단 이름 → 실제 라우터 procedure 매핑
@@ -883,9 +903,6 @@
     }
   };
 
-  checkAuth();
-  loadOverview();
-
   // ===== 견적서 전송 (지사) =====
   let besUploadedFile = null;
   const besFileInput = document.getElementById('bes-file');
@@ -896,30 +913,20 @@
       besUploadedFile = null;
       if (!f) { statusEl.textContent = ''; return; }
       if (f.size > 10 * 1024 * 1024) { statusEl.textContent = '⚠️ 10MB 이하 파일만 가능합니다.'; statusEl.style.color = '#dc2626'; besFileInput.value = ''; return; }
-      statusEl.style.color = '#6b7280';
-      statusEl.textContent = '업로드 중...';
+      statusEl.style.color = '#6b7280'; statusEl.textContent = '업로드 중...';
       try {
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result).split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(f);
+          reader.onerror = reject; reader.readAsDataURL(f);
         });
-        const r = await trpc('estimates.uploadFile', { _mutation: true, fileName: f.name, contentType: f.type || 'application/octet-stream', base64 });
-        if (r && r.fileUrl) {
-          besUploadedFile = { fileUrl: r.fileUrl, fileName: f.name, fileType: f.type };
-          statusEl.style.color = '#16a34a';
-          statusEl.textContent = '✅ 업로드 완료';
-        } else {
-          statusEl.style.color = '#dc2626';
-          statusEl.textContent = '⚠️ 업로드 실패. 다시 시도해 주세요.';
-        }
-      } catch (err) {
-        statusEl.style.color = '#dc2626';
-        statusEl.textContent = '⚠️ 업로드 오류가 발생했습니다.';
-      }
+        const r = await trpc('estimates.uploadFile', { fileName: f.name, contentType: f.type || 'application/octet-stream', base64 });
+        if (r && r.fileUrl) { besUploadedFile = { fileUrl: r.fileUrl, fileName: f.name, fileType: f.type }; statusEl.style.color = '#16a34a'; statusEl.textContent = '✅ 업로드 완료'; }
+        else { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ 업로드 실패. 다시 시도해 주세요.'; }
+      } catch (err) { statusEl.style.color = '#dc2626'; statusEl.textContent = '⚠️ 업로드 오류가 발생했습니다.'; }
     });
   }
+
   window.submitBranchEstimate = async function () {
     const name = document.getElementById('bes-name').value.trim();
     const phone = document.getElementById('bes-phone').value.trim();
@@ -931,56 +938,40 @@
     const btn = document.getElementById('bes-send-btn');
     btn.disabled = true; btn.textContent = '발송 중...';
     const r = await trpc('estimates.send', {
-      _mutation: true,
-      customerName: name,
-      phoneNumber: phone,
+      customerName: name, phoneNumber: phone,
       title: document.getElementById('bes-title').value.trim() || undefined,
       amount: amountVal ? Number(amountVal) : undefined,
       memo: document.getElementById('bes-memo').value.trim() || undefined,
-      fileUrl: besUploadedFile.fileUrl,
-      fileName: besUploadedFile.fileName,
-      fileType: besUploadedFile.fileType,
-      validUntil,
-      sentBy: user.userId,
-      sentByName: user.name || user.username || '지사',
-      branchId: user.branchId,
+      fileUrl: besUploadedFile.fileUrl, fileName: besUploadedFile.fileName, fileType: besUploadedFile.fileType,
+      validUntil, branchId: user.branchId, sentBy: user.userId, sentByName: user.name || user.username || '지사',
     });
     btn.disabled = false; btn.textContent = '📤 견적서 문자 발송';
     if (r && r.success) {
-      alert('견적서가 발송되었습니다.' + (r.smsSent === false ? '\n(문자 발송은 실패했지만 견적서 링크는 생성되었습니다.)' : ''));
+      alert('견적서가 발송되었습니다.' + (r.smsSent === false ? '\n(문자 발송은 실패했지만 링크는 생성되었습니다.)' : ''));
       ['bes-name','bes-phone','bes-title','bes-amount','bes-memo'].forEach(id => document.getElementById(id).value = '');
-      besFileInput.value = ''; besUploadedFile = null;
-      document.getElementById('bes-file-status').textContent = '';
-      window.loadBranchEstimates();
-    } else {
-      alert((r && r.message) || '발송에 실패했습니다. 다시 시도해 주세요.');
-    }
+      besFileInput.value = ''; besUploadedFile = null; document.getElementById('bes-file-status').textContent = '';
+      loadBranchEstimates();
+    } else { alert((r && r.message) || '발송에 실패했습니다.'); }
   };
+
   const BES_STATUS = { pending:{t:'발송됨',c:'#2563eb'}, viewed:{t:'열람',c:'#7c3aed'}, approved:{t:'승인',c:'#16a34a'}, rejected:{t:'거절',c:'#dc2626'}, expired:{t:'만료',c:'#9ca3af'} };
   window.loadBranchEstimates = async function () {
-    const filterEl = document.getElementById('bes-filter');
-    const status = filterEl ? filterEl.value : '';
+    const status = document.getElementById('bes-filter').value;
     const tbody = document.getElementById('besTbody');
-    if (!tbody) return;
-    const list = await trpc('estimates.listByBranch', { _query: true, branchId: user.branchId, status: status || undefined });
-    const rows = list || [];
+    // list는 query(GET)이므로 직접 fetch (branchId로 제한)
+    let rows = [];
+    try {
+      const inp = { json: { branchId: user.branchId, status: status || undefined } };
+      const res = await fetch(API + '/estimates.list?input=' + encodeURIComponent(JSON.stringify(inp)));
+      const data = await res.json();
+      rows = data.result?.data?.json || [];
+    } catch (e) { rows = []; }
     if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">견적서가 없습니다.</td></tr>'; return; }
     tbody.innerHTML = rows.map(e => {
       const st = BES_STATUS[e.status] || { t: e.status, c: '#6b7280' };
       const amt = e.amount ? Number(e.amount).toLocaleString('ko-KR') + '원' : '-';
       const sent = e.createdAt ? String(e.createdAt).slice(0,16).replace('T',' ') : '-';
-      return `<tr>
-        <td>${e.estimateNumber || ('#' + e.id)}</td>
-        <td>${e.customerName || '-'}</td>
-        <td>${e.phoneNumber || '-'}</td>
-        <td>${amt}</td>
-        <td><span style="color:${st.c};font-weight:600">${st.t}</span></td>
-        <td>${sent}</td>
-        <td style="white-space:nowrap">
-          <button onclick="copyBranchEstimateLink('${e.token}')" style="padding:5px 9px;background:#e0f2fe;color:#0369a1;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">링크</button>
-          ${(e.status==='pending'||e.status==='viewed'||e.status==='expired') ? `<button onclick="resendBranchEstimate(${e.id})" style="padding:5px 9px;background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:6px;font-size:12px;cursor:pointer">재전송</button>` : ''}
-        </td>
-      </tr>`;
+      return `<tr><td>${e.estimateNumber || ('#' + e.id)}</td><td>${e.customerName || '-'}</td><td>${e.phoneNumber || '-'}</td><td>${amt}</td><td><span style="color:${st.c};font-weight:600">${st.t}</span></td><td>${sent}</td><td style="white-space:nowrap"><button onclick="copyBranchEstimateLink('${e.token}')" style="padding:5px 9px;background:#eef2ff;color:#4338ca;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">링크</button>${(e.status==='pending'||e.status==='viewed'||e.status==='expired') ? `<button onclick="resendBranchEstimate(${e.id})" style="padding:5px 9px;background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:6px;font-size:12px;cursor:pointer">재전송</button>` : ''}</td></tr>`;
     }).join('');
   };
   window.copyBranchEstimateLink = function (token) {
@@ -989,10 +980,13 @@
   };
   window.resendBranchEstimate = async function (id) {
     if (!confirm('견적서를 다시 발송하시겠습니까?')) return;
-    const r = await trpc('estimates.resend', { _mutation: true, id });
-    if (r && r.success) { alert('견적서를 재전송했습니다.'); window.loadBranchEstimates(); }
+    const r = await trpc('estimates.resend', { id });
+    if (r && r.success) { alert('재전송했습니다.'); loadBranchEstimates(); }
     else alert((r && r.message) || '재전송에 실패했습니다.');
   };
+
+  checkAuth();
+  loadOverview();
 </script>
 </body>
 </html>
