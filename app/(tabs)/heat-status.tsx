@@ -10,6 +10,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
+import { useAppAuth } from "@/lib/auth-context";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 
@@ -62,10 +63,11 @@ function NoSensorView({ colors }: { colors: any }) {
 }
 
 // ─── 세대 상태 카드 ───────────────────────────────────────────────
-function SensorCard({ item, colors, onRequestInspection }: {
+function SensorCard({ item, colors, onRequestInspection, showTechnical = false }: {
   item: any;
   colors: any;
   onRequestInspection: (sensorId: string) => void;
+  showTechnical?: boolean;
 }) {
   const status = item.lastStatus ?? "정상";
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG["정상"];
@@ -97,29 +99,37 @@ function SensorCard({ item, colors, onRequestInspection }: {
         </View>
       </View>
 
-      {/* 핵심 지표 */}
-      <View style={styles.metricsRow}>
-        <View style={styles.metricBox}>
-          <Text style={[styles.metricLabel, { color: colors.muted }]}>현재 유량</Text>
-          <Text style={[styles.metricValue, { color: cfg.color }]}>
-            {formatLpm(item.lastFlowRateLpm)}
-          </Text>
+      {/* 핵심 지표 - 기술 수치는 관리자/지사장만 표시 */}
+      {showTechnical ? (
+        <View style={styles.metricsRow}>
+          <View style={styles.metricBox}>
+            <Text style={[styles.metricLabel, { color: colors.muted }]}>현재 유량</Text>
+            <Text style={[styles.metricValue, { color: cfg.color }]}>
+              {formatLpm(item.lastFlowRateLpm)}
+            </Text>
+          </View>
+          <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.metricBox}>
+            <Text style={[styles.metricLabel, { color: colors.muted }]}>기준 유량</Text>
+            <Text style={[styles.metricValue, { color: colors.foreground }]}>
+              {formatLpm(item.baseFlowRateLpm)}
+            </Text>
+          </View>
+          <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.metricBox}>
+            <Text style={[styles.metricLabel, { color: colors.muted }]}>난방 압력</Text>
+            <Text style={[styles.metricValue, { color: colors.foreground }]}>
+              {formatPressure(item.lastSupplyPressure)}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-        <View style={styles.metricBox}>
-          <Text style={[styles.metricLabel, { color: colors.muted }]}>기준 유량</Text>
-          <Text style={[styles.metricValue, { color: colors.foreground }]}>
-            {formatLpm(item.baseFlowRateLpm)}
-          </Text>
+      ) : (
+        <View style={[styles.metricsRow, { justifyContent: "center", paddingVertical: 8 }]}>
+          <View style={[styles.statusBadge, { backgroundColor: cfg.color, paddingHorizontal: 24, paddingVertical: 10 }]}>
+            <Text style={[styles.statusBadgeText, { fontSize: 16 }]}>{cfg.icon} {cfg.label}</Text>
+          </View>
         </View>
-        <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-        <View style={styles.metricBox}>
-          <Text style={[styles.metricLabel, { color: colors.muted }]}>난방 압력</Text>
-          <Text style={[styles.metricValue, { color: colors.foreground }]}>
-            {formatPressure(item.lastSupplyPressure)}
-          </Text>
-        </View>
-      </View>
+      )}
 
       {/* 통신 상태 + 측정 시간 */}
       <View style={styles.infoRow}>
@@ -150,18 +160,20 @@ function SensorCard({ item, colors, onRequestInspection }: {
 // ─── 메인 화면 ────────────────────────────────────────────────────
 export default function HeatStatusScreen() {
   const colors = useColors();
+  const { user } = useAppAuth();
+  const showTechnical = user?.appRole === "hq_admin" || user?.appRole === "branch_manager";
   const [phone, setPhone] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: sensors = [], isLoading, refetch } = trpc.flowRate.getByCustomerPhone.useQuery(
-    { phone: searchPhone },
+    { phone: searchPhone, appRole: user?.appRole ?? "customer" },
     { enabled: searchPhone.length >= 9 }
   );
 
-  // 전체 목록 (데모용 - 전화번호 미입력 시 모든 센서 표시)
+  // 전체 목록 (전화번호 미입력 시 모든 센서 표시 - role 기반 필터링)
   const { data: allSensors = [], isLoading: allLoading, refetch: refetchAll } = trpc.flowRate.listSettings.useQuery(
-    undefined,
+    { appRole: user?.appRole ?? "customer", branchId: user?.branchId ?? undefined },
     { enabled: searchPhone.length < 9 }
   );
 
@@ -260,6 +272,7 @@ export default function HeatStatusScreen() {
                 item={item}
                 colors={colors}
                 onRequestInspection={handleRequestInspection}
+                showTechnical={showTechnical}
               />
             ))}
           </View>

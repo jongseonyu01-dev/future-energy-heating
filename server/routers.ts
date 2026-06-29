@@ -1446,7 +1446,24 @@ export const appRouter = router({
 
   // ─── 유량 관리 ──────────────────────────────────────────────────
   flowRate: router({
-    listSettings: publicProcedure.query(async () => db.getAllFlowRateSettings()),
+    listSettings: publicProcedure
+      .input(z.object({
+        appRole: z.enum(["customer", "technician", "branch_manager", "hq_admin"]).optional(),
+        branchId: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const settings = await db.getAllFlowRateSettings();
+        const role = input?.appRole ?? "customer";
+        if (role === "hq_admin") return settings;
+        if (role === "branch_manager" && input?.branchId) {
+          return settings.filter((s: any) => s.branchId === input.branchId);
+        }
+        // customer / technician: strip technical data
+        return settings.map((s: any) => {
+          const { lastFlowRateLpm, baseFlowRateLpm, lastSupplyPressure, lastReturnPressure, ...rest } = s;
+          return rest;
+        });
+      }),
 
     addSetting: publicProcedure
       .input(z.object({
@@ -1512,13 +1529,20 @@ export const appRouter = router({
 
     // 고객 전화번호 기반 유량 데이터 조회
     getByCustomerPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1) }))
+      .input(z.object({
+        phone: z.string().min(1),
+        appRole: z.enum(["customer", "technician", "branch_manager", "hq_admin"]).optional(),
+      }))
       .query(async ({ input }) => {
-        // 전화번호로 고객 접수 이력에서 customerId 또는 sensorId 매핑
         const settings = await db.getAllFlowRateSettings();
-        // customerId 필드가 전화번호와 일치하는 항목 반환
         const matched = settings.filter((s: any) => s.customerId === input.phone);
-        return matched;
+        const role = input.appRole ?? "customer";
+        if (role === "hq_admin" || role === "branch_manager") return matched;
+        // customer / technician: strip technical data
+        return matched.map((s: any) => {
+          const { lastFlowRateLpm, baseFlowRateLpm, lastSupplyPressure, lastReturnPressure, ...rest } = s;
+          return rest;
+        });
       }),
 
     // 점검 처리 상태 업데이트

@@ -17,20 +17,18 @@ import { trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
 import { ScreenContainer } from "@/components/screen-container";
 
-type ViewType = "login" | "changePw" | "signup" | "signupTech" | "signupBranch" | "findId" | "resetPw";
-type SignupTab = "customer" | "technician" | "branch";
+type View2 = "login" | "changePw" | "signup" | "findId" | "resetPw";
 
 export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { login } = useAppAuth();
 
-  const [view, setView] = useState<ViewType>("login");
-  const [signupTab, setSignupTab] = useState<SignupTab>("customer");
+  const [view, setView] = useState<View2>("login");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
@@ -39,7 +37,7 @@ export default function LoginScreen() {
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
 
-  // 고객 회원가입
+  // 회원가입
   const [suName, setSuName] = useState("");
   const [suPhone, setSuPhone] = useState("");
   const [suCode, setSuCode] = useState("");
@@ -47,25 +45,6 @@ export default function LoginScreen() {
   const [suVerified, setSuVerified] = useState(false);
   const [suLoginId, setSuLoginId] = useState("");
   const [suPw, setSuPw] = useState("");
-
-  // 기사 회원가입
-  const [techName, setTechName] = useState("");
-  const [techPhone, setTechPhone] = useState("");
-  const [techCode, setTechCode] = useState("");
-  const [techCodeSent, setTechCodeSent] = useState(false);
-  const [techVerified, setTechVerified] = useState(false);
-  const [techLoginId, setTechLoginId] = useState("");
-  const [techPw, setTechPw] = useState("");
-  const [techBranchId, setTechBranchId] = useState<number | null>(null);
-
-  // 지사장 회원가입
-  const [branchName, setBranchName] = useState("");
-  const [branchPhone, setBranchPhone] = useState("");
-  const [branchCode, setBranchCode] = useState("");
-  const [branchCodeSent, setBranchCodeSent] = useState(false);
-  const [branchVerified, setBranchVerified] = useState(false);
-  const [branchLoginId, setBranchLoginId] = useState("");
-  const [branchPw, setBranchPw] = useState("");
 
   // 아이디 찾기 / 비번 재설정
   const [fiPhone, setFiPhone] = useState("");
@@ -78,23 +57,17 @@ export default function LoginScreen() {
 
   const s = styles(colors);
 
+  // 포커스된 입력칸이 키보드 위로 보이도록 자동 스크롤
+  // Web에서는 findNodeHandle/UIManager를 사용할 수 없으므로 건너뜀
   const scrollRef = useRef<ScrollView>(null);
   const handleFocus = (_e: any) => {
     if (Platform.OS === "web") return;
+    // Native(iOS/Android)에서만 스크롤 처리
+    // KeyboardAvoidingView가 대부분의 경우를 처리하므로 추가 스크롤 불필요
   };
 
   const clearMsg = () => { setError(""); setInfo(""); };
-  const go = (v: ViewType) => { setView(v); clearMsg(); };
-
-  // 역할별 화면 분기
-  const getRouteByRole = (appRole: string) => {
-    switch (appRole) {
-      case "technician": return "/(tabs)/tech-schedule";
-      case "branch_manager": return "/(tabs)/branch-dashboard";
-      case "hq_admin": return "/hq-admin";
-      default: return "/(tabs)";
-    }
-  };
+  const go = (v: View2) => { setView(v); clearMsg(); };
 
   const finishLogin = async (data: any) => {
     await login(
@@ -112,8 +85,7 @@ export default function LoginScreen() {
       loginId,
       rememberMe
     );
-    const route = getRouteByRole(data.appRole);
-    router.replace(route as any);
+    router.replace("/(tabs)");
   };
 
   const loginMutation = trpc.auth.login.useMutation({
@@ -143,10 +115,6 @@ export default function LoginScreen() {
   const sendCodeMutation = trpc.auth.sendVerifyCode.useMutation();
   const checkCodeMutation = trpc.auth.checkVerifyCode.useMutation();
   const registerMutation = trpc.auth.registerCustomer.useMutation();
-  const registerTechMutation = trpc.auth.registerTechnician.useMutation();
-  const registerBranchMutation = trpc.auth.registerBranchManager.useMutation();
-  // 지사 목록 조회 (기사 가입 시 지사 선택용)
-  const { data: branchList = [] } = trpc.branch.listAll.useQuery(undefined, { enabled: signupTab === "technician" });
   const findIdMutation = trpc.auth.findLoginId.useMutation();
   const resetPwMutation = trpc.auth.resetPassword.useMutation();
 
@@ -167,7 +135,7 @@ export default function LoginScreen() {
 
   const handleGuestMode = () => router.replace("/(tabs)");
 
-  // 고객 회원가입
+  // 회원가입 흐름
   const suSendCode = () => {
     clearMsg();
     if (!suPhone.trim()) { setError("휴대전화 번호를 입력해주세요."); return; }
@@ -193,80 +161,6 @@ export default function LoginScreen() {
     registerMutation.mutate(
       { loginId: suLoginId.trim(), password: suPw, name: suName.trim(), phoneNumber: suPhone.trim() },
       { onSuccess: (r: any) => { if (r?.success) { setInfo("회원가입이 완료되었습니다. 로그인해주세요."); setLoginId(suLoginId.trim()); setTimeout(() => go("login"), 1000); } else setError(r?.error ?? "회원가입에 실패했습니다."); }, onError: () => setError("회원가입 중 오류가 발생했습니다.") }
-    );
-  };
-
-  // 기사 회원가입
-  const techSendCode = () => {
-    clearMsg();
-    if (!techPhone.trim()) { setError("휴대전화 번호를 입력해주세요."); return; }
-    sendCodeMutation.mutate(
-      { phoneNumber: techPhone.trim(), purpose: "signup" },
-      { onSuccess: (r: any) => { if (r?.success) { setTechCodeSent(true); setInfo("인증번호를 발송했습니다." + (r.devCode ? ` (테스트코드: ${r.devCode})` : "")); } else setError("인증번호 발송에 실패했습니다."); }, onError: () => setError("인증번호 발송 중 오류가 발생했습니다.") }
-    );
-  };
-  const techVerifyCode = () => {
-    clearMsg();
-    if (!techCode.trim()) { setError("인증번호를 입력해주세요."); return; }
-    checkCodeMutation.mutate(
-      { phoneNumber: techPhone.trim(), code: techCode.trim(), purpose: "signup" },
-      { onSuccess: (r: any) => { if (r?.success) { setTechVerified(true); setInfo("휴대폰 인증이 완료되었습니다."); } else setError("인증번호가 올바르지 않습니다."); }, onError: () => setError("인증 확인 중 오류가 발생했습니다.") }
-    );
-  };
-  const handleTechSignup = () => {
-    Keyboard.dismiss();
-    clearMsg();
-    if (!techName.trim() || !techPhone.trim() || !techLoginId.trim() || !techPw) { setError("모든 항목을 입력해주세요."); return; }
-    if (techPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
-    if (!techVerified) { setError("휴대폰 인증을 먼저 완료해주세요."); return; }
-    registerTechMutation.mutate(
-      { loginId: techLoginId.trim(), password: techPw, name: techName.trim(), phoneNumber: techPhone.trim(), branchId: techBranchId ?? undefined },
-      {
-        onSuccess: (r: any) => {
-          if (r?.success) {
-            setInfo("기사 가입이 완료되었습니다. 바로 로그인하세요.");
-            setTimeout(() => go("login"), 2000);
-          } else setError(r?.error ?? "가입 신청에 실패했습니다.");
-        },
-        onError: () => setError("가입 신청 중 오류가 발생했습니다.")
-      }
-    );
-  };
-
-  // 지사장 회원가입
-  const branchSendCode = () => {
-    clearMsg();
-    if (!branchPhone.trim()) { setError("휴대전화 번호를 입력해주세요."); return; }
-    sendCodeMutation.mutate(
-      { phoneNumber: branchPhone.trim(), purpose: "signup" },
-      { onSuccess: (r: any) => { if (r?.success) { setBranchCodeSent(true); setInfo("인증번호를 발송했습니다." + (r.devCode ? ` (테스트코드: ${r.devCode})` : "")); } else setError("인증번호 발송에 실패했습니다."); }, onError: () => setError("인증번호 발송 중 오류가 발생했습니다.") }
-    );
-  };
-  const branchVerifyCode = () => {
-    clearMsg();
-    if (!branchCode.trim()) { setError("인증번호를 입력해주세요."); return; }
-    checkCodeMutation.mutate(
-      { phoneNumber: branchPhone.trim(), code: branchCode.trim(), purpose: "signup" },
-      { onSuccess: (r: any) => { if (r?.success) { setBranchVerified(true); setInfo("휴대폰 인증이 완료되었습니다."); } else setError("인증번호가 올바르지 않습니다."); }, onError: () => setError("인증 확인 중 오류가 발생했습니다.") }
-    );
-  };
-  const handleBranchSignup = () => {
-    Keyboard.dismiss();
-    clearMsg();
-    if (!branchName.trim() || !branchPhone.trim() || !branchLoginId.trim() || !branchPw) { setError("모든 항목을 입력해주세요."); return; }
-    if (branchPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
-    if (!branchVerified) { setError("휴대폰 인증을 먼저 완료해주세요."); return; }
-    registerBranchMutation.mutate(
-      { loginId: branchLoginId.trim(), password: branchPw, name: branchName.trim(), phoneNumber: branchPhone.trim() },
-      {
-        onSuccess: (r: any) => {
-          if (r?.success) {
-            setInfo("지사장 가입이 완료되었습니다. 바로 로그인하세요.");
-            setTimeout(() => go("login"), 2000);
-          } else setError(r?.error ?? "가입 신청에 실패했습니다.");
-        },
-        onError: () => setError("가입 신청 중 오류가 발생했습니다.")
-      }
     );
   };
 
@@ -316,6 +210,7 @@ export default function LoginScreen() {
     </>
   );
 
+  // 아이디/비번 공통 입력 속성: 자동 대문자/자동완성/자동수정 모두 비활성화
   const idInputProps = {
     autoCapitalize: "none" as const,
     autoCorrect: false,
@@ -358,6 +253,7 @@ export default function LoginScreen() {
                   <TouchableOpacity onPress={() => setShowPw(!showPw)} style={s.pwToggle}><Text style={{ fontSize: 18 }}>{showPw ? "🙈" : "👁"}</Text></TouchableOpacity>
                 </View>
 
+                {/* 자동 로그인 */}
                 <TouchableOpacity style={s.rememberRow} onPress={() => setRememberMe(!rememberMe)} activeOpacity={0.7}>
                   <View style={[s.checkbox, rememberMe && s.checkboxOn]}>{rememberMe ? <Text style={s.checkMark}>✓</Text> : null}</View>
                   <Text style={s.rememberText}>자동 로그인</Text>
@@ -371,8 +267,6 @@ export default function LoginScreen() {
                   <TouchableOpacity onPress={() => go("findId")}><Text style={s.link}>아이디 찾기</Text></TouchableOpacity>
                   <Text style={s.linkDot}>·</Text>
                   <TouchableOpacity onPress={() => go("resetPw")}><Text style={s.link}>비밀번호 재설정</Text></TouchableOpacity>
-                  <Text style={s.linkDot}>·</Text>
-                  <TouchableOpacity onPress={() => go("signup")}><Text style={s.link}>회원가입</Text></TouchableOpacity>
                 </View>
               </View>
 
@@ -398,164 +292,24 @@ export default function LoginScreen() {
               <TextInput style={s.input} value={newPw2} onChangeText={setNewPw2} onFocus={handleFocus} placeholder="새 비밀번호 다시 입력" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
               <TouchableOpacity style={[s.loginBtn, changePwMutation.isPending && s.loginBtnDisabled]} onPress={handleChangePw} disabled={changePwMutation.isPending} activeOpacity={0.8}>
-                {changePwMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>비밀번호 변경</Text>}
+                {changePwMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>변경 후 시작하기</Text>}
               </TouchableOpacity>
             </View>
           )}
 
-          {/* ── 회원가입 (탭 선택) ── */}
+          {/* ── 회원가입 (공개 가입 비활성화) ── */}
           {view === "signup" && (
             <View style={s.form}>
               <Text style={s.formTitle}>회원가입</Text>
-
-              {/* 가입 유형 탭 */}
-              <View style={s.tabRow}>
-                <TouchableOpacity
-                  style={[s.tab, signupTab === "customer" && s.tabActive]}
-                  onPress={() => { setSignupTab("customer"); clearMsg(); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[s.tabText, signupTab === "customer" && s.tabTextActive]}>👤 고객</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.tab, signupTab === "technician" && s.tabActive]}
-                  onPress={() => { setSignupTab("technician"); clearMsg(); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[s.tabText, signupTab === "technician" && s.tabTextActive]}>🔧 기사</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.tab, signupTab === "branch" && s.tabActive]}
-                  onPress={() => { setSignupTab("branch"); clearMsg(); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[s.tabText, signupTab === "branch" && s.tabTextActive]}>🏢 지사</Text>
-                </TouchableOpacity>
+              <View style={{ backgroundColor: "#fff7ed", borderWidth: 1.5, borderColor: "#fed7aa", borderRadius: 12, padding: 20, alignItems: "center", marginBottom: 16 }}>
+                <Text style={{ fontSize: 32, marginBottom: 10 }}>🔒</Text>
+                <Text style={{ fontWeight: "700", fontSize: 16, color: "#9a3412", marginBottom: 8, textAlign: "center" }}>공개 회원가입이 비활성화되어 있습니다</Text>
+                <Text style={{ fontSize: 14, color: "#7c3aed", lineHeight: 22, textAlign: "center" }}>계정 등록은 관리자 또는{" "}담당 지사장을 통해 진행됩니다.{" "}계정이 필요하신 경우 담당자에게{" "}문의해 주세요.</Text>
               </View>
-
-              {/* 고객 가입 폼 */}
-              {signupTab === "customer" && (
-                <>
-                  <Text style={s.label}>이름</Text>
-                  <TextInput style={s.input} value={suName} onChangeText={setSuName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
-                  <Text style={s.label}>휴대전화 번호</Text>
-                  <View style={s.rowField}>
-                    <TextInput style={[s.input, { flex: 1 }]} value={suPhone} onChangeText={setSuPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
-                    <TouchableOpacity style={s.smallBtn} onPress={suSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
-                  </View>
-                  {suCodeSent && (
-                    <>
-                      <Text style={s.label}>인증번호</Text>
-                      <View style={s.rowField}>
-                        <TextInput style={[s.input, { flex: 1 }]} value={suCode} onChangeText={setSuCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
-                        <TouchableOpacity style={[s.smallBtn, { backgroundColor: "#6B7280" }]} onPress={suVerify}><Text style={s.smallBtnText}>확인</Text></TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                  <Text style={s.label}>아이디</Text>
-                  <TextInput style={s.input} value={suLoginId} onChangeText={setSuLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
-                  <Text style={s.label}>비밀번호</Text>
-                  <TextInput style={s.input} value={suPw} onChangeText={setSuPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
-                  <Msg />
-                  <TouchableOpacity style={[s.loginBtn, registerMutation.isPending && s.loginBtnDisabled]} onPress={handleSignup} disabled={registerMutation.isPending} activeOpacity={0.8}>
-                    {registerMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>가입하기</Text>}
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* 기사 가입 폼 */}
-              {signupTab === "technician" && (
-                <>
-                  <View style={s.noticeBox}>
-                    <Text style={s.noticeText}>🔧 기사 계정으로 가입하면 바로 로그인하여 배정된 작업을 확인할 수 있습니다.</Text>
-                  </View>
-                  <Text style={s.label}>이름</Text>
-                  <TextInput style={s.input} value={techName} onChangeText={setTechName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
-                  <Text style={s.label}>휴대전화 번호</Text>
-                  <View style={s.rowField}>
-                    <TextInput style={[s.input, { flex: 1 }]} value={techPhone} onChangeText={setTechPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
-                    <TouchableOpacity style={s.smallBtn} onPress={techSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
-                  </View>
-                  {techCodeSent && (
-                    <>
-                      <Text style={s.label}>인증번호</Text>
-                      <View style={s.rowField}>
-                        <TextInput style={[s.input, { flex: 1 }]} value={techCode} onChangeText={setTechCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
-                        <TouchableOpacity style={[s.smallBtn, { backgroundColor: "#6B7280" }]} onPress={techVerifyCode}><Text style={s.smallBtnText}>확인</Text></TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                  <Text style={s.label}>소속 지사 (선택)</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <TouchableOpacity
-                        style={[s.smallBtn, techBranchId === null && { backgroundColor: '#FF6B35' }]}
-                        onPress={() => setTechBranchId(null)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={[s.smallBtnText, techBranchId === null && { color: '#fff' }]}>미선택</Text>
-                      </TouchableOpacity>
-                      {branchList.map((b: any) => (
-                        <TouchableOpacity
-                          key={b.id}
-                          style={[s.smallBtn, techBranchId === b.id && { backgroundColor: '#FF6B35' }]}
-                          onPress={() => setTechBranchId(b.id)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[s.smallBtnText, techBranchId === b.id && { color: '#fff' }]}>{b.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                  <Text style={s.label}>아이디</Text>
-                  <TextInput style={s.input} value={techLoginId} onChangeText={setTechLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
-                  <Text style={s.label}>비밀번호</Text>
-                  <TextInput style={s.input} value={techPw} onChangeText={setTechPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
-                  <Msg />
-                  <TouchableOpacity style={[s.loginBtn, { backgroundColor: "#FF6B35" }, registerTechMutation.isPending && s.loginBtnDisabled]} onPress={handleTechSignup} disabled={registerTechMutation.isPending} activeOpacity={0.8}>
-                    {registerTechMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>기사 가입하기</Text>}
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* 지사장 가입 폼 */}
-              {signupTab === "branch" && (
-                <>
-                  <View style={s.noticeBox}>
-                    <Text style={s.noticeText}>🏢 지사장 계정으로 가입하면 바로 로그인하여 지사 관리 화면에 접속할 수 있습니다.{"\n"}문의: 031-8042-7310</Text>
-                  </View>
-                  <Text style={s.label}>이름</Text>
-                  <TextInput style={s.input} value={branchName} onChangeText={setBranchName} onFocus={handleFocus} placeholder="이름" placeholderTextColor={colors.muted} />
-                  <Text style={s.label}>휴대전화 번호</Text>
-                  <View style={s.rowField}>
-                    <TextInput style={[s.input, { flex: 1 }]} value={branchPhone} onChangeText={setBranchPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
-                    <TouchableOpacity style={s.smallBtn} onPress={branchSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
-                  </View>
-                  {branchCodeSent && (
-                    <>
-                      <Text style={s.label}>인증번호</Text>
-                      <View style={s.rowField}>
-                        <TextInput style={[s.input, { flex: 1 }]} value={branchCode} onChangeText={setBranchCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
-                        <TouchableOpacity style={[s.smallBtn, { backgroundColor: "#6B7280" }]} onPress={branchVerifyCode}><Text style={s.smallBtnText}>확인</Text></TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                  <Text style={s.label}>아이디</Text>
-                  <TextInput style={s.input} value={branchLoginId} onChangeText={setBranchLoginId} onFocus={handleFocus} placeholder="사용할 아이디 (영문 소문자)" placeholderTextColor={colors.muted} {...idInputProps} />
-                  <Text style={s.label}>비밀번호</Text>
-                  <TextInput style={s.input} value={branchPw} onChangeText={setBranchPw} onFocus={handleFocus} placeholder="비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
-                  <Msg />
-                  <TouchableOpacity style={[s.loginBtn, { backgroundColor: "#1A3A6B" }, registerBranchMutation.isPending && s.loginBtnDisabled]} onPress={handleBranchSignup} disabled={registerBranchMutation.isPending} activeOpacity={0.8}>
-                    {registerBranchMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>지사장 가입하기</Text>}
-                  </TouchableOpacity>
-                </>
-              )}
-
               <TouchableOpacity onPress={() => go("login")} style={{ marginTop: 14, alignItems: "center" }}><Text style={s.link}>← 로그인으로 돌아가기</Text></TouchableOpacity>
             </View>
           )}
-
-          {/* ── 아이디 찾기 ── */}
+                    {/* ── 아이디 찾기 ── */}
           {view === "findId" && (
             <View style={s.form}>
               <Text style={s.formTitle}>아이디 찾기</Text>
@@ -596,6 +350,7 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* 키보드 위 여백: 작은 화면에서도 버튼이 가려지지 않도록 충분히 확보 */}
           <View style={{ height: 120 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -629,8 +384,7 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     errorText: { color: colors.error, fontSize: 13, marginTop: 10, textAlign: "center" },
     infoText: { color: "#1D4ED8", fontSize: 13, marginTop: 10, textAlign: "center" },
     resultBox: { backgroundColor: colors.background, borderRadius: 10, padding: 12, marginTop: 10, fontSize: 14, fontWeight: "700", color: colors.foreground, textAlign: "center" },
-    noticeBox: { backgroundColor: "#EFF6FF", borderRadius: 10, padding: 12, marginBottom: 4, marginTop: 8 },
-    noticeText: { color: "#1D4ED8", fontSize: 13, lineHeight: 20 },
+    noticeBox: { backgroundColor: "#EFF6FF", color: "#1D4ED8", fontSize: 13, padding: 12, borderRadius: 10, marginBottom: 8, lineHeight: 19 },
     loginBtn: { backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center", marginTop: 20 },
     loginBtnDisabled: { opacity: 0.6 },
     loginBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
@@ -642,10 +396,4 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     guestBtn: { paddingVertical: 8, paddingHorizontal: 16 },
     guestBtnText: { fontSize: 14, color: "#FF6B35", fontWeight: "600" },
     footer: { textAlign: "center", fontSize: 12, color: colors.muted, lineHeight: 18 },
-    // 가입 탭
-    tabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-    tab: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", backgroundColor: colors.background },
-    tabActive: { borderColor: "#FF6B35", backgroundColor: "#FFF5F0" },
-    tabText: { fontSize: 14, fontWeight: "600", color: colors.muted },
-    tabTextActive: { color: "#FF6B35" },
   });
