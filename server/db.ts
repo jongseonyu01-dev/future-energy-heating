@@ -1279,7 +1279,8 @@ export async function createLocationConsent(technicianId: number): Promise<void>
 }
 
 // ─── 견적서 (estimates) ────────────────────────────────────────────────────
-import { estimates, Estimate, InsertEstimate } from "../drizzle/schema";
+import { estimates, estimates as estimatesTable, Estimate, InsertEstimate } from "../drizzle/schema";
+import { estimateMessageLogs, InsertEstimateMessageLog, EstimateMessageLog } from "../drizzle/schema";
 
 export async function createEstimate(data: InsertEstimate): Promise<number> {
   const db = await getDb();
@@ -1347,4 +1348,87 @@ export async function updateRepairEstimateInfo(
   const db = await getDb();
   if (!db) return;
   await db.update(repairRequests).set(data).where(eq(repairRequests.id, id));
+}
+
+// ─── 독립 견적서 (estimateMessageLogs / 권한별 목록 / 승인 후 오더) ───────────
+
+// 견적/메시지 발송 기록 저장
+export async function createEstimateMessageLog(
+  data: InsertEstimateMessageLog
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(estimateMessageLogs).values(data);
+  } catch (error) {
+    console.error("[Database] Failed to log estimate message:", error);
+  }
+}
+
+// 메시지 발송 기록 조회 (권한별)
+export async function getEstimateMessageLogs(opts?: {
+  branchId?: number | null;
+}): Promise<EstimateMessageLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+  if (opts?.branchId != null) {
+    return db
+      .select()
+      .from(estimateMessageLogs)
+      .where(eq(estimateMessageLogs.branchId, opts.branchId))
+      .orderBy(desc(estimateMessageLogs.sentAt));
+  }
+  return db.select().from(estimateMessageLogs).orderBy(desc(estimateMessageLogs.sentAt));
+}
+
+// 견적서 목록 조회 (권한별: 본사=전체, 지사=자기것만)
+export async function listEstimates(opts?: {
+  branchId?: number | null;
+  status?: string;
+}): Promise<Estimate[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conds: any[] = [];
+  if (opts?.branchId != null) conds.push(eq(estimatesTable.branchId, opts.branchId));
+  if (opts?.status) conds.push(eq(estimatesTable.status, opts.status as any));
+  let q = db.select().from(estimatesTable);
+  if (conds.length === 1) q = (q as any).where(conds[0]);
+  else if (conds.length > 1) q = (q as any).where(and(...conds));
+  return (q as any).orderBy(desc(estimatesTable.createdAt));
+}
+
+// 견적서 단건 조회 (id)
+export async function getEstimateById(id: number): Promise<Estimate | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(estimatesTable).where(eq(estimatesTable.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+// 견적서 부분 업데이트 (id 기준)
+export async function updateEstimateById(
+  id: number,
+  data: Record<string, unknown>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(estimatesTable).set(data as any).where(eq(estimatesTable.id, id));
+}
+
+// 견적서 조회 시 viewed 상태로 표시 (pending -> viewed)
+export async function markEstimateViewed(token: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db.select().from(estimatesTable).where(eq(estimatesTable.token, token)).limit(1);
+  const est = rows[0];
+  if (est && est.status === "pending") {
+    await db.update(estimatesTable).set({ status: "viewed", viewedAt: new Date() } as any)
+      .where(eq(estimatesTable.token, token));
+  }
+}
+
+// 지사 담당자 전화번호 조회 (지사 phoneNumber)
+export async function getBranchPhone(branchId: number): Promise<string | null> {
+  const b = await getBranchById(branchId);
+  return b?.phoneNumber ?? null;
 }

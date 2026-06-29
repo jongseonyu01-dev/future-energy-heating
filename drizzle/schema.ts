@@ -459,34 +459,61 @@ export const locationConsents = mysqlTable("location_consents", {
 // ─── 견적서 테이블 (토큰 기반 고객 승인/거절) ──────────────────────
 export const estimates = mysqlTable("estimates", {
   id: int("id").autoincrement().primaryKey(),
-  // 연결된 접수 건
-  requestId: int("requestId").notNull(),
-  // 일회용 토큰 (고객 링크용)
+  requestId: int("requestId"),
   token: varchar("token", { length: 64 }).notNull().unique(),
-  // 견적 금액
+  title: varchar("title", { length: 200 }),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
-  // 견적 내용 (작업 내역 설명)
   description: text("description"),
-  // 처리 주체 (unassigned/headquarters/branch)
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  fileUrl: text("fileUrl"),
+  fileName: varchar("fileName", { length: 255 }),
+  fileType: varchar("fileType", { length: 100 }),
+  fileSize: int("fileSize"),
   ownerType: mysqlEnum("ownerType", ["unassigned", "headquarters", "branch"]).notNull().default("headquarters"),
   branchId: int("branchId"),
-  // 상태
-  status: mysqlEnum("status", ["pending", "approved", "rejected", "expired"]).notNull().default("pending"),
-  // 고객 방문 희망 일정 (승인 시 입력)
+  branchName: varchar("branchName", { length: 100 }),
+  status: mysqlEnum("status", ["pending", "viewed", "approved", "rejected", "expired"]).notNull().default("pending"),
+  viewedAt: timestamp("viewedAt"),
+  addressFull: text("addressFull"),
+  sido: varchar("sido", { length: 50 }),
+  sigungu: varchar("sigungu", { length: 50 }),
+  eupmyeondong: varchar("eupmyeondong", { length: 50 }),
+  buildingName: varchar("buildingName", { length: 100 }),
+  buildingDong: varchar("buildingDong", { length: 20 }),
+  buildingHo: varchar("buildingHo", { length: 20 }),
   visitDate: varchar("visitDate", { length: 20 }),
   visitTime: varchar("visitTime", { length: 20 }),
-  // 거절 사유
+  requestMemo: text("requestMemo"),
+  orderId: int("orderId"),
   rejectReason: text("rejectReason"),
-  // 발송 / 만료 시각
   sentAt: timestamp("sentAt").defaultNow().notNull(),
   validUntil: timestamp("validUntil").notNull(),
-  // 고객 응답 시각
   approvedAt: timestamp("approvedAt"),
   rejectedAt: timestamp("rejectedAt"),
-  // 발송자 (관리자 userId)
   sentBy: int("sentBy"),
+  senderRole: varchar("senderRole", { length: 30 }),
+  resendCount: int("resendCount").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 견적/메시지 발송 기록 ───────────────────────────────
+export const estimateMessageLogs = mysqlTable("estimate_message_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  estimateId: int("estimateId"),
+  orderId: int("orderId"),
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  branchId: int("branchId"),
+  branchName: varchar("branchName", { length: 100 }),
+  senderRole: varchar("senderRole", { length: 30 }),
+  senderId: int("senderId"),
+  messageType: varchar("messageType", { length: 50 }).notNull(),
+  messageBody: text("messageBody"),
+  linkUrl: text("linkUrl"),
+  sendStatus: mysqlEnum("sendStatus", ["SUCCESS", "FAILED", "SKIPPED"]).notNull().default("SKIPPED"),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
 });
 
 // ─── 휴대폰 인증코드 테이블 (고객 회원가입/비밀번호 재설정) ──────────
@@ -541,3 +568,5 @@ export type LocationConsent = typeof locationConsents.$inferSelect;
 export type InsertLocationConsent = typeof locationConsents.$inferInsert;
 export type Estimate = typeof estimates.$inferSelect;
 export type InsertEstimate = typeof estimates.$inferInsert;
+export type EstimateMessageLog = typeof estimateMessageLogs.$inferSelect;
+export type InsertEstimateMessageLog = typeof estimateMessageLogs.$inferInsert;

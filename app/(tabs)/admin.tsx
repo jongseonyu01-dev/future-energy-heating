@@ -19,10 +19,11 @@ import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import { formatFullAddress } from "@/constants/address-data";
 import { useAppAuth } from "@/lib/auth-context";
+import { EstimateManager } from "@/components/estimate-manager";
 import { useRouter } from "expo-router";
 
 // 관리자 화면 탭 정의
-type AdminTab = "requests" | "leak" | "technicians" | "settings";
+type AdminTab = "requests" | "estimates" | "leak" | "technicians" | "settings";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   신규접수: { label: "신규 접수", color: "#3B82F6", bg: "#EFF6FF", icon: "📋" },
@@ -127,6 +128,7 @@ export default function AdminScreen() {
       <View style={[styles.adminTabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         {([
           { key: "requests", label: "접수 관리", icon: "📋" },
+          { key: "estimates", label: "견적서", icon: "🧾" },
           { key: "leak", label: "누수관제", icon: "💧" },
           { key: "technicians", label: "기사 관리", icon: "👷" },
           { key: "settings", label: "설정", icon: "⚙️" },
@@ -166,6 +168,9 @@ export default function AdminScreen() {
           showDetailModal={showDetailModal}
           setShowDetailModal={setShowDetailModal}
         />
+      )}
+      {activeTab === "estimates" && (
+        <EstimateManager role="headquarters" branchId={null} senderId={user.userId} />
       )}
       {activeTab === "leak" && <LeakMonitorTab colors={colors} />}
       {activeTab === "technicians" && <TechniciansTab colors={colors} />}

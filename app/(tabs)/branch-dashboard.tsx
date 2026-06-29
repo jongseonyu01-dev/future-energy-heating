@@ -72,6 +72,24 @@ export default function BranchDashboardScreen() {
           ))}
         </View>
 
+        {/* 견적서 전송 빠른 진입 */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
+          <TouchableOpacity
+            onPress={() => router.push("/branch-estimates" as any)}
+            activeOpacity={0.85}
+            style={{ backgroundColor: "#1D4ED8", borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ fontSize: 22 }}>🧾</Text>
+              <View>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>견적서 전송하기</Text>
+                <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 }}>견적서 파일을 고객에게 보내고 승인받기</Text>
+              </View>
+            </View>
+            <Text style={{ color: "#fff", fontSize: 20 }}>→</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* 오늘 방문 일정 */}
         <View style={s.section}>
           <View style={s.sectionHeader}>

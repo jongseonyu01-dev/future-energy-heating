@@ -401,3 +401,39 @@ export function buildWorkCompletedMessage(
   const reviewPart = reviewUrl ? `\n후기 작성: ${reviewUrl}` : "";
   return `[퓨처에너지테크]\n${customerName}님, 요청하신 작업이 완료되었습니다.\n이용해 주셔서 감사합니다.${reviewPart}\n문의: 031-8042-7310`;
 }
+
+/** 독립 견적서 발송 (고객용) - 파일 기반 견적서 링크 */
+export function buildEstimateDocMessage(
+  customerName: string,
+  estimateUrl: string,
+  amount?: number | null,
+): string {
+  const amountPart =
+    amount && amount > 0 ? `\n견적 금액: ${amount.toLocaleString("ko-KR")}원` : "";
+  return `[퓨처에너지테크]\n${customerName}님, 요청하신 견적서가 도착했습니다.${amountPart}\n아래 링크에서 견적서를 확인하시고 승인/거절을 선택해 주세요.\n${estimateUrl}\n문의: 031-8042-7310`;
+}
+
+/** 고객이 견적을 거절했을 때 본사/지사 담당자에게 보내는 알림 */
+export function buildEstimateRejectedAdminMessage(
+  customerName: string,
+  reason?: string | null,
+): string {
+  const reasonPart = reason && reason.trim() ? `\n사유: ${reason.trim()}` : "";
+  return `[퓨처에너지테크]\n${customerName} 고객님이 견적서를 거절하셨습니다.${reasonPart}\n관리자 화면에서 확인해 주세요.`;
+}
+
+/** 고객이 견적을 승인했을 때 본사/지사 담당자에게 보내는 알림 */
+export function buildEstimateApprovedAdminMessage(
+  customerName: string,
+  requestNumber: string,
+): string {
+  return `[퓨처에너지테크]\n${customerName} 고객님이 견적서를 승인했습니다.\n신규 접수(${requestNumber})가 생성되었습니다. 기사 배정을 진행해 주세요.`;
+}
+
+/** 견적 승인 후 고객에게 접수 완료 안내 */
+export function buildEstimateApprovedCustomerMessage(
+  customerName: string,
+  requestNumber: string,
+): string {
+  return `[퓨처에너지테크]\n${customerName}님, 견적이 승인되어 작업 접수(${requestNumber})가 완료되었습니다.\n배정된 기사가 예정된 일정에 방문할 예정입니다.\n문의: 031-8042-7310`;
+}

@@ -20,6 +20,10 @@ import {
   buildTechnicianArrivedMessage,
   buildWorkCompletedMessage,
   buildEstimateMessage,
+  buildEstimateDocMessage,
+  buildEstimateRejectedAdminMessage,
+  buildEstimateApprovedAdminMessage,
+  buildEstimateApprovedCustomerMessage,
 } from "./notification";
 import { dispatchLeakSms } from "./leak-sms";
 import { buildTechnicianDepartedMessage } from "./notification";
@@ -1887,70 +1891,97 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── 견적서 라우터 ───────────────────────────────────────────────────────────────
+  // ─── 견적서 라우터 (독립형 – 파일 업로드 기반) ────────────────────────
   estimates: router({
 
-    // 견적 생성 + 고객 SMS 발송
-    create: publicProcedure
+    // 견적서 파일 업로드 (base64 → S3)
+    uploadFile: publicProcedure
       .input(z.object({
-        requestId: z.number(),
-        amount: z.number().positive(),
-        description: z.string().optional(),
-        sentBy: z.number().optional(), // 관리자 userId
+        fileName: z.string().min(1),
+        fileType: z.string().min(1),
+        base64: z.string().min(1),
       }))
       .mutation(async ({ input }) => {
-        // 접수 건 조회
-        const req = await db.getRepairRequestById(input.requestId);
-        if (!req) throw new Error("접수 건을 찾을 수 없습니다.");
+        const allowed = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+        if (!allowed.includes(input.fileType.toLowerCase())) {
+          throw new Error("PDF, JPG, PNG 파일만 업로드할 수 있습니다.");
+        }
+        const { storagePut } = await import("./storage");
+        const buffer = Buffer.from(input.base64, "base64");
+        if (buffer.length > 15 * 1024 * 1024) {
+          throw new Error("파일 크기는 15MB 이하여야 합니다.");
+        }
+        const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const { url } = await storagePut(`estimates/${Date.now()}_${safeName}`, buffer, input.fileType);
+        return { fileUrl: url, fileName: input.fileName, fileType: input.fileType, fileSize: buffer.length };
+      }),
 
-        // 일회용 토큰 생성
+    // 독립 견적서 전송 (파일 + 고객정보 + SMS)
+    send: publicProcedure
+      .input(z.object({
+        title: z.string().optional(),
+        amount: z.number().min(0).default(0),
+        description: z.string().optional(),
+        customerName: z.string().min(1),
+        customerPhone: z.string().min(8),
+        fileUrl: z.string().min(1),
+        fileName: z.string().optional(),
+        fileType: z.string().optional(),
+        fileSize: z.number().optional(),
+        ownerType: z.enum(["headquarters", "branch"]).default("headquarters"),
+        branchId: z.number().nullable().optional(),
+        sentBy: z.number().optional(),
+        senderRole: z.string().optional(),
+        validHours: z.number().default(72),
+      }))
+      .mutation(async ({ input }) => {
         const token = crypto.randomBytes(24).toString("base64url");
         const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
         const estimateUrl = `${baseUrl}/estimate/${token}`;
+        const validUntil = new Date(Date.now() + input.validHours * 60 * 60 * 1000);
 
-        // 견적 유효기간: 72시간
-        const validUntil = new Date(Date.now() + 72 * 60 * 60 * 1000);
+        let branchName: string | null = null;
+        if (input.ownerType === "branch" && input.branchId) {
+          const b = await db.getBranchById(input.branchId);
+          branchName = b?.name ?? null;
+        }
 
-        // DB 저장
         const estimateId = await db.createEstimate({
-          requestId: input.requestId,
+          requestId: null,
           token,
+          title: input.title ?? null,
           amount: String(input.amount),
           description: input.description ?? null,
-          ownerType: req.ownerType,
-          branchId: req.branchId ?? null,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone.replace(/[^0-9]/g, ""),
+          fileUrl: input.fileUrl,
+          fileName: input.fileName ?? null,
+          fileType: input.fileType ?? null,
+          fileSize: input.fileSize ?? null,
+          ownerType: input.ownerType,
+          branchId: input.branchId ?? null,
+          branchName,
           status: "pending",
           sentAt: new Date(),
           validUntil,
           sentBy: input.sentBy ?? null,
-        });
-
-        // repairRequests 업데이트: 견적 금액 + 발송 시각 + workflowStage
-        await db.updateRepairEstimateInfo(input.requestId, {
-          estimateAmount: String(input.amount),
-          estimateSentAt: new Date(),
-          workflowStage: "견적전달",
-          status: "견적승인대기",
-        });
+          senderRole: input.senderRole ?? null,
+        } as any);
 
         // 고객 SMS 발송
+        const msg = buildEstimateDocMessage(input.customerName, estimateUrl, input.amount);
         let smsSent = false;
         let smsError: string | undefined;
         try {
-          const msg = buildEstimateMessage(
-            req.customerName,
-            req.requestNumber,
-            input.amount,
-            estimateUrl
-          );
-          const r = await notifyAndLog({
-            requestId: input.requestId,
-            phoneNumber: req.phoneNumber,
-            messageType: "ESTIMATE_SENT",
-            content: msg,
-          });
+          const r = await sendNotification(input.customerPhone, msg);
           smsSent = r.result === "SUCCESS";
           if (!smsSent) smsError = r.errorMessage;
+          await db.createEstimateMessageLog({
+            estimateId, customerName: input.customerName, customerPhone: input.customerPhone,
+            branchId: input.branchId ?? null, branchName, senderRole: input.senderRole ?? null,
+            senderId: input.sentBy ?? null, messageType: "견적서발송", messageBody: msg,
+            linkUrl: estimateUrl, sendStatus: r.result as any,
+          });
         } catch (e) {
           smsError = e instanceof Error ? e.message : String(e);
         }
@@ -1958,85 +1989,203 @@ export const appRouter = router({
         return { success: true, estimateId, token, estimateUrl, smsSent, smsError };
       }),
 
-    // 토큰으로 견적 조회 (고객용, 인증 불요)
+    // 견적서 재전송
+    resend: publicProcedure
+      .input(z.object({ id: z.number(), senderId: z.number().optional(), senderRole: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const est = await db.getEstimateById(input.id);
+        if (!est) throw new Error("견적서를 찾을 수 없습니다.");
+        if (est.status === "approved" || est.status === "rejected") {
+          return { success: false, message: "이미 응답된 견적서는 재전송할 수 없습니다." };
+        }
+        const baseUrl = (process.env.SITE_URL || "https://futureenergytech.co.kr").replace(/\/$/, "");
+        const estimateUrl = `${baseUrl}/estimate/${est.token}`;
+        const newValid = new Date(Date.now() + 72 * 60 * 60 * 1000);
+        await db.updateEstimateById(input.id, {
+          status: "pending", validUntil: newValid, resendCount: (est.resendCount ?? 0) + 1, sentAt: new Date(),
+        });
+        const msg = buildEstimateDocMessage(est.customerName ?? "고객", estimateUrl, Number(est.amount));
+        let smsSent = false;
+        let smsError: string | undefined;
+        try {
+          const r = await sendNotification(est.customerPhone ?? "", msg);
+          smsSent = r.result === "SUCCESS";
+          if (!smsSent) smsError = r.errorMessage;
+          await db.createEstimateMessageLog({
+            estimateId: est.id, customerName: est.customerName, customerPhone: est.customerPhone,
+            branchId: est.branchId, branchName: est.branchName, senderRole: input.senderRole ?? null,
+            senderId: input.senderId ?? null, messageType: "견적서재발송", messageBody: msg,
+            linkUrl: estimateUrl, sendStatus: r.result as any,
+          });
+        } catch (e) {
+          smsError = e instanceof Error ? e.message : String(e);
+        }
+        return { success: true, smsSent, smsError };
+      }),
+
+    // 토큰으로 견적 조회 (고객용) + viewed 표시
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         await db.expireOldEstimates();
         const estimate = await db.getEstimateByToken(input.token);
         if (!estimate) return null;
-        // 접수 건 정보도 함께 반환
-        const req = await db.getRepairRequestById(estimate.requestId);
-        return {
-          ...estimate,
-          customerName: req?.customerName,
-          requestNumber: req?.requestNumber,
-          apartmentName: req?.apartmentName,
-          dong: req?.dong,
-          ho: req?.ho,
-          symptom: req?.symptom,
-          detailContent: req?.detailContent,
-        };
+        await db.markEstimateViewed(input.token);
+        return estimate;
       }),
 
-    // 견적 승인 (고객)
-    approve: publicProcedure
+    // 견적 거절 (고객) → 본사/지사 알림
+    reject: publicProcedure
+      .input(z.object({ token: z.string(), rejectReason: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const estimate = await db.getEstimateByToken(input.token);
+        if (!estimate) throw new Error("견적서를 찾을 수 없습니다.");
+        if (estimate.status === "approved" || estimate.status === "rejected") {
+          return { success: false, message: "이미 응답된 견적입니다." };
+        }
+        await db.rejectEstimate(input.token, input.rejectReason);
+
+        // 본사/지사 담당자 알림
+        const adminMsg = buildEstimateRejectedAdminMessage(estimate.customerName ?? "고객", input.rejectReason);
+        try {
+          let adminPhone: string | null = null;
+          if (estimate.ownerType === "branch" && estimate.branchId) {
+            adminPhone = await db.getBranchPhone(estimate.branchId);
+          }
+          if (!adminPhone) adminPhone = await db.getSetting("hq_admin_phone");
+          if (adminPhone && adminPhone.trim().length >= 9) {
+            const r = await sendSms(adminPhone.trim(), adminMsg);
+            await db.createEstimateMessageLog({
+              estimateId: estimate.id, customerName: estimate.customerName, customerPhone: adminPhone.trim(),
+              branchId: estimate.branchId, branchName: estimate.branchName, messageType: "견적거절알림",
+              messageBody: adminMsg, sendStatus: r.result as any,
+            });
+          }
+        } catch (e) {
+          console.error("[estimate.reject] admin notify failed:", e);
+        }
+        return { success: true, message: "견적을 거절했습니다." };
+      }),
+
+    // 견적 승인 + 주소/일정 → 신규 오더 생성 (고객)
+    approveWithOrder: publicProcedure
       .input(z.object({
         token: z.string(),
+        addressFull: z.string().min(1),
+        buildingName: z.string().optional(),
+        buildingDong: z.string().optional(),
+        buildingHo: z.string().optional(),
         visitDate: z.string().optional(),
         visitTime: z.string().optional(),
+        requestMemo: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const estimate = await db.getEstimateByToken(input.token);
         if (!estimate) throw new Error("견적서를 찾을 수 없습니다.");
-        if (estimate.status !== "pending") {
-          return { success: false, message: "이미 응답된 견적입니다." };
+        if (estimate.status === "approved") {
+          return { success: false, message: "이미 승인된 견적입니다." };
+        }
+        if (estimate.status === "rejected") {
+          return { success: false, message: "이미 거절된 견적입니다." };
         }
         if (estimate.validUntil && new Date(estimate.validUntil) < new Date()) {
           await db.rejectEstimate(input.token, "유효기간 만료");
           return { success: false, message: "견적 유효기간이 만료되었습니다." };
         }
 
-        await db.approveEstimate(input.token, input.visitDate, input.visitTime);
-
-        // repairRequests 업데이트: 승인 시각 + workflowStage + 방문 일정
-        const updateData: Record<string, unknown> = {
-          estimateApprovedAt: new Date(),
-          workflowStage: "견적승인",
-          status: "기사배정대기",
-        };
-        if (input.visitDate) updateData.preferredDate = input.visitDate;
-        if (input.visitTime) updateData.preferredTime = input.visitTime;
-        await db.updateRepairEstimateInfo(estimate.requestId, updateData);
-
-        return { success: true, message: "견적을 승인했습니다. 배정된 기사가 방문할 예정입니다." };
-      }),
-
-    // 견적 거절 (고객)
-    reject: publicProcedure
-      .input(z.object({
-        token: z.string(),
-        rejectReason: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const estimate = await db.getEstimateByToken(input.token);
-        if (!estimate) throw new Error("견적서를 찾을 수 없습니다.");
-        if (estimate.status !== "pending") {
-          return { success: false, message: "이미 응답된 견적입니다." };
+        // 지사 자동 배정 (주소 기반) — 견적의 ownerType이 branch면 그 지사 우선
+        let branchId: number | null = estimate.branchId ?? null;
+        if (!branchId) {
+          const b = await db.findBranchByAddress(input.addressFull);
+          branchId = b?.id ?? null;
         }
 
-        await db.rejectEstimate(input.token, input.rejectReason);
+        // 신규 오더(접수) 생성
+        const order = await db.createRepairRequest({
+          branchId,
+          customerName: estimate.customerName ?? "고객",
+          phoneNumber: estimate.customerPhone ?? "",
+          apartmentName: input.buildingName || input.addressFull,
+          dong: input.buildingDong || "-",
+          ho: input.buildingHo || "-",
+          symptom: "기타문의",
+          detailContent: `[견적승인 자동접수]\n주소: ${input.addressFull}\n견적금액: ${Number(estimate.amount).toLocaleString("ko-KR")}원${input.requestMemo ? `\n요청메모: ${input.requestMemo}` : ""}`,
+          preferredDate: input.visitDate ?? null,
+          preferredTime: input.visitTime ?? null,
+          ownerType: branchId ? "branch" : "headquarters",
+          status: "기사배정대기",
+          workflowStage: "견적승인",
+          estimateAmount: String(estimate.amount),
+          estimateApprovedAt: new Date(),
+        } as any);
 
-        // repairRequests 업데이트: 거절 시 workflowStage 되돌리기
-        await db.updateRepairEstimateInfo(estimate.requestId, {
-          workflowStage: "견적작성",
-          status: "견적승인대기",
+        // 견적 승인 처리 + 오더 연결
+        await db.updateEstimateById(estimate.id, {
+          status: "approved",
+          approvedAt: new Date(),
+          addressFull: input.addressFull,
+          buildingName: input.buildingName ?? null,
+          buildingDong: input.buildingDong ?? null,
+          buildingHo: input.buildingHo ?? null,
+          visitDate: input.visitDate ?? null,
+          visitTime: input.visitTime ?? null,
+          requestMemo: input.requestMemo ?? null,
+          orderId: order.id,
+          branchId,
         });
 
-        return { success: true, message: "견적을 거절했습니다." };
+        // 고객 접수완료 안내
+        try {
+          const custMsg = buildEstimateApprovedCustomerMessage(estimate.customerName ?? "고객", order.requestNumber);
+          const r = await notifyAndLog({
+            requestId: order.id, phoneNumber: estimate.customerPhone ?? "",
+            messageType: "ESTIMATE_APPROVED", content: custMsg,
+          });
+          await db.createEstimateMessageLog({
+            estimateId: estimate.id, orderId: order.id, customerName: estimate.customerName,
+            customerPhone: estimate.customerPhone, branchId, branchName: estimate.branchName,
+            messageType: "승인접수완료알림", messageBody: custMsg, sendStatus: r.result as any,
+          });
+        } catch (e) {
+          console.error("[approveWithOrder] customer notify failed:", e);
+        }
+
+        // 본사/지사 승인 알림
+        try {
+          const adminMsg = buildEstimateApprovedAdminMessage(estimate.customerName ?? "고객", order.requestNumber);
+          let adminPhone: string | null = null;
+          if (branchId) adminPhone = await db.getBranchPhone(branchId);
+          if (!adminPhone) adminPhone = await db.getSetting("hq_admin_phone");
+          if (adminPhone && adminPhone.trim().length >= 9) {
+            const r = await sendSms(adminPhone.trim(), adminMsg);
+            await db.createEstimateMessageLog({
+              estimateId: estimate.id, orderId: order.id, customerName: estimate.customerName,
+              customerPhone: adminPhone.trim(), branchId, branchName: estimate.branchName,
+              messageType: "견적승인알림", messageBody: adminMsg, sendStatus: r.result as any,
+            });
+          }
+        } catch (e) {
+          console.error("[approveWithOrder] admin notify failed:", e);
+        }
+
+        return { success: true, message: "견적을 승인했습니다. 작업 접수가 완료되었습니다.", orderId: order.id, requestNumber: order.requestNumber };
       }),
 
-    // 접수 건별 견적 목록 조회 (관리자용)
+    // 견적서 목록 (권한별: 본사=전체, 지사=자기것만)
+    list: publicProcedure
+      .input(z.object({ branchId: z.number().nullable().optional(), status: z.string().optional() }).optional())
+      .query(async ({ input }) => {
+        return db.listEstimates({ branchId: input?.branchId ?? null, status: input?.status });
+      }),
+
+    // 메시지 발송 기록 (권한별)
+    messageLogs: publicProcedure
+      .input(z.object({ branchId: z.number().nullable().optional() }).optional())
+      .query(async ({ input }) => {
+        return db.getEstimateMessageLogs({ branchId: input?.branchId ?? null });
+      }),
+
+    // 접수 건별 견적 목록 (기존 호환)
     listByRequest: publicProcedure
       .input(z.object({ requestId: z.number() }))
       .query(async ({ input }) => {
