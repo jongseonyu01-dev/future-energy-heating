@@ -73,6 +73,8 @@ type RepairRequest = {
   inspectionResult: string | null;
   createdAt: Date;
   updatedAt: Date;
+  ownerType?: "unassigned" | "headquarters" | "branch" | null;
+  branchId?: number | null;
 };
 
 export default function AdminScreen() {
@@ -355,6 +357,28 @@ function RequestsTab({
                       👷 {item.technicianName}
                     </Text>
                   )}
+                  {/* ownerType 배지 */}
+                  {(!item.ownerType || item.ownerType === "unassigned") && (
+                    <View style={{ flexDirection: "row", marginTop: 4 }}>
+                      <View style={{ backgroundColor: "#FEF9C3", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 11, color: "#854D0E", fontWeight: "600" }}>미배정 - 담당 배정 필요</Text>
+                      </View>
+                    </View>
+                  )}
+                  {item.ownerType === "headquarters" && (
+                    <View style={{ flexDirection: "row", marginTop: 4 }}>
+                      <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 11, color: "#1E40AF", fontWeight: "600" }}>🏢 본사 직접 처리</Text>
+                      </View>
+                    </View>
+                  )}
+                  {item.ownerType === "branch" && (
+                    <View style={{ flexDirection: "row", marginTop: 4 }}>
+                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 11, color: "#166534", fontWeight: "600" }}>🏗️ 지사 배정</Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
 
                 <View style={[styles.listCardBottom, { borderTopColor: colors.border }]}>
@@ -413,6 +437,8 @@ function DetailModal({
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime || "");
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showTechnicianPicker, setShowTechnicianPicker] = useState(false);
+  const [showOwnerPicker, setShowOwnerPicker] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
 
   const { data: technicians } = trpc.technicians.listAll.useQuery();
   const { data: branches } = trpc.branch.listActive.useQuery();
@@ -496,6 +522,24 @@ function DetailModal({
       Alert.alert("완료", "기사가 배정되었습니다.");
       onUpdate();
     },
+  });
+
+  const assignToHQMutation = trpc.repair.assignToHeadquarters.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "본사 직접 처리로 설정되었습니다.\n이제 본사 기사를 배정하세요.");
+      setShowOwnerPicker(false);
+      onUpdate();
+    },
+    onError: () => Alert.alert("오류", "본사 배정 중 문제가 발생했습니다."),
+  });
+
+  const assignToBranchMutation = trpc.repair.assignToBranch.useMutation({
+    onSuccess: () => {
+      Alert.alert("완료", "지사 배정이 완료되었습니다.");
+      setShowOwnerPicker(false);
+      onUpdate();
+    },
+    onError: () => Alert.alert("오류", "지사 배정 중 문제가 발생했습니다."),
   });
 
   const updateScheduleMutation = trpc.repair.updateSchedule.useMutation({
@@ -661,8 +705,110 @@ function DetailModal({
             </Pressable>
           </SectionCard>
 
+          {/* 담당 배정 (본사체리 / 지사배정) */}
+          <SectionCard title="🏢 담당 배정" colors={colors}>
+            {/* 현재 ownerType 표시 */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 13, color: colors.muted, marginRight: 8 }}>현재 담당:</Text>
+              {(!item.ownerType || item.ownerType === "unassigned") && (
+                <View style={{ backgroundColor: "#FEF9C3", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 12, color: "#854D0E", fontWeight: "600" }}>미배정</Text>
+                </View>
+              )}
+              {item.ownerType === "headquarters" && (
+                <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 12, color: "#1E40AF", fontWeight: "600" }}>🏢 본사 직접 처리</Text>
+                </View>
+              )}
+              {item.ownerType === "branch" && (
+                <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 12, color: "#166534", fontWeight: "600" }}>🏗️ 지사 배정</Text>
+                </View>
+              )}
+            </View>
+
+            {/* 선택 버튼 */}
+            {(!item.ownerType || item.ownerType === "unassigned" || showOwnerPicker) && (
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                <Pressable
+                  style={({ pressed }) => ([
+                    { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 2,
+                      borderColor: "#3B82F6", backgroundColor: "#EFF6FF",
+                      alignItems: "center", opacity: pressed ? 0.8 : 1 }
+                  ])}
+                  onPress={() => {
+                    if (!user) return;
+                    Alert.alert(
+                      "본사 직접 처리",
+                      "이 접수를 본사에서 직접 처리하시겠습니까?",
+                      [
+                        { text: "취소", style: "cancel" },
+                        { text: "확인", onPress: () => assignToHQMutation.mutate({ id: item.id, actorUserId: user.userId }) },
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#1E40AF" }}>🏢 본사 직접</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => ([
+                    { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 2,
+                      borderColor: "#22C55E", backgroundColor: "#F0FDF4",
+                      alignItems: "center", opacity: pressed ? 0.8 : 1 }
+                  ])}
+                  onPress={() => setShowOwnerPicker(v => !v)}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#166534" }}>🏗️ 지사 배정</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* 지사 선택 목록 */}
+            {showOwnerPicker && (
+              <View style={[styles.techPickerList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={{ backgroundColor: "#F0FDF4", paddingHorizontal: 12, paddingVertical: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#166534" }}>배정할 지사를 선택하세요</Text>
+                </View>
+                {(branches ?? []).map(branch => (
+                  <Pressable
+                    key={branch.id}
+                    style={[styles.techPickerItem, {
+                      borderBottomColor: colors.border,
+                      backgroundColor: selectedBranchId === branch.id ? "#F0FDF4" : "transparent",
+                    }]}
+                    onPress={() => {
+                      if (!user) return;
+                      Alert.alert(
+                        "지사 배정",
+                        `${branch.name}으로 배정하시겠습니까?`,
+                        [
+                          { text: "취소", style: "cancel" },
+                          { text: "배정", onPress: () => {
+                            setSelectedBranchId(branch.id);
+                            assignToBranchMutation.mutate({ id: item.id, branchId: branch.id, actorUserId: user.userId });
+                          }},
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.techPickerName, { color: colors.foreground }]}>📍 {branch.name}</Text>
+                    {branch.region && (
+                      <Text style={[styles.techPickerPhone, { color: colors.muted }]}>{branch.region}</Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </SectionCard>
+
           {/* 기사 배정 */}
           <SectionCard title="👷 기사 배정" colors={colors}>
+            {item.ownerType === "unassigned" || !item.ownerType ? (
+              <View style={{ backgroundColor: "#FEF9C3", padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, color: "#854D0E" }}>⚠️ 먼저 위에서 담당 배정(본사/지사)을 선택해주세요.</Text>
+              </View>
+            ) : null}
+
             {item.technicianName && (
               <View style={[styles.currentTechBox, { backgroundColor: "#F0FDF4", borderColor: "#86EFAC" }]}>
                 <Text style={styles.currentTechText}>
@@ -671,45 +817,51 @@ function DetailModal({
               </View>
             )}
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: "#0EA5E9", opacity: pressed ? 0.85 : 1 },
-              ]}
-              onPress={() => setShowTechnicianPicker(true)}
-            >
-              <Text style={styles.actionButtonText}>
-                {item.technicianName ? "기사 변경" : "기사 배정"}
-              </Text>
-            </Pressable>
+            {(item.ownerType === "headquarters" || item.ownerType === "branch") && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: "#0EA5E9", opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() => setShowTechnicianPicker(true)}
+              >
+                <Text style={styles.actionButtonText}>
+                  {item.technicianName ? "기사 변경" : "기사 배정"}
+                </Text>
+              </Pressable>
+            )}
 
-            {/* 기사 선택 목록 - 본사/지사 그룹 */}
+            {/* 기사 선택 목록 - ownerType에 따라 필터링 */}
             {showTechnicianPicker && (
               <View style={[styles.techPickerList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                {/* 본사 직속 기사 */}
-                {(technicians?.filter(t => t.branchId === null || t.branchId === undefined) ?? []).length > 0 && (
-                  <View style={{ backgroundColor: "#FFF7F0", paddingHorizontal: 12, paddingVertical: 6 }}>
-                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#FF6B35" }}>🏢 본사 직속 기사</Text>
-                  </View>
-                )}
-                {technicians?.filter(t => t.branchId === null || t.branchId === undefined).map((tech) => (
-                  <Pressable
-                    key={tech.id}
-                    style={[styles.techPickerItem, { borderBottomColor: colors.border }]}
-                    onPress={() => handleAssignTechnician(tech)}
-                  >
-                    <Text style={[styles.techPickerName, { color: colors.foreground }]}>
-                      👷 {tech.name}
-                    </Text>
-                    {tech.phoneNumber && (
-                      <Text style={[styles.techPickerPhone, { color: colors.muted }]}>
-                        {tech.phoneNumber}
-                      </Text>
+                {/* 본사 직속 기사 - headquarters이거나 전체 목록 */}
+                {(item.ownerType === "headquarters" || !item.ownerType) && (
+                  <>
+                    {(technicians?.filter(t => t.branchId === null || t.branchId === undefined) ?? []).length > 0 && (
+                      <View style={{ backgroundColor: "#FFF7F0", paddingHorizontal: 12, paddingVertical: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#FF6B35" }}>🏢 본사 직속 기사</Text>
+                      </View>
                     )}
-                  </Pressable>
-                ))}
-                {/* 지사 소속 기사 (지사별 그룹) */}
-                {branches?.map(branch => {
+                    {technicians?.filter(t => t.branchId === null || t.branchId === undefined).map((tech) => (
+                      <Pressable
+                        key={tech.id}
+                        style={[styles.techPickerItem, { borderBottomColor: colors.border }]}
+                        onPress={() => handleAssignTechnician(tech)}
+                      >
+                        <Text style={[styles.techPickerName, { color: colors.foreground }]}>
+                          👷 {tech.name}
+                        </Text>
+                        {tech.phoneNumber && (
+                          <Text style={[styles.techPickerPhone, { color: colors.muted }]}>
+                            {tech.phoneNumber}
+                          </Text>
+                        )}
+                      </Pressable>
+                    ))}
+                  </>
+                )}
+                {/* 지사 소속 기사 (지사별 그룹) - branch이거나 전체 목록 */}
+                {branches?.filter(branch => !item.branchId || item.branchId === branch.id).map(branch => {
                   const branchTechs = technicians?.filter(t => t.branchId === branch.id) ?? [];
                   if (branchTechs.length === 0) return null;
                   return (

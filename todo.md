@@ -474,3 +474,31 @@
 - [ ] 앱: 기사 화면에 견적금액/요청사항 표시
 - [ ] 전체 테스트 통과
 - [ ] GitHub 푸시 및 체크포인트 저장
+
+## 본사/지사 배정 흐름 구현 (30차)
+- [ ] 서버: assignToHQ API (ownerType=headquarters, branchId=null)
+- [ ] 서버: assignToBranch API (ownerType=branch, branchId=선택)
+- [ ] 서버: 지사 목록 조회 API (branches.list)
+- [ ] 홈페이지 dashboard.html: 신규접수 목록에 "본사처리/지사배정" 버튼 추가
+- [ ] 홈페이지 dashboard.html: 본사처리 선택 시 본사 기사 배정 모달
+- [ ] 홈페이지 dashboard.html: 지사배정 선택 시 지사 선택 드롭다운 + 배정 버튼
+- [ ] 앱 hq-admin.tsx: 신규접수 목록에 "본사처리/지사배정" 버튼 추가
+- [ ] 앱 hq-admin.tsx: 본사처리 선택 시 본사 기사 배정 모달
+- [ ] 앱 hq-admin.tsx: 지사배정 선택 시 지사 선택 드롭다운 + 배정 버튼
+- [ ] 홈페이지 branch.html: ownerType=branch 접수만 표시 확인
+- [ ] 전체 테스트 통과
+- [ ] GitHub 푸시 및 체크포인트 저장
+
+## 본사/지사 배정 흐름 (작업 1번)
+- [x] repairRequests 테이블 ownerType 컬럼 추가 (unassigned/headquarters/branch)
+- [x] 서버 API: repair.assignToHeadquarters (ownerType=headquarters, branchId=null)
+- [x] 서버 API: repair.assignToBranch (ownerType=branch, branchId=선택한 지사)
+- [x] 모바일 앱 admin.tsx: RepairRequest 타입에 ownerType, branchId 필드 추가
+- [x] 모바일 앱 admin.tsx: 담당 배정 섹션 UI (본사직접/지사배정 버튼, 지사 선택 목록)
+- [x] 모바일 앱 admin.tsx: 접수 카드에 ownerType 배지 표시
+- [x] 모바일 앱 admin.tsx: 기사 배정 섹션 ownerType 기반 필터링 (본사=본사기사만, 지사=해당지사기사만)
+- [x] 홈페이지 dashboard.html: 신규접수 목록 행에 담당배정 버튼 추가
+- [x] 홈페이지 dashboard.html: ownerModal (본사처리/지사배정 선택 모달) 추가
+- [x] 홈페이지 dashboard.html: ownerTypeBadge 함수 추가
+- [x] GitHub push (futureenergytech 레포)
+- [x] 모바일 앱 checkpoint 저장
