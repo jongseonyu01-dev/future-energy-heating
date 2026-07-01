@@ -1443,11 +1443,23 @@ export const appRouter = router({
         return { success: true, sms: result };
       }),
 
-    events: publicProcedure
+        events: publicProcedure
       .input(z.object({ sensorUid: z.string() }))
       .query(async ({ input }) => db.getSensorEvents(input.sensorUid)),
+    getAlertPhones: publicProcedure
+      .query(async () => {
+        const raw = await db.getSetting("leak_alert_phones");
+        const phones = raw ? raw.split(/[,\s]+/).map((p: string) => p.trim()).filter(Boolean) : [];
+        return { phones };
+      }),
+    setAlertPhones: publicProcedure
+      .input(z.object({ phones: z.array(z.string()) }))
+      .mutation(async ({ input }) => {
+        const value = input.phones.map((p: string) => p.replace(/[^0-9]/g, "")).filter((p: string) => p.length >= 10).join(",");
+        await db.setSetting("leak_alert_phones", value);
+        return { ok: true };
+      }),
   }),
-
   // ─── 유량 관리 ──────────────────────────────────────────────────
   flowRate: router({
     listSettings: publicProcedure

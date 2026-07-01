@@ -259,10 +259,21 @@ export const notificationLogs = mysqlTable("notification_logs", {
   channel: mysqlEnum("channel", ["SMS", "ALIMTALK"]).notNull().default("SMS"),
   messageType: varchar("messageType", { length: 50 }),
   content: text("content"),
-  result: mysqlEnum("result", ["SUCCESS", "FAILED", "SKIPPED"]).notNull().default("SKIPPED"),
+  result: mysqlEnum("result", ["SUCCESS", "FAILED", "SKIPPED", "REQUESTED"]).notNull().default("SKIPPED"),
   errorMessage: text("errorMessage"),
   // 알림톡 시도 후 문자로 대체 발송되었는지 여부
   fallbackUsed: boolean("fallbackUsed").notNull().default(false),
+  // SMS 발송 상세 필드 (누수감지 등)
+  sensorUid: varchar("sensorUid", { length: 64 }),
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  provider: varchar("provider", { length: 20 }).default("solapi"),
+  groupId: varchar("groupId", { length: 100 }),
+  messageId: varchar("messageId", { length: 100 }),
+  sendStatus: varchar("sendStatus", { length: 20 }),
+  failReason: text("failReason"),
+  responsePayload: text("responsePayload"),
+  sentAt: timestamp("sentAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

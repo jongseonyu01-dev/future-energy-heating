@@ -14,8 +14,12 @@ import crypto from "crypto";
 const SOLAPI_BASE_URL = "https://api.solapi.com";
 
 export interface SendResult {
-  result: "SUCCESS" | "FAILED" | "SKIPPED";
+  result: "SUCCESS" | "FAILED" | "SKIPPED" | "REQUESTED";
   errorMessage?: string;
+  provider?: string;
+  groupId?: string;
+  messageId?: string;
+  responsePayload?: string;
 }
 
 /**
@@ -92,12 +96,18 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
     const data = (await response.json()) as {
       failedMessageList?: unknown[];
       errorMessage?: string;
+      groupId?: string;
+      messageId?: string;
     };
+
+    const responsePayload = JSON.stringify(data);
 
     if (!response.ok) {
       return {
         result: "FAILED",
+        provider: "solapi",
         errorMessage: data?.errorMessage || `HTTP ${response.status}`,
+        responsePayload,
       };
     }
 
@@ -108,11 +118,19 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
     ) {
       return {
         result: "FAILED",
+        provider: "solapi",
         errorMessage: JSON.stringify(data.failedMessageList),
+        responsePayload,
       };
     }
 
-    return { result: "SUCCESS" };
+    return {
+      result: "REQUESTED",
+      provider: "solapi",
+      groupId: data.groupId,
+      messageId: data.messageId,
+      responsePayload,
+    };
   } catch (error) {
     return {
       result: "FAILED",
@@ -286,10 +304,14 @@ export function isAlimtalkConfigured(): boolean {
 export interface NotifyResult {
   /** 최종 발송에 사용된 채널 */
   channel: "ALIMTALK" | "SMS";
-  result: "SUCCESS" | "FAILED" | "SKIPPED";
+  result: "SUCCESS" | "FAILED" | "SKIPPED" | "REQUESTED";
   /** 알림톡 시도 후 문자로 대체 발송되었는지 */
   fallbackUsed: boolean;
   errorMessage?: string;
+  provider?: string;
+  groupId?: string;
+  messageId?: string;
+  responsePayload?: string;
 }
 
 /**

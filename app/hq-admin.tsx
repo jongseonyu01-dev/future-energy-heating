@@ -666,6 +666,15 @@ function HQAccounts({ colors }: { colors: any }) {
 function HQSensors({ colors }: { colors: any }) {
   const utils = trpc.useUtils();
   const { data: sensors = [], isLoading } = trpc.sensor.listAll.useQuery();
+  const { data: alertPhonesData } = trpc.sensor.getAlertPhones.useQuery();
+  const [alertPhoneInput, setAlertPhoneInput] = useState("");
+  const setAlertPhonesMutation = trpc.sensor.setAlertPhones.useMutation({
+    onSuccess: () => {
+      utils.sensor.getAlertPhones.invalidate();
+      Alert.alert("저장 완료", "알림 수신번호가 저장되었습니다.");
+      setAlertPhoneInput("");
+    },
+  });
 
   const resolveMutation = trpc.sensor.resolve.useMutation({
     onSuccess: () => { utils.sensor.listAll.invalidate(); Alert.alert("완료", "처리 완료로 변경되었습니다."); },
@@ -700,8 +709,56 @@ function HQSensors({ colors }: { colors: any }) {
         </View>
       </View>
 
+      {/* 알림 수신번호 설정 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>📱 누수 알림 수신번호 설정</Text>
+        {alertPhonesData?.phones && alertPhonesData.phones.length > 0 ? (
+          <View style={{ gap: 4 }}>
+            {alertPhonesData.phones.map((p, i) => (
+              <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#EFF6FF", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ fontSize: 13, color: "#1D4ED8", fontWeight: "600" }}>{p}</Text>
+                <TouchableOpacity onPress={() => {
+                  const newPhones = alertPhonesData.phones.filter((_: string, idx: number) => idx !== i);
+                  setAlertPhonesMutation.mutate({ phones: newPhones });
+                }} activeOpacity={0.7}>
+                  <Text style={{ fontSize: 12, color: "#EF4444" }}>삭제</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ fontSize: 12, color: colors.muted }}>등록된 수신번호가 없습니다.</Text>
+        )}
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TextInput
+            style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, fontSize: 14, color: colors.foreground, backgroundColor: colors.background }}
+            value={alertPhoneInput}
+            onChangeText={setAlertPhoneInput}
+            placeholder="010-0000-0000"
+            placeholderTextColor={colors.muted}
+            keyboardType="phone-pad"
+            returnKeyType="done"
+          />
+          <TouchableOpacity
+            style={{ backgroundColor: "#3B82F6", borderRadius: 8, paddingHorizontal: 14, justifyContent: "center" }}
+            onPress={() => {
+              const phone = alertPhoneInput.replace(/[^0-9]/g, "");
+              if (phone.length < 10) { Alert.alert("오류", "올바른 전화번호를 입력하세요."); return; }
+              const existing = alertPhonesData?.phones ?? [];
+              if (existing.includes(phone)) { Alert.alert("알림", "이미 등록된 번호입니다."); return; }
+              setAlertPhonesMutation.mutate({ phones: [...existing, phone] });
+            }}
+            activeOpacity={0.8}
+            disabled={setAlertPhonesMutation.isPending}
+          >
+            <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>추가</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {isLoading ? <ActivityIndicator color="#FF6B35" /> : sensors.map(sensor => {
         const cfg = STATUS_CONFIG[sensor.status] ?? STATUS_CONFIG["정상"];
+        const lastSignal = sensor.lastCommAt ? new Date(sensor.lastCommAt).toLocaleString("ko-KR") : "-";
         return (
           <View key={sensor.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: sensor.status !== "정상" ? "#FECACA" : colors.border, gap: 6 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -715,6 +772,7 @@ function HQSensors({ colors }: { colors: any }) {
             <Text style={{ fontSize: 13, color: colors.muted }}>{sensor.apartmentName} {sensor.dong}동 {sensor.ho}호</Text>
             {sensor.installLocation && <Text style={{ fontSize: 12, color: "#FF6B35" }}>📍 {sensor.installLocation}</Text>}
             {sensor.batteryLevel !== null && <Text style={{ fontSize: 12, color: colors.muted }}>🔋 배터리 {sensor.batteryLevel}%</Text>}
+            <Text style={{ fontSize: 12, color: colors.muted }}>📶 마지막 신호: {lastSignal}</Text>
             {sensor.status !== "정상" && (
               <TouchableOpacity style={{ backgroundColor: "#22C55E", borderRadius: 8, padding: 8, alignItems: "center", marginTop: 4 }} onPress={() => resolveMutation.mutate({ id: sensor.id })} activeOpacity={0.8} disabled={resolveMutation.isPending}>
                 <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>처리 완료</Text>
