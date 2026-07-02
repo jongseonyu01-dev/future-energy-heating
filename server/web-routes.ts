@@ -187,10 +187,10 @@ export function registerWebRoutes(app: Express) {
     }
   });
 
-  // 위치 업데이트 (기사 앱 → 서버, 30초 간격)
+  // 위치 업데이트 (기사 앱 → 서버, 3초 간격 — 차량 이동 기준)
   app.post("/api/location/update", async (req: Request, res: Response) => {
     try {
-      const { token, lat, lng } = req.body;
+      const { token, lat, lng, speed, heading, accuracy } = req.body;
       if (!token || lat === undefined || lng === undefined) {
         return res.status(400).json({ error: "token, lat, lng 필수" });
       }
@@ -219,7 +219,9 @@ export function registerWebRoutes(app: Express) {
         }
       }
       await updateLocationSessionPosition(token, String(nLat), String(nLng));
-      res.json({ success: true, lat: nLat, lng: nLng, updatedAt: new Date().toISOString() });
+      // speed(m/s), heading(도), accuracy(m) 수신 확인 (현재 DB 콼럼 없음 — 로그만)
+      const speedKmh = (speed !== null && speed !== undefined) ? (Number(speed) * 3.6).toFixed(1) : null;
+      res.json({ success: true, lat: nLat, lng: nLng, updatedAt: new Date().toISOString(), speedKmh, heading: heading ?? null, accuracy: accuracy ?? null });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

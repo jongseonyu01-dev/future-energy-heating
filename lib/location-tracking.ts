@@ -4,9 +4,10 @@
  * ⚠️ 중요 원칙:
  * - 앱 시작 시 위치 추적을 절대 자동 시작하지 않음
  * - "고객 집으로 출발" 버튼을 누를 때만 위치 공유 시작
- * - 10초 간격으로 서버에 위치 전송
+ * - 3초 간격으로 서버에 위치 전송 (차량 이동 기준)
  * - "도착" 또는 "업무 취소" 버튼을 누르면 즉시 종료
  * - 위치 권한 거부 시 앱 종료 없이 안내 메시지만 표시
+ * - maximumAge:0 / enableHighAccuracy:true → 캐시 좌표 사용 금지
  */
 
 import { Platform } from "react-native";
@@ -16,8 +17,37 @@ const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://futureenergytech.co.kr";
 
+// ─── 모듈 레벨 전역 포그라운드 인터벌 ─────────────────────────────────────
+// 화면 이탈/탭 이동 시에도 3초마다 위치 전송 지속 (차량 이동 기준)
+let _globalFgInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startGlobalFgInterval() {
+  if (_globalFgInterval) return; // 이미 실행 중
+  _globalFgInterval = setInterval(async () => {
+    const token = await AsyncStorage.getItem(TRACKING_TOKEN_KEY);
+    const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);
+    if (!token || isActive !== "true") return;
+    const loc = await getCurrentLocationFull();
+    if (!loc) return;
+    await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
+  }, 3000); // 3초 — 차량 이동 기준
+}
+
+export function stopGlobalFgInterval() {
+  if (_globalFgInterval) {
+    clearInterval(_globalFgInterval);
+    _globalFgInterval = null;
+  }
+}
+
+export async function resumeTrackingIfActive() {
+  const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);
+  if (isActive === "true") {
+    startGlobalFgInterval();
+  }
+}
+
 // ─── 백그라운드 태스크 정의 (지연 로드 방식) ──────────────────────────────
-// 앱 시작 시 즉시 실행되지 않도록 함수 내부에서만 import
 let _locationModule: any = null;
 let _taskManagerModule: any = null;
 let _taskDefined = false;
@@ -62,12 +92,19 @@ async function ensureTaskDefined() {
         const token = await AsyncStorage.getItem(TRACKING_TOKEN_KEY);
         const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);
         if (!token || isActive !== "true") return;
-        const { latitude, longitude } = data.locations[0].coords;
+        const { latitude, longitude, speed, heading, accuracy } = data.locations[0].coords;
         try {
           await fetch(`${API_BASE_URL}/api/location/update`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, lat: latitude, lng: longitude }),
+            body: JSON.stringify({
+              token,
+              lat: latitude,
+              lng: longitude,
+              speed: speed ?? null,
+              heading: heading ?? null,
+              accuracy: accuracy ?? null,
+            }),
           });
         } catch (e) {
           console.error("[LocationTask] 위치 전송 실패:", e);
@@ -111,7 +148,6 @@ export async function requestLocationPermissions(): Promise<{
       const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
       bgGranted = bgStatus === "granted";
     } catch (e) {
-      // 백그라운드 권한 요청 실패는 무시 (포그라운드만으로도 동작 가능)
       console.warn("[LocationTracking] 백그라운드 권한 요청 실패 (무시):", e);
     }
 
@@ -131,6 +167,9 @@ export async function startLocationTracking(token: string): Promise<void> {
   await AsyncStorage.setItem(TRACKING_TOKEN_KEY, token);
   await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "true");
 
+  // 전역 포그라운드 인터벌 시작 (화면 이탈 시에도 3초마다 전송)
+  startGlobalFgInterval();
+
   if (Platform.OS === "web") return;
 
   // 태스크 등록 (처음 출발 시에만)
@@ -145,9 +184,9 @@ export async function startLocationTracking(token: string): Promise<void> {
       await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);
     }
     await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 10000,       // 10초 간격
-      distanceInterval: 10,      // 10m 이동 시에도 업데이트
+      accuracy: Location.Accuracy.High,   // 차량 이동 기준: 고정밀 GPS
+      timeInterval: 3000,                 // 3초 간격 (차량 이동 기준)
+      distanceInterval: 5,                // 5m 이동 시에도 즉시 업데이트
       foregroundService: {
         notificationTitle: "퓨처에너지테크 기사 앱",
         notificationBody: "고객 방문 중 위치를 공유하고 있습니다.",
@@ -157,7 +196,7 @@ export async function startLocationTracking(token: string): Promise<void> {
     });
   } catch (e) {
     console.error("[LocationTracking] 백그라운드 위치 시작 실패 (포그라운드 폴백 사용):", e);
-    // 백그라운드 실패 시 포그라운드 인터벌로 폴백 (앱 켜진 상태에서는 동작)
+    // 백그라운드 실패 시 전역 포그라운드 인터벌이 백업으로 동작
   }
 }
 
@@ -165,6 +204,9 @@ export async function startLocationTracking(token: string): Promise<void> {
 export async function stopLocationTracking(): Promise<void> {
   await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "false");
   await AsyncStorage.removeItem(TRACKING_TOKEN_KEY);
+
+  // 전역 포그라운드 인터벌 중단
+  stopGlobalFgInterval();
 
   if (Platform.OS !== "web") {
     const Location = await getLocationModule();
@@ -198,35 +240,80 @@ export async function getActiveTrackingToken(): Promise<string | null> {
   }
 }
 
-// ─── 현재 위치 1회 조회 ────────────────────────────────────────────────────
-export async function getCurrentLocation(): Promise<{ lat: number; lng: number } | null> {
+// ─── 현재 위치 1회 조회 (speed/heading/accuracy 포함) ─────────────────────
+export async function getCurrentLocationFull(): Promise<{
+  lat: number;
+  lng: number;
+  speed: number | null;
+  heading: number | null;
+  accuracy: number | null;
+} | null> {
   if (Platform.OS === "web") {
     return new Promise((resolve) => {
       if (!navigator.geolocation) { resolve(null); return; }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (pos) => resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          speed: pos.coords.speed ?? null,
+          heading: pos.coords.heading ?? null,
+          accuracy: pos.coords.accuracy ?? null,
+        }),
         () => resolve(null),
-        { timeout: 10000 }
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,        // 캐시 좌표 사용 금지
+          timeout: 10000,
+        }
       );
     });
   }
   try {
     const Location = await getLocationModule();
     if (!Location) return null;
-    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return { lat: loc.coords.latitude, lng: loc.coords.longitude };
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,  // 차량 이동 기준: 고정밀 GPS
+    });
+    return {
+      lat: loc.coords.latitude,
+      lng: loc.coords.longitude,
+      speed: loc.coords.speed ?? null,
+      heading: loc.coords.heading ?? null,
+      accuracy: loc.coords.accuracy ?? null,
+    };
   } catch {
     return null;
   }
 }
 
-// ─── 서버에 위치 전송 (포그라운드 폴백) ───────────────────────────────────
-export async function sendLocationToServer(token: string, lat: number, lng: number): Promise<void> {
+// 하위 호환성 유지 (lat/lng만 반환)
+export async function getCurrentLocation(): Promise<{ lat: number; lng: number } | null> {
+  const result = await getCurrentLocationFull();
+  if (!result) return null;
+  return { lat: result.lat, lng: result.lng };
+}
+
+// ─── 서버에 위치 전송 (speed/heading/accuracy 포함) ───────────────────────
+export async function sendLocationToServer(
+  token: string,
+  lat: number,
+  lng: number,
+  speed?: number | null,
+  heading?: number | null,
+  accuracy?: number | null
+): Promise<void> {
   try {
     await fetch(`${API_BASE_URL}/api/location/update`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, lat, lng }),
+      body: JSON.stringify({
+        token,
+        lat,
+        lng,
+        speed: speed ?? null,
+        heading: heading ?? null,
+        accuracy: accuracy ?? null,
+      }),
     });
   } catch (e) {
     console.error("[LocationTracking] 위치 전송 실패:", e);
