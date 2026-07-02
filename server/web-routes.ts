@@ -206,8 +206,20 @@ export function registerWebRoutes(app: Express) {
         await stopLocationSession(token, "만료");
         return res.status(400).json({ error: "세션이 만료되었습니다.", status: "만료" });
       }
-      await updateLocationSessionPosition(token, String(lat), String(lng));
-      res.json({ success: true });
+      // 좌표 검증: 한국 WGS84 범위(위도 33~39, 경도 124~132) + lat/lng 뒤바뀜 교정
+      let nLat = Number(lat);
+      let nLng = Number(lng);
+      const inKorea = (a: number, b: number) =>
+        Number.isFinite(a) && Number.isFinite(b) && a >= 33 && a <= 39 && b >= 124 && b <= 132;
+      if (!inKorea(nLat, nLng)) {
+        if (inKorea(nLng, nLat)) {
+          const tmp = nLat; nLat = nLng; nLng = tmp;
+        } else {
+          return res.status(400).json({ error: "좌표 범위 오류(한국 밖 또는 잘못된 값)", lat: nLat, lng: nLng });
+        }
+      }
+      await updateLocationSessionPosition(token, String(nLat), String(nLng));
+      res.json({ success: true, lat: nLat, lng: nLng, updatedAt: new Date().toISOString() });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
