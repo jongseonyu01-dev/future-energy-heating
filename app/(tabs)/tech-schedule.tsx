@@ -104,7 +104,7 @@ export default function TechScheduleScreen() {
     fgIntervalRef.current = setInterval(async () => {
       const loc = await getCurrentLocation();
       if (loc) await sendLocationToServer(token, loc.lat, loc.lng);
-    }, 30000);
+    }, 10000);
   }, []);
 
   const stopForegroundInterval = useCallback(() => {

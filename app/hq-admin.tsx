@@ -667,6 +667,7 @@ function HQSensors({ colors }: { colors: any }) {
   const utils = trpc.useUtils();
   const { data: sensors = [], isLoading } = trpc.sensor.listAll.useQuery();
   const { data: alertPhonesData } = trpc.sensor.getAlertPhones.useQuery();
+  const { data: notifLogs = [], isLoading: logsLoading } = trpc.sensor.getNotificationLogs.useQuery({ limit: 50 });
   const [alertPhoneInput, setAlertPhoneInput] = useState("");
   const setAlertPhonesMutation = trpc.sensor.setAlertPhones.useMutation({
     onSuccess: () => {
@@ -781,6 +782,30 @@ function HQSensors({ colors }: { colors: any }) {
           </View>
         );
       })}
+
+      {/* 누수 알림 발송 내역 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 8 }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>📋 누수 알림 발송 내역</Text>
+        {logsLoading ? <ActivityIndicator color="#FF6B35" /> : notifLogs.length === 0 ? (
+          <Text style={{ fontSize: 13, color: colors.muted, textAlign: "center", paddingVertical: 12 }}>발송 내역이 없습니다</Text>
+        ) : notifLogs.map((log: any, i: number) => {
+          const sentAt = log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : (log.createdAt ? new Date(log.createdAt).toLocaleString("ko-KR") : "-");
+          const isSuccess = log.sendStatus === "SUCCESS" || log.sendStatus === "REQUESTED";
+          return (
+            <View key={log.id ?? i} style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border, paddingTop: i > 0 ? 8 : 0, gap: 3 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 12, color: isSuccess ? "#22C55E" : "#EF4444", fontWeight: "700" }}>{isSuccess ? "✅ 발송성공" : "❌ 발송실패"}</Text>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{sentAt}</Text>
+              </View>
+              <Text style={{ fontSize: 13, color: colors.foreground }}>{log.customerName ?? "-"} · {log.phoneNumber}</Text>
+              <Text style={{ fontSize: 11, color: colors.muted }}>{log.messageType} · {log.provider ?? "solapi"}</Text>
+              {log.sensorUid && <Text style={{ fontSize: 11, color: colors.muted }}>센서: {log.sensorUid}</Text>}
+              {log.groupId && <Text style={{ fontSize: 10, color: colors.muted }}>groupId: {log.groupId}</Text>}
+              {log.failReason && <Text style={{ fontSize: 11, color: "#EF4444" }}>실패: {log.failReason}</Text>}
+            </View>
+          );
+        })}
+      </View>
     </ScrollView>
   );
 }

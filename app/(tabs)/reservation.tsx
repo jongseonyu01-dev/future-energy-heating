@@ -344,7 +344,7 @@ export default function ReservationScreen() {
 function TrackingButton({ requestId }: { requestId: number }) {
   const { data: session, isLoading } = trpc.location.getSessionByRequest.useQuery(
     { requestId },
-    { refetchInterval: 30000 } // 30초마다 자동 갱신
+    { refetchInterval: 10000 } // 10초마다 자동 갱신
   );
 
   const handlePress = () => {

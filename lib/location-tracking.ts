@@ -4,7 +4,7 @@
  * ⚠️ 중요 원칙:
  * - 앱 시작 시 위치 추적을 절대 자동 시작하지 않음
  * - "고객 집으로 출발" 버튼을 누를 때만 위치 공유 시작
- * - 30초 간격으로 서버에 위치 전송
+ * - 10초 간격으로 서버에 위치 전송
  * - "도착" 또는 "업무 취소" 버튼을 누르면 즉시 종료
  * - 위치 권한 거부 시 앱 종료 없이 안내 메시지만 표시
  */
@@ -146,8 +146,8 @@ export async function startLocationTracking(token: string): Promise<void> {
     }
     await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
       accuracy: Location.Accuracy.Balanced,
-      timeInterval: 30000,       // 30초 간격
-      distanceInterval: 50,      // 50m 이동 시에도 업데이트
+      timeInterval: 10000,       // 10초 간격
+      distanceInterval: 10,      // 10m 이동 시에도 업데이트
       foregroundService: {
         notificationTitle: "퓨처에너지테크 기사 앱",
         notificationBody: "고객 방문 중 위치를 공유하고 있습니다.",

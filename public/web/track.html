@@ -8,11 +8,9 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif; background: #f8f9fa; min-height: 100vh; }
 
-    /* 헤더 */
     .header {
       background: linear-gradient(135deg, #FF6B35, #e55a25);
-      color: white;
-      padding: 20px 16px 16px;
+      color: white; padding: 20px 16px 16px;
       position: sticky; top: 0; z-index: 100;
       box-shadow: 0 2px 12px rgba(255,107,53,0.3);
     }
@@ -21,13 +19,9 @@
     .header-company { font-size: 13px; opacity: 0.85; }
     .header-title { font-size: 20px; font-weight: 800; }
 
-    /* 상태 카드 */
     .status-card {
-      margin: 16px;
-      background: white;
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      margin: 16px; background: white; border-radius: 20px;
+      padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .status-icon { font-size: 36px; }
@@ -40,60 +34,42 @@
       border-radius: 20px; padding: 6px 14px;
       font-size: 13px; font-weight: 700;
     }
-    .status-badge.arrived { background: #DCFCE7; color: #16A34A; }
-    .status-badge.cancelled { background: #FEE2E2; color: #DC2626; }
-    .status-badge.expired { background: #F3F4F6; color: #6B7280; }
-
     .pulse-dot {
       width: 10px; height: 10px; border-radius: 50%;
-      background: #FF6B35;
-      animation: pulse 1.5s infinite;
-      flex-shrink: 0;
+      background: #FF6B35; animation: pulse 1.5s infinite; flex-shrink: 0;
     }
     @keyframes pulse {
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.4); opacity: 0.6; }
     }
-
     .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
     .info-item { background: #F9FAFB; border-radius: 12px; padding: 12px; }
     .info-item-label { font-size: 11px; color: #9CA3AF; font-weight: 600; margin-bottom: 4px; }
     .info-item-value { font-size: 14px; font-weight: 700; color: #374151; }
 
-    /* 지도 영역 */
     .map-container {
-      margin: 0 16px 16px;
-      background: white;
-      border-radius: 20px;
-      overflow: hidden;
+      margin: 0 16px 16px; background: white;
+      border-radius: 20px; overflow: hidden;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .map-header {
-      padding: 14px 16px;
-      border-bottom: 1px solid #F3F4F6;
+      padding: 14px 16px; border-bottom: 1px solid #F3F4F6;
       display: flex; align-items: center; gap: 8px;
     }
     .map-header-title { font-size: 15px; font-weight: 700; color: #111; }
     .map-header-sub { font-size: 12px; color: #9CA3AF; margin-left: auto; }
-
-    #map {
-      width: 100%; height: 320px;
-      background: #e8f4f8;
-      display: flex; align-items: center; justify-content: center;
-      position: relative;
-    }
+    #map { width: 100%; height: 320px; background: #e8f4f8; position: relative; }
     .map-placeholder {
-      text-align: center; color: #6B7280;
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; color: #6B7280;
     }
     .map-placeholder-icon { font-size: 48px; margin-bottom: 8px; }
-    .map-placeholder-text { font-size: 14px; }
+    .map-placeholder-text { font-size: 14px; text-align: center; padding: 0 16px; }
 
-    /* 기사 정보 */
     .tech-card {
-      margin: 0 16px 16px;
-      background: white;
-      border-radius: 20px;
-      padding: 20px;
+      margin: 0 16px 16px; background: white;
+      border-radius: 20px; padding: 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .tech-card-title { font-size: 14px; font-weight: 700; color: #6B7280; margin-bottom: 14px; }
@@ -102,87 +78,74 @@
       width: 52px; height: 52px; border-radius: 50%;
       background: linear-gradient(135deg, #FF6B35, #e55a25);
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; color: white; font-weight: 800;
-      flex-shrink: 0;
+      font-size: 22px; color: white; font-weight: 800; flex-shrink: 0;
     }
     .tech-name { font-size: 18px; font-weight: 800; color: #111; }
     .tech-company { font-size: 13px; color: #6B7280; margin-top: 2px; }
     .call-btn {
-      margin-left: auto;
-      background: #3B82F6; color: white;
-      border: none; border-radius: 12px;
-      padding: 10px 16px; font-size: 14px; font-weight: 700;
-      cursor: pointer; display: flex; align-items: center; gap: 6px;
-      text-decoration: none;
+      margin-left: auto; background: #3B82F6; color: white;
+      border: none; border-radius: 12px; padding: 10px 16px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; text-decoration: none;
     }
     .call-btn:hover { background: #2563EB; }
 
-    /* 도착 완료 / 만료 화면 */
     .ended-card {
-      margin: 16px;
-      background: white;
-      border-radius: 20px;
-      padding: 32px 20px;
-      text-align: center;
+      margin: 16px; background: white; border-radius: 20px;
+      padding: 32px 20px; text-align: center;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .ended-icon { font-size: 56px; margin-bottom: 12px; }
     .ended-title { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 8px; }
     .ended-desc { font-size: 14px; color: #6B7280; line-height: 1.6; }
 
-    /* 로딩 */
     .loading {
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       min-height: 60vh; gap: 16px;
     }
     .spinner {
-      width: 44px; height: 44px;
-      border: 4px solid #F3F4F6;
-      border-top-color: #FF6B35;
-      border-radius: 50%;
+      width: 44px; height: 44px; border: 4px solid #F3F4F6;
+      border-top-color: #FF6B35; border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text { font-size: 15px; color: #6B7280; font-weight: 600; }
 
-    /* 에러 */
     .error-card {
-      margin: 32px 16px;
-      background: white;
-      border-radius: 20px;
-      padding: 32px 20px;
-      text-align: center;
+      margin: 32px 16px; background: white; border-radius: 20px;
+      padding: 32px 20px; text-align: center;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .error-icon { font-size: 48px; margin-bottom: 12px; }
     .error-title { font-size: 18px; font-weight: 800; color: #EF4444; margin-bottom: 8px; }
     .error-desc { font-size: 14px; color: #6B7280; line-height: 1.6; }
 
-    /* 업데이트 시간 */
-    .update-time {
-      text-align: center; font-size: 12px; color: #9CA3AF;
-      padding: 8px 16px 16px;
+    .update-time { text-align: center; font-size: 12px; color: #9CA3AF; padding: 8px 16px 4px; }
+    .delay-warning {
+      display: none; margin: 0 16px 12px; background: #FEF3C7; border: 1px solid #F59E0B;
+      border-radius: 12px; padding: 10px 14px; font-size: 13px; color: #92400E;
+      font-weight: 600; text-align: center;
     }
-
-    /* 푸터 */
-    .footer {
-      text-align: center; padding: 20px 16px;
-      font-size: 12px; color: #9CA3AF;
-      border-top: 1px solid #F3F4F6;
-      margin-top: 8px;
-    }
+    .delay-warning.visible { display: block; }
+    .footer { text-align: center; padding: 20px 16px; font-size: 12px; color: #9CA3AF; border-top: 1px solid #F3F4F6; margin-top: 8px; }
     .footer a { color: #FF6B35; text-decoration: none; }
 
-    /* 네이버 지도 마커 */
-    .naver-marker {
-      background: #FF6B35; color: white;
-      border-radius: 50%; width: 36px; height: 36px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; font-weight: 800;
-      box-shadow: 0 2px 8px rgba(255,107,53,0.5);
-      border: 3px solid white;
+    /* 디버그 패널 - 기본 숨김, ?debug=1 시 표시 */
+    #debug-panel {
+      background: #1e293b; color: #94a3b8; font-size: 11px;
+      font-family: monospace; padding: 12px 16px;
+      margin: 8px 16px; border-radius: 8px; line-height: 1.8;
+      display: none;
     }
+    #debug-panel.visible { display: block; }
+    #debug-errors {
+      background: #2d1515; color: #fca5a5; font-size: 11px;
+      font-family: monospace; padding: 8px 16px;
+      margin: 0 16px 8px; border-radius: 8px; line-height: 1.6;
+      display: none;
+    }
+    #debug-errors.visible { display: block; }
   </style>
 </head>
 <body>
@@ -202,319 +165,735 @@
   </div>
 </div>
 
-<script>
-const BASE_URL = window.location.origin;
-const token = window.location.pathname.split('/track/')[1];
-let refreshInterval = null;
-let naverMap = null;
-let techMarker = null;
-let destMarker = null;
-let mapInitialized = false;
+<!-- 디버그 패널: 항상 표시 (app 외부에 위치하여 render() 영향 없음) -->
+<div id="debug-panel">
+  <div style="color:#f1f5f9;font-weight:bold;margin-bottom:4px">🔍 디버그 정보</div>
+  <div>세션 API: <span id="dbg-api" style="color:#fbbf24">대기 중...</span></div>
+  <div>기사 위도(currentLat): <span id="dbg-tech-lat" style="color:#94a3b8">-</span></div>
+  <div>기사 경도(currentLng): <span id="dbg-tech-lng" style="color:#94a3b8">-</span></div>
+  <div>목적지 위도(customerLat): <span id="dbg-dest-lat" style="color:#94a3b8">-</span></div>
+  <div>목적지 경도(customerLng): <span id="dbg-dest-lng" style="color:#94a3b8">-</span></div>
+  <div>KAKAO_JS_KEY: <span id="dbg-js-key" style="color:#94a3b8">확인 중...</span></div>
+  <div>KAKAO_REST_KEY: <span id="dbg-rest-key" style="color:#94a3b8">확인 중...</span></div>
+  <div>SDK URL: <span id="dbg-sdk-url" style="color:#94a3b8;word-break:break-all">-</span></div>
+  <div>kakao SDK: <span id="dbg-sdk-status" style="color:#fbbf24">로딩 전</span></div>
+  <div>kakao 객체: <span id="dbg-kakao-diag" style="color:#94a3b8;word-break:break-all">-</span></div>
+  <div>지도 생성: <span id="dbg-map-result" style="color:#94a3b8">대기 중...</span></div>
+</div>
+<div id="debug-errors"></div>
 
-// ─── 시간 포맷 ─────────────────────────────────────────────────────────────
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// 상수 및 상태 변수 (스크립트 최상단에 선언)
+// ═══════════════════════════════════════════════════════════════════════════
+var BASE_URL = window.location.origin;
+var token = (window.location.pathname.split('/track/')[1] || '').split('?')[0].split('#')[0];
+// ?debug=1 시에만 디버그 패널 표시 (고객에게 절대 노출 금지)
+var IS_DEBUG = (window.location.search.indexOf('debug=1') !== -1);
+var refreshInterval = null;
+var kakaoMap = null;
+var techMarker = null;
+var destMarker = null;
+var mapInitialized = false;
+var sdkLoaded = false;
+var sdkLoadStarted = false;
+var pendingMapArgs = null;
+var isFirstRender = true;  // 최초 렌더링 여부
+var lastTechLat = null;    // 마지막 기사 위도
+var lastTechLng = null;    // 마지막 기사 경도
+var lastDestLat = null;    // 마지막 목적지 위도
+var lastDestLng = null;    // 마지막 목적지 경도
+var updateTimeInterval = null;  // 업데이트 시간 주기적 갱신 인터벌
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 디버그 패널 초기화 - ?debug=1 시에만 표시
+// ═══════════════════════════════════════════════════════════════════════════
+if (IS_DEBUG) {
+  var dbgPanel = document.getElementById('debug-panel');
+  if (dbgPanel) dbgPanel.classList.add('visible');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 전역 오류 캐체 - JS 오류를 디버그 모드에서만 표시
+// ═══════════════════════════════════════════════════════════════════════════
+var _consoleErrors = [];
+window.onerror = function(msg, src, line, col, err) {
+  var text = '[오류] ' + msg + ' (' + (src||'') + ':' + line + ')';
+  _consoleErrors.push(text);
+  showDebugErrors();
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  var text = '[Promise 거부] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason));
+  _consoleErrors.push(text);
+  showDebugErrors();
+});
+function showDebugErrors() {
+  if (!IS_DEBUG) return; // 디버그 모드에서만 오류 표시
+  var el = document.getElementById('debug-errors');
+  if (!el || _consoleErrors.length === 0) return;
+  el.classList.add('visible');
+  el.innerHTML = '<div style="color:#f87171;font-weight:bold;margin-bottom:4px">⚠️ JavaScript 오류</div>' +
+    _consoleErrors.map(function(e) { return '<div>' + e + '</div>'; }).join('');
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 디버그 헬퍼
+// ═══════════════════════════════════════════════════════════════════════════
+function dbg(id, text, color) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  if (color) el.style.color = color;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 시간 포맷 유틸
+// ═══════════════════════════════════════════════════════════════════════════
 function formatTime(dateStr) {
   if (!dateStr) return '-';
-  const d = new Date(dateStr);
+  var d = new Date(dateStr);
   return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 }
 function formatElapsed(dateStr) {
   if (!dateStr) return '';
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  var diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
   if (diff < 1) return '방금 출발';
-  if (diff < 60) return `출발 후 ${diff}분`;
-  return `출발 후 ${Math.floor(diff/60)}시간 ${diff%60}분`;
+  if (diff < 60) return '출발 후 ' + diff + '분';
+  return '출발 후 ' + Math.floor(diff/60) + '시간 ' + (diff%60) + '분';
 }
 function formatLastUpdate(dateStr) {
   if (!dateStr) return '위치 정보 없음';
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  var diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
   if (diff < 10) return '방금 업데이트';
-  if (diff < 60) return `${diff}초 전 업데이트`;
-  return `${Math.floor(diff/60)}분 전 업데이트`;
+  if (diff < 60) return diff + '초 전 업데이트';
+  return Math.floor(diff/60) + '분 전 업데이트';
 }
 
-// ─── 네이버 지도 초기화 ────────────────────────────────────────────────────
-function initNaverMap(techLat, techLng, destLat, destLng) {
-  if (typeof naver === 'undefined') return false;
-  const mapEl = document.getElementById('map');
-  if (!mapEl) return false;
-
-  const centerLat = techLat || destLat || 37.5665;
-  const centerLng = techLng || destLng || 126.9780;
-
-  if (!mapInitialized) {
-    naverMap = new naver.maps.Map('map', {
-      center: new naver.maps.LatLng(centerLat, centerLng),
-      zoom: 14,
-      mapTypeId: naver.maps.MapTypeId.NORMAL,
-    });
-    mapInitialized = true;
-  }
-
-  // 기사 마커
-  if (techLat && techLng) {
-    const techPos = new naver.maps.LatLng(techLat, techLng);
-    if (techMarker) {
-      techMarker.setPosition(techPos);
-    } else {
-      techMarker = new naver.maps.Marker({
-        position: techPos,
-        map: naverMap,
-        title: '기사 현재 위치',
-        icon: {
-          content: '<div style="background:#FF6B35;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🚗</div>',
-          anchor: new naver.maps.Point(20, 20),
-        },
-      });
-    }
-    naverMap.setCenter(techPos);
-  }
-
-  // 목적지 마커
-  if (destLat && destLng) {
-    const destPos = new naver.maps.LatLng(destLat, destLng);
-    if (!destMarker) {
-      destMarker = new naver.maps.Marker({
-        position: destPos,
-        map: naverMap,
-        title: '고객 주소',
-        icon: {
-          content: '<div style="background:#3B82F6;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🏠</div>',
-          anchor: new naver.maps.Point(20, 20),
-        },
-      });
-    }
-    // 두 마커가 모두 있으면 범위 맞춤
-    if (techLat && techLng) {
-      const bounds = new naver.maps.LatLngBounds(
-        new naver.maps.LatLng(Math.min(techLat, destLat) - 0.002, Math.min(techLng, destLng) - 0.002),
-        new naver.maps.LatLng(Math.max(techLat, destLat) + 0.002, Math.max(techLng, destLng) + 0.002)
-      );
-      naverMap.fitBounds(bounds);
-    }
-  }
-  return true;
-}
-
-// ─── 거리 계산 (Haversine) ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// 거리/ETA 계산
+// ═══════════════════════════════════════════════════════════════════════════
 function calcDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  var R = 6371;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 function estimateArrival(techLat, techLng, destLat, destLng) {
   if (!techLat || !techLng || !destLat || !destLng) return null;
-  const dist = calcDistance(techLat, techLng, destLat, destLng);
-  const avgSpeedKmh = 30; // 도심 평균 속도
-  const minutes = Math.ceil((dist / avgSpeedKmh) * 60);
+  var dist = calcDistance(techLat, techLng, destLat, destLng);
+  var minutes = Math.ceil((dist / 30) * 60);
   if (minutes < 1) return '곧 도착';
-  if (minutes < 60) return `약 ${minutes}분 후 도착 예정`;
-  return `약 ${Math.floor(minutes/60)}시간 ${minutes%60}분 후 도착 예정`;
+  if (minutes < 60) return '약 ' + minutes + '분 후 도착 예정';
+  return '약 ' + Math.floor(minutes/60) + '시간 ' + (minutes%60) + '분 후 도착 예정';
 }
 
-// ─── 화면 렌더링 ───────────────────────────────────────────────────────────
-function render(data) {
-  const app = document.getElementById('app');
-  const techLat = data.currentLat ? parseFloat(data.currentLat) : null;
-  const techLng = data.currentLng ? parseFloat(data.currentLng) : null;
-  const destLat = data.customerLat ? parseFloat(data.customerLat) : null;
-  const destLng = data.customerLng ? parseFloat(data.customerLng) : null;
-  const eta = estimateArrival(techLat, techLng, destLat, destLng);
-
-  if (data.status === '도착완료') {
-    app.innerHTML = `
-      <div class="ended-card">
-        <div class="ended-icon">✅</div>
-        <div class="ended-title">기사가 도착했습니다!</div>
-        <div class="ended-desc">담당 기사(${data.technicianName || '기사'})가 도착하여<br>위치 공유가 종료되었습니다.<br><br>도착 시각: ${formatTime(data.arrivedAt)}</div>
-      </div>
-      <div class="footer">
-        퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
-      </div>`;
-    if (refreshInterval) clearInterval(refreshInterval);
-    return;
-  }
-
-  if (data.status === '업무취소' || data.status === '만료') {
-    app.innerHTML = `
-      <div class="ended-card">
-        <div class="ended-icon">${data.status === '만료' ? '⏰' : '❌'}</div>
-        <div class="ended-title">${data.status === '만료' ? '위치 공유 링크 만료' : '방문이 취소되었습니다'}</div>
-        <div class="ended-desc">${data.status === '만료' ? '위치 공유 링크가 만료되었습니다.<br>문의사항은 고객센터로 연락해 주세요.' : '담당 기사의 방문이 취소되었습니다.<br>불편을 드려 죄송합니다. 고객센터로 연락해 주세요.'}</div>
-      </div>
-      <div class="footer">
-        퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
-      </div>`;
-    if (refreshInterval) clearInterval(refreshInterval);
-    return;
-  }
-
-  // 이동 중
-  const techName = data.technicianName || '담당 기사';
-  // 기사 직통번호는 노출하지 않고, 회사 고객센터로 문의 연결 (개인정보 보호)
-  const centerPhone = '031-8042-7310';
-  const hasLocation = techLat && techLng;
-
-  app.innerHTML = `
-    <div class="status-card">
-      <div class="status-row">
-        <div class="status-icon">🚗</div>
-        <div class="status-info">
-          <div class="status-label">현재 상태</div>
-          <div class="status-value">이동 중</div>
-        </div>
-        <div class="status-badge">
-          <div class="pulse-dot"></div>
-          실시간
-        </div>
-      </div>
-      ${eta ? `<div style="background:#FFF3E0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;color:#FF6B35;text-align:center;margin-bottom:8px">⏱ ${eta}</div>` : ''}
-      <div class="info-grid">
-        <div class="info-item">
-          <div class="info-item-label">출발 시각</div>
-          <div class="info-item-value">${formatTime(data.departedAt)}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-item-label">경과 시간</div>
-          <div class="info-item-value">${formatElapsed(data.departedAt)}</div>
-        </div>
-        ${data.customerAddress ? `
-        <div class="info-item" style="grid-column:1/-1">
-          <div class="info-item-label">방문 주소</div>
-          <div class="info-item-value">${data.customerAddress}</div>
-        </div>` : ''}
-      </div>
-    </div>
-
-    <div class="map-container">
-      <div class="map-header">
-        <span>📍</span>
-        <span class="map-header-title">기사 현재 위치</span>
-        <span class="map-header-sub">${hasLocation ? '실시간 업데이트' : '위치 수신 대기 중'}</span>
-      </div>
-      <div id="map">
-        ${!hasLocation ? `
-        <div class="map-placeholder">
-          <div class="map-placeholder-icon">📍</div>
-          <div class="map-placeholder-text">위치 정보를 수신하는 중입니다...</div>
-        </div>` : ''}
-      </div>
-    </div>
-
-    <div class="tech-card">
-      <div class="tech-card-title">담당 기사 정보</div>
-      <div class="tech-info">
-        <div class="tech-avatar">${(techName[0] || '기').toUpperCase()}</div>
-        <div>
-          <div class="tech-name">${techName}</div>
-          <div class="tech-company">퓨처에너지테크</div>
-        </div>
-        <a class="call-btn" href="tel:${centerPhone.replace(/[^0-9]/g,'')}">📞 고객센터</a>
-      </div>
-    </div>
-
-    <div class="update-time" id="update-time">
-      ${data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음'}
-    </div>
-
-    <div class="footer">
-      퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a>
-    </div>`;
-
-  // 지도 초기화 (네이버 지도 API 로드 후)
-  if (hasLocation) {
-    setTimeout(() => {
-      initNaverMap(techLat, techLng, destLat, destLng);
-    }, 100);
-  }
+// ═══════════════════════════════════════════════════════════════════════════
+// 지도 메시지 표시
+// ═══════════════════════════════════════════════════════════════════════════
+function showMapMessage(icon, text) {
+  var mapEl = document.getElementById('map');
+  if (!mapEl) return;
+  mapEl.innerHTML = '<div class="map-placeholder">' +
+    '<div class="map-placeholder-icon">' + icon + '</div>' +
+    '<div class="map-placeholder-text">' + text + '</div>' +
+    '</div>';
 }
 
-// ─── 데이터 로드 ───────────────────────────────────────────────────────────
-async function loadSession() {
-  if (!token) {
-    document.getElementById('app').innerHTML = `
-      <div class="error-card">
-        <div class="error-icon">🔗</div>
-        <div class="error-title">잘못된 링크</div>
-        <div class="error-desc">유효하지 않은 위치 확인 링크입니다.</div>
-      </div>`;
-    return;
+// ═══════════════════════════════════════════════════════════════════════════
+// 카카오맵 초기화
+// ═══════════════════════════════════════════════════════════════════════════
+function initKakaoMap(techLat, techLng, destLat, destLng) {
+  console.log('[지도] initKakaoMap 호출 - tech:', techLat, techLng, 'dest:', destLat, destLng);
+
+  // ── 1. SDK 로드 여부 확인 (SDK 실패 ≠ 좌표 null)
+  if (typeof kakao === 'undefined' || !kakao.maps) {
+    console.warn('[지도] kakao.maps 없음 - SDK 로드 실패');
+    showMapMessage('🗺️', '카카오 지도 SDK 로딩 실패<br><span style="font-size:13px;color:#94a3b8">JavaScript 키 또는 Web 플랫폼 도메인을 확인해주세요.</span>');
+    dbg('dbg-map-result', '실패: kakao.maps 없음 (SDK 미로드)', '#f87171');
+    return false;
   }
+
+  // ── 1-2. SDK 내부 클래스(LatLng, Map) 준비 여부 확인 (요청사항 1, 2)
+  if (typeof kakao.maps.LatLng !== 'function' || typeof kakao.maps.Map !== 'function') {
+    var cmsg = 'kakao.maps.LatLng/Map 생성자 미준비 (LatLng:' + typeof kakao.maps.LatLng + ', Map:' + typeof kakao.maps.Map + ')';
+    console.error('[지도]', cmsg);
+    showMapMessage('🗺️', '카카오 지도 SDK 초기화 대기 중...<br><span style="font-size:13px;color:#94a3b8">잠시 후 다시 시도됩니다.</span>');
+    dbg('dbg-map-result', '실패: ' + cmsg, '#f87171');
+    return false;
+  }
+
+  // ── 2. 지도 컨테이너 확인
+  var mapEl = document.getElementById('map');
+  if (!mapEl) {
+    console.warn('[지도] id=map 요소 없음');
+    dbg('dbg-map-result', '실패: id=map DOM 없음', '#f87171');
+    return false;
+  }
+
+  // ── 3. 기사 좌표 없으면 지도 생성 안 함 (기사 좌표 없음 ≠ SDK 실패)
+  if (!techLat || !techLng) {
+    console.log('[지도] 기사 좌표 없음 - 지도 생성 대기');
+    showMapMessage('📍', '기사 위치 수신 대기 중...<br><span style="font-size:13px;color:#94a3b8">잠시 후 자동으로 표시됩니다.</span>');
+    dbg('dbg-map-result', '대기: 기사 좌표 없음', '#fbbf24');
+    return false;
+  }
+
+  // ── 4. 지도 컨테이너 높이 보장 (innerHTML 비우면 높이 0이 되어 예외 발생)
+  mapEl.style.height = '320px';
+  mapEl.style.minHeight = '320px';
+  // 기존 플레이스홀더 제거 (지도 생성 전 내부 div 제거)
+  while (mapEl.firstChild) { mapEl.removeChild(mapEl.firstChild); }
+
+  var centerLat = techLat;
+  var centerLng = techLng;
+
+  // ── 5. 지도 생성
   try {
-    const res = await fetch(`${BASE_URL}/api/location/session/${token}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      let icon = '⏰';
-      let title = '링크 만료 또는 오류';
-      let desc = err.error || '위치 정보를 불러올 수 없습니다.';
-      // 404: 세션 없음 → 기사 출발 전 또는 링크 만료
-      if (res.status === 404) {
-        icon = '🚗'; title = '기사 출발 전입니다';
-        desc = '담당 기사가 아직 출발하지 않았습니다.<br>기사가 출발하면 이 페이지에서 실시간 위치를 확인하실 수 있습니다.<br><br>잠시 후 다시 확인해 주세요.';
-        // 30초마다 자동 재시도 (출발 대기 중)
-        if (!refreshInterval) {
-          refreshInterval = setInterval(loadSession, 30000);
-        }
-      } else if (res.status === 410 || err.ended) {
-        // 410: 세션 종료됨
-        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-        if (err.status === '도착완료') {
-          icon = '✅'; title = '기사가 도착했습니다';
-          desc = '담당 기사가 고객님 댁에 무사히 도착하여 위치 공유가 종료되었습니다.';
-        } else if (err.status === '업무취소') {
-          icon = '🚫'; title = '방문이 취소되었습니다';
-          desc = '해당 방문이 취소되어 위치 공유가 종료되었습니다.';
+    kakaoMap = new kakao.maps.Map(mapEl, {
+      center: new kakao.maps.LatLng(centerLat, centerLng),
+      level: 5,
+    });
+    techMarker = null;
+    destMarker = null;
+    mapInitialized = true;
+    console.log('[지도] kakao.maps.Map 생성 성공');
+    dbg('dbg-map-result', '성공: 지도 생성됨 ✅', '#4ade80');
+  } catch(e) {
+    console.error('[지도] kakao.maps.Map 생성 실패:', e);
+    showMapMessage('🗺️', '지도를 불러오는 데 실패했습니다.<br><span style="font-size:13px;color:#94a3b8">' + e.message + '</span>');
+    dbg('dbg-map-result', '실패: Map 생성 예외 - ' + e.message, '#f87171');
+    return false;
+  }
+
+  // ── 6. 기사 마커 (currentLat/currentLng 기준 - 항상 표시)
+  var techPos = new kakao.maps.LatLng(techLat, techLng);
+  var techContent = '<div style="background:#FF6B35;color:white;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🚗</div>';
+  techMarker = new kakao.maps.CustomOverlay({ position: techPos, content: techContent, map: kakaoMap, yAnchor: 0.5, xAnchor: 0.5 });
+  kakaoMap.setCenter(techPos);
+
+  // ── 7. 목적지 마커 (customerLat/customerLng 있을 때만 - 없으면 생략)
+  var destNoticeEl = document.getElementById('dest-notice');
+  if (!destLat || !destLng) {
+    // 목적지 좌표 없음 → 마커 생략, 안내 문구만 표시
+    if (destNoticeEl) {
+      destNoticeEl.textContent = '기사 위치를 실시간으로 확인 중입니다.';
+      destNoticeEl.style.display = 'block';
+    }
+    console.log('[지도] 목적지 좌표 없음 - 목적지 마커 생략, 기사 위치만 표시');
+  } else {
+    // 목적지 좌표 있음 → 마커 추가 + 범위 맞춤
+    if (destNoticeEl) destNoticeEl.style.display = 'none';
+    var destPos = new kakao.maps.LatLng(destLat, destLng);
+    var destContent = '<div style="background:#3B82F6;color:white;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🏠</div>';
+    destMarker = new kakao.maps.CustomOverlay({ position: destPos, content: destContent, map: kakaoMap, yAnchor: 0.5, xAnchor: 0.5 });
+    var bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(techLat, techLng));
+    bounds.extend(new kakao.maps.LatLng(destLat, destLng));
+    kakaoMap.setBounds(bounds, 60);
+  }
+
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 기사 마커 위치만 업데이트 (지도 재생성 없이 - 폴링 시 사용)
+// ═══════════════════════════════════════════════════════════════════════════
+function updateTechMarkerOnly(techLat, techLng) {
+  if (!mapInitialized || !kakaoMap) return false;
+  if (!techLat || !techLng) return false;
+  if (typeof kakao === 'undefined' || !kakao.maps) return false;
+  try {
+    var newPos = new kakao.maps.LatLng(techLat, techLng);
+    if (techMarker) {
+      techMarker.setPosition(newPos);
+    } else {
+      var techContent = '<div style="background:#FF6B35;color:white;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">\uD83D\uDE97</div>';
+      techMarker = new kakao.maps.CustomOverlay({ position: newPos, content: techContent, map: kakaoMap, yAnchor: 0.5, xAnchor: 0.5 });
+    }
+    kakaoMap.setCenter(newPos);
+    lastTechLat = techLat;
+    lastTechLng = techLng;
+    console.log('[지도] 기사 마커 위치 업데이트:', techLat, techLng);
+    return true;
+  } catch(e) {
+    console.error('[지도] 마커 업데이트 실패:', e);
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 카카오 지오코딩 (클라이언트 사이드 - KAKAO_REST_API_KEY 사용)
+// ═══════════════════════════════════════════════════════════════════════════
+function geocodeAddress(address, callback) {
+  var apiKey = window.KAKAO_REST_API_KEY || '';
+  if (!apiKey || !address) { callback(null); return; }
+  var url = 'https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(address);
+  fetch(url, { headers: { 'Authorization': 'KakaoAK ' + apiKey } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var doc = data.documents && data.documents[0];
+      callback(doc ? { lat: parseFloat(doc.y), lng: parseFloat(doc.x) } : null);
+    })
+    .catch(function(e) { console.warn('[지오코딩 실패]', e); callback(null); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 지도 초기화 트리거 (SDK 로드 완료 후 또는 SDK 이미 로드된 경우)
+// ═══════════════════════════════════════════════════════════════════════════
+function triggerMapInit(techLat, techLng, destLat, destLng, customerAddress) {
+  function doInit(dLat, dLng) {
+    initKakaoMap(techLat, techLng, dLat, dLng);
+  }
+
+  function runWithGeocoding(dLat, dLng) {
+    if ((!dLat || !dLng) && customerAddress) {
+      console.log('[지오코딩] 주소 변환 시도:', customerAddress);
+      geocodeAddress(customerAddress, function(result) {
+        if (result) {
+          console.log('[지오코딩] 성공:', result.lat, result.lng);
+          doInit(result.lat, result.lng);
         } else {
-          icon = '⏰'; title = '위치 공유가 종료되었습니다';
-          desc = '링크 유효 시간이 지나 위치 공유가 자동 종료되었습니다.';
+          console.warn('[지오코딩] 실패');
+          doInit(null, null);
         }
-      } else {
-        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-      }
-      document.getElementById('app').innerHTML = `
-        <div class="error-card">
-          <div class="error-icon">${icon}</div>
-          <div class="error-title">${title}</div>
-          <div class="error-desc">${desc}<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>
-        </div>`;
-      if (res.status !== 404) return;
+      });
+    } else {
+      doInit(dLat, dLng);
+    }
+  }
+
+  if (sdkLoaded) {
+    // SDK 이미 로드됨 → 즉시 실행
+    runWithGeocoding(destLat, destLng);
+  } else {
+    // SDK 로드 대기 → pendingMapArgs에 저장
+    pendingMapArgs = { techLat: techLat, techLng: techLng, destLat: destLat, destLng: destLng, customerAddress: customerAddress };
+    console.log('[지도] SDK 로드 대기 중 - pendingMapArgs 저장');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 카카오맵 SDK 로드 (단일 실행 보장)
+// ═══════════════════════════════════════════════════════════════════════════
+function loadKakaoMapSdk() {
+  if (sdkLoadStarted) return; // 중복 로드 방지
+  sdkLoadStarted = true;
+
+  var jsKey = window.KAKAO_JAVASCRIPT_KEY || '';
+
+  // 키 디버그 표시
+  dbg('dbg-js-key', jsKey ? jsKey.substring(0, 8) + '...' : 'undefined (미설정)', jsKey ? '#4ade80' : '#f87171');
+  var restKey = window.KAKAO_REST_API_KEY || '';
+  dbg('dbg-rest-key', restKey ? '설정됨 ✅' : 'undefined (미설정)', restKey ? '#4ade80' : '#f87171');
+
+  if (!jsKey) {
+    console.warn('[지도] KAKAO_JAVASCRIPT_KEY 없음');
+    dbg('dbg-sdk-status', '미설정 (키 없음) ❌', '#f87171');
+    dbg('dbg-sdk-url', '(키 없음 - 로드 안 함)', '#f87171');
+    showMapMessage('🔑', '카카오 지도 키가 설정되지 않았습니다.<br>관리자에게 문의해 주세요.');
+    dbg('dbg-map-result', '실패: JS 키 없음', '#f87171');
+    pendingMapArgs = null; // 지도 초기화 포기
+    return;
+  }
+
+  // ★ autoload=false 추가 → kakao.maps.load() 콜백이 클래스 초기화를 보장
+  // (autoload=false 없으면 load() 콜백해도 LatLng/Map이 undefined일 수 있음)
+  var sdkUrl = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + jsKey + '&autoload=false&libraries=services';
+  console.log('[지도] SDK 로드 시작:', sdkUrl);
+  dbg('dbg-sdk-url', sdkUrl.replace(jsKey, jsKey.substring(0, 6) + '...'), '#94a3b8');
+  dbg('dbg-sdk-status', '로딩 중...', '#fbbf24');
+
+  var loadTimeout = setTimeout(function() {
+    if (!sdkLoaded) {
+      var msg = 'SDK 로드 타임아웃 (10초) - 도메인 등록 확인';
+      console.error('[지도]', msg);
+      dbg('dbg-sdk-status', '미로드 (타임아웃) ❌', '#f87171');
+      dbg('dbg-map-result', '실패: ' + msg, '#f87171');
+      showMapMessage('🗺️', '카카오 지도 SDK 로딩 실패<br><span style="font-size:13px;color:#94a3b8">JavaScript 키 또는 Web 플랫폼 도메인을 확인해주세요.</span>');
+      pendingMapArgs = null;
+    }
+  }, 10000);
+
+  var script = document.createElement('script');
+  script.src = sdkUrl;
+  script.async = true;
+
+  script.onload = function() {
+    clearTimeout(loadTimeout);
+    console.log('[지도] script.onload - kakao 존재:', typeof kakao, '/ kakao.maps:', typeof kakao !== 'undefined' && !!kakao.maps);
+
+    if (typeof kakao === 'undefined' || !kakao.maps) {
+      var msg = 'script 로드됐으나 kakao.maps 없음 (도메인 미등록 가능성)';
+      console.error('[지도]', msg);
+      dbg('dbg-sdk-status', '미로드 (kakao.maps 없음) ❌', '#f87171');
+      dbg('dbg-map-result', '실패: ' + msg, '#f87171');
+      showMapMessage('🗺️', '카카오 지도 SDK 로딩 실패<br><span style="font-size:13px;color:#94a3b8">JavaScript 키 또는 Web 플랫폼 도메인을 확인해주세요.</span>');
+      pendingMapArgs = null;
       return;
     }
-    const data = await res.json();
-    render(data);
 
-    // 이동 중이면 10초마다 자동 갱신
-    if (data.status === '이동중') {
-      if (!refreshInterval) {
-        refreshInterval = setInterval(loadSession, 10000);
+    // ★ 핵심 수정: kakao.maps.load() 콜백 안에서 실제 클래스(LatLng, Map 등) 초기화를 기다림
+    var mapsLoadCallbackFired = false;
+    function onMapsReady() {
+      mapsLoadCallbackFired = true;
+      // SDK 내부 클래스 존재 여부 진단 (요청사항 4)
+      var diag = {
+        kakao: typeof window.kakao,
+        maps: typeof (window.kakao && window.kakao.maps),
+        load: typeof (window.kakao && window.kakao.maps && window.kakao.maps.load),
+        LatLng: typeof (window.kakao && window.kakao.maps && window.kakao.maps.LatLng),
+        Map: typeof (window.kakao && window.kakao.maps && window.kakao.maps.Map),
+        Marker: typeof (window.kakao && window.kakao.maps && window.kakao.maps.Marker)
+      };
+      console.log('[지도] kakao 객체 진단:', diag);
+      // 전체 진단 결과를 디버그에 출력 (요청사항 4)
+      dbg('dbg-kakao-diag', 'kakao=' + diag.kakao + ' maps=' + diag.maps + ' load=' + diag.load + ' LatLng=' + diag.LatLng + ' Map=' + diag.Map + ' Marker=' + diag.Marker, (diag.LatLng === 'function' && diag.Map === 'function') ? '#4ade80' : '#f87171');
+
+      // LatLng/Map undefined 구분 표시 (요청사항 7)
+      if (diag.LatLng !== 'function' || diag.Map !== 'function') {
+        var emsg = 'load 콜백은 실행됐으나 클래스 미준비 (LatLng:' + diag.LatLng + ', Map:' + diag.Map + ')';
+        console.error('[지도]', emsg);
+        dbg('dbg-sdk-status', 'load콜백 실행됨, 클래스 미준비 ❌', '#f87171');
+        dbg('dbg-map-result', '실패: ' + emsg, '#f87171');
+        dbg('dbg-sdk-url', sdkUrl, '#f87171');
+        showMapMessage('🗺️', '카카오 지도 SDK 초기화 실패<br><span style="font-size:13px;color:#94a3b8">LatLng=' + diag.LatLng + ' / Map=' + diag.Map + '</span>');
+        pendingMapArgs = null;
+        return;
       }
-    } else {
-      if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-    }
-  } catch (e) {
-    console.error('위치 정보 로드 실패:', e);
-  }
-}
 
-// ─── 네이버 지도 API 로드 ──────────────────────────────────────────────────
-// 네이버 지도 API 키가 없으면 지도 없이 동작
-function loadNaverMapApi() {
-  const clientId = (window.NAVER_MAP_CLIENT_ID || '').trim();
-  // API 키가 없거나, URL/공백 등 비정상 값이면 지도 생략 (텍스트 정보는 그대로 표시)
-  if (!clientId || clientId.includes('://') || clientId.includes('.') || clientId.includes(' ')) return;
-  const script = document.createElement('script');
-  script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
-  script.onload = () => {
-    // 지도 API 로드 완료 후 현재 데이터로 지도 재초기화
-    loadSession();
+      sdkLoaded = true;
+      console.log('[지도] SDK 로드 및 클래스 초기화 완료 ✅');
+      dbg('dbg-sdk-status', '로드됨 ✅ (load콜백 실행, LatLng/Map OK)', '#4ade80');
+
+      // 대기 중인 지도 초기화 실행
+      if (pendingMapArgs) {
+        var args = pendingMapArgs;
+        pendingMapArgs = null;
+        var dLat = args.destLat;
+        var dLng = args.destLng;
+        if ((!dLat || !dLng) && args.customerAddress) {
+          console.log('[지오코딩] 주소 변환 시도:', args.customerAddress);
+          geocodeAddress(args.customerAddress, function(result) {
+            if (result) {
+              console.log('[지오코딩] 성공:', result.lat, result.lng);
+              initKakaoMap(args.techLat, args.techLng, result.lat, result.lng);
+            } else {
+              console.warn('[지오코딩] 실패');
+              initKakaoMap(args.techLat, args.techLng, null, null);
+            }
+          });
+        } else {
+          initKakaoMap(args.techLat, args.techLng, dLat, dLng);
+        }
+      }
+    }
+
+    // autoload=false이므로 kakao.maps.load는 반드시 존재해야 함 (요청사항 2, 3)
+    if (typeof kakao.maps.load === 'function') {
+      console.log('[지도] kakao.maps.load() 콜백 등록');
+      kakao.maps.load(onMapsReady);
+      // load 콜백이 일정 시간 내 실행 안 되면 구분 표시 (요청사항 7)
+      setTimeout(function() {
+        if (!mapsLoadCallbackFired && !sdkLoaded) {
+          var lmsg = 'kakao.maps.load 콜백 미실행 (3초 경과)';
+          console.error('[지도]', lmsg);
+          dbg('dbg-sdk-status', 'load 콜백 미실행 ❌', '#f87171');
+          dbg('dbg-map-result', '실패: ' + lmsg, '#f87171');
+          showMapMessage('🗺️', '카카오 지도 SDK 초기화 콜백이 실행되지 않았습니다.<br><span style="font-size:13px;color:#94a3b8">잠시 후 다시 시도해 주세요.</span>');
+        }
+      }, 3000);
+    } else {
+      // autoload=false인데 load가 없으면 SDK 로드 이상
+      var nmsg = 'kakao.maps.load 함수 없음 (SDK 비정상)';
+      console.error('[지도]', nmsg);
+      dbg('dbg-sdk-status', 'load 함수 없음 ❌', '#f87171');
+      dbg('dbg-map-result', '실패: ' + nmsg, '#f87171');
+      showMapMessage('🗺️', '카카오 지도 SDK 초기화 함수가 없습니다.<br><span style="font-size:13px;color:#94a3b8">SDK 로드 상태를 확인해 주세요.</span>');
+      pendingMapArgs = null;
+    }
   };
+
+  script.onerror = function(e) {
+    clearTimeout(loadTimeout);
+    var msg = 'script onerror - appkey/도메인 확인';
+    console.error('[지도]', msg, e);
+    dbg('dbg-sdk-status', '로드 실패 (onerror) ❌', '#f87171');
+    dbg('dbg-map-result', '실패: ' + msg, '#f87171');
+    showMapMessage('🗺️', '카카오 지도 SDK 로딩 실패<br><span style="font-size:13px;color:#94a3b8">JavaScript 키 또는 Web 플랫폼 도메인을 확인해주세요.</span>');
+    pendingMapArgs = null;
+  };
+
   document.head.appendChild(script);
 }
 
-// 초기 로드
-loadSession();
-loadNaverMapApi();
+// ═══════════════════════════════════════════════════════════════════════════
+// 화면 렌더링 (세션 데이터 기반 - 지도와 완전 분리)
+// ═══════════════════════════════════════════════════════════════════════════
+// 업데이트 시간 주기적 갱신 (마지막 수신 시간 표시 용)
+// ═══════════════════════════════════════════════════════════════════════════
+var _lastCurrentUpdatedAt = null;  // 마지막 위치 수신 시각
+
+function startUpdateTimeRefresh(currentUpdatedAt) {
+  _lastCurrentUpdatedAt = currentUpdatedAt;
+  if (updateTimeInterval) clearInterval(updateTimeInterval);
+  updateTimeInterval = setInterval(function() {
+    var el = document.getElementById('update-time');
+    var delayEl = document.getElementById('delay-warning');
+    if (!el) return;
+    if (!_lastCurrentUpdatedAt) {
+      el.textContent = '위치 정보 없음';
+      return;
+    }
+    var diffSec = Math.floor((Date.now() - new Date(_lastCurrentUpdatedAt).getTime()) / 1000);
+    el.textContent = formatLastUpdate(_lastCurrentUpdatedAt);
+    // 30초 이상 미업데이트 시 경고 표시
+    if (delayEl) {
+      if (diffSec >= 30) {
+        delayEl.textContent = '⚠️ 기사 위치 업데이트 지연 (' + diffSec + '초 미업데이트)';
+        delayEl.classList.add('visible');
+      } else {
+        delayEl.classList.remove('visible');
+      }
+    }
+  }, 3000);
+}
+
+function stopUpdateTimeRefresh() {
+  if (updateTimeInterval) { clearInterval(updateTimeInterval); updateTimeInterval = null; }
+}
+
+function render(data) {
+  var app = document.getElementById('app');
+  if (!app) return;
+
+  var techLat = data.currentLat ? parseFloat(data.currentLat) : null;
+  var techLng = data.currentLng ? parseFloat(data.currentLng) : null;
+  var destLat = data.customerLat ? parseFloat(data.customerLat) : null;
+  var destLng = data.customerLng ? parseFloat(data.customerLng) : null;
+  var eta = estimateArrival(techLat, techLng, destLat, destLng);
+
+  // 디버그 패널 업데이트 (app 외부에 있으므로 render 후에도 유지됨)
+  dbg('dbg-tech-lat', data.currentLat || 'null', data.currentLat ? '#4ade80' : '#f87171');
+  dbg('dbg-tech-lng', data.currentLng || 'null', data.currentLng ? '#4ade80' : '#f87171');
+  dbg('dbg-dest-lat', data.customerLat || 'null', data.customerLat ? '#4ade80' : '#f87171');
+  dbg('dbg-dest-lng', data.customerLng || 'null', data.customerLng ? '#4ade80' : '#f87171');
+
+  // 도착완료
+  if (data.status === '도착완료') {
+    stopUpdateTimeRefresh();
+    app.innerHTML = '<div class="ended-card">' +
+      '<div class="ended-icon">✅</div>' +
+      '<div class="ended-title">기사가 도착했습니다!</div>' +
+      '<div class="ended-desc">담당 기사(' + (data.technicianName || '기사') + ')가 도착하여<br>위치 공유가 종료되었습니다.<br><br>도착 시각: ' + formatTime(data.arrivedAt) + '</div>' +
+      '</div>' +
+      '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+    if (refreshInterval) clearInterval(refreshInterval);
+    return;
+  }
+
+  // 업무취소 / 만료
+  if (data.status === '업무취소' || data.status === '만료') {
+    stopUpdateTimeRefresh();
+    var isExpired = data.status === '만료';
+    app.innerHTML = '<div class="ended-card">' +
+      '<div class="ended-icon">' + (isExpired ? '⏰' : '❌') + '</div>' +
+      '<div class="ended-title">' + (isExpired ? '위치 공유 링크 만료' : '방문이 취소되었습니다') + '</div>' +
+      '<div class="ended-desc">' + (isExpired ? '위치 공유 링크가 만료되었습니다.<br>문의사항은 고객센터로 연락해 주세요.' : '담당 기사의 방문이 취소되었습니다.<br>불편을 드려 죄송합니다.') + '</div>' +
+      '</div>' +
+      '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+    if (refreshInterval) clearInterval(refreshInterval);
+    return;
+  }
+
+  // 이동 중 (기본)
+  var techName = data.technicianName || '담당 기사';
+  var techPhone = data.technicianPhone || '';
+  var hasLocation = !!(techLat && techLng);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 폴링 업데이트: 지도가 이미 초기화된 경우 DOM 전체 재생성 없이 마커/ETA/시간만 업데이트
+  // ───────────────────────────────────────────────────────────────────────────
+  if (!isFirstRender && mapInitialized) {
+    // 마커 위치 업데이트 (지도 재생성 없이)
+    if (hasLocation) {
+      updateTechMarkerOnly(techLat, techLng);
+    }
+    // ETA 업데이트
+    var etaEl = document.querySelector('.status-card [style*="FFF3E0"]');
+    if (etaEl && eta) { etaEl.textContent = '⏱ ' + eta; }
+    // 마지막 업데이트 시간 갱신
+    var updateTimeEl = document.getElementById('update-time');
+    if (updateTimeEl) {
+      updateTimeEl.textContent = data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음';
+    }
+    // 마지막 수신 시각 갱신
+    if (data.currentUpdatedAt) {
+      _lastCurrentUpdatedAt = data.currentUpdatedAt;
+    }
+    // 지도 헤더 서브 텍스트 갱신
+    var mapHeaderSub = document.getElementById('map-header-sub');
+    if (mapHeaderSub) {
+      mapHeaderSub.textContent = hasLocation ? '실시간 업데이트' : '위치 수신 대기 중';
+    }
+    return;  // DOM 전체 재생성 안 함
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 최초 렌더링: DOM 전체 생성 + 지도 초기화
+  // ───────────────────────────────────────────────────────────────────────────
+  isFirstRender = false;
+  lastTechLat = techLat;
+  lastTechLng = techLng;
+  lastDestLat = destLat;
+  lastDestLng = destLng;
+
+  var etaHtml = eta ? '<div style="background:#FFF3E0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;color:#FF6B35;text-align:center;margin-bottom:8px">⏱ ' + eta + '</div>' : '';
+  var addrHtml = data.customerAddress ? '<div class="info-item" style="grid-column:1/-1"><div class="info-item-label">방문 주소</div><div class="info-item-value">' + data.customerAddress + '</div></div>' : '';
+  var callHtml = techPhone ? '<a class="call-btn" href="tel:' + techPhone.replace(/[^0-9]/g,'') + '">📞 전화</a>' : '';
+  var mapPlaceholder = hasLocation ? '' : '<div class="map-placeholder"><div class="map-placeholder-icon">📍</div><div class="map-placeholder-text">기사 위치 정보를 수신하는 중입니다...</div></div>';
+
+  app.innerHTML =
+    '<div class="status-card">' +
+      '<div class="status-row">' +
+        '<div class="status-icon">🚗</div>' +
+        '<div class="status-info">' +
+          '<div class="status-label">현재 상태</div>' +
+          '<div class="status-value">이동 중</div>' +
+        '</div>' +
+        '<div class="status-badge"><div class="pulse-dot"></div>실시간</div>' +
+      '</div>' +
+      etaHtml +
+      '<div class="info-grid">' +
+        '<div class="info-item"><div class="info-item-label">출발 시각</div><div class="info-item-value">' + formatTime(data.departedAt) + '</div></div>' +
+        '<div class="info-item"><div class="info-item-label">경과 시간</div><div class="info-item-value">' + formatElapsed(data.departedAt) + '</div></div>' +
+        addrHtml +
+      '</div>' +
+    '</div>' +
+    '<div class="delay-warning" id="delay-warning"></div>' +
+    '<div class="map-container">' +
+      '<div class="map-header">' +
+        '<span>📍</span>' +
+        '<span class="map-header-title">기사 현재 위치</span>' +
+        '<span class="map-header-sub" id="map-header-sub">' + (hasLocation ? '실시간 업데이트' : '위치 수신 대기 중') + '</span>' +
+      '</div>' +
+      '<div id="map">' + mapPlaceholder + '</div>' +
+      '<div id="dest-notice" style="display:none;background:#fef3c7;color:#92400e;font-size:13px;padding:8px 16px;text-align:center">목적지 좌표 변환 중 또는 목적지 좌표 변환 실패</div>' +
+    '</div>' +
+    '<div class="tech-card">' +
+      '<div class="tech-card-title">담당 기사 정보</div>' +
+      '<div class="tech-info">' +
+        '<div class="tech-avatar">' + (techName[0] || '기').toUpperCase() + '</div>' +
+        '<div><div class="tech-name">' + techName + '</div><div class="tech-company">퍼치에너지테크</div></div>' +
+        callHtml +
+      '</div>' +
+    '</div>' +
+    '<div class="update-time" id="update-time">' + (data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음') + '</div>' +
+    '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+
+  // SDK 상태 디버그 재반영
+  if (sdkLoaded) {
+    dbg('dbg-sdk-status', '로드됨 ✅', '#4ade80');
+  }
+
+  // 업데이트 시간 주기적 갱신 시작
+  startUpdateTimeRefresh(data.currentUpdatedAt);
+
+  // 지도 초기화 트리거 (세션 렌더링 완료 후 비동기로 실행)
+  // id="map" DOM이 생성된 직후이므로 setTimeout(0)으로 다음 틱에 실행
+  setTimeout(function() {
+    triggerMapInit(techLat, techLng, destLat, destLng, data.customerAddress);
+  }, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 세션 데이터 로드 (10초 타임아웃 포함)
+// ═══════════════════════════════════════════════════════════════════════════
+function loadSession() {
+  if (!token) {
+    document.getElementById('app').innerHTML =
+      '<div class="error-card">' +
+        '<div class="error-icon">🔗</div>' +
+        '<div class="error-title">잘못된 링크</div>' +
+        '<div class="error-desc">유효하지 않은 위치 확인 링크입니다.<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>' +
+      '</div>';
+    dbg('dbg-api', '토큰 없음 ❌', '#f87171');
+    return;
+  }
+
+  dbg('dbg-api', '요청 중...', '#fbbf24');
+
+  // 10초 타임아웃
+  var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var fetchTimeout = setTimeout(function() {
+    if (controller) controller.abort();
+    document.getElementById('app').innerHTML =
+      '<div class="error-card">' +
+        '<div class="error-icon">⏱</div>' +
+        '<div class="error-title">위치 세션 조회 실패</div>' +
+        '<div class="error-desc">서버 응답이 없습니다 (10초 초과).<br>네트워크 연결을 확인하거나 잠시 후 다시 시도해 주세요.<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>' +
+      '</div>';
+    dbg('dbg-api', '타임아웃 (10초) ❌', '#f87171');
+  }, 10000);
+
+  var fetchOptions = controller ? { signal: controller.signal } : {};
+  fetch(BASE_URL + '/api/location/session/' + token, fetchOptions)
+    .then(function(res) {
+      clearTimeout(fetchTimeout);
+      dbg('dbg-api', 'HTTP ' + res.status + (res.ok ? ' ✅' : ' ❌'), res.ok ? '#4ade80' : '#f87171');
+
+      if (!res.ok) {
+        return res.json().catch(function() { return {}; }).then(function(err) {
+          var icon = '⏰', title = '링크 만료 또는 오류', desc = err.error || '위치 정보를 불러올 수 없습니다.';
+          if (res.status === 404) {
+            icon = '🕐'; title = '기사 출발 전입니다';
+            desc = '아직 기사가 출발하지 않았습니다.<br>출발 후 이 페이지를 다시 열어주세요.';
+          } else if (res.status === 410 || err.ended) {
+            if (err.status === '도착완료') { icon = '✅'; title = '기사가 도착했습니다'; desc = '담당 기사가 고객님 댁에 무사히 도착하여 위치 공유가 종료되었습니다.'; }
+            else if (err.status === '업무취소') { icon = '🚫'; title = '방문이 취소되었습니다'; desc = '해당 방문이 취소되어 위치 공유가 종료되었습니다.'; }
+            else { icon = '⏰'; title = '위치 공유가 종료되었습니다'; desc = '링크 유효 시간이 지나 위치 공유가 자동 종료되었습니다.'; }
+          }
+          document.getElementById('app').innerHTML =
+            '<div class="error-card">' +
+              '<div class="error-icon">' + icon + '</div>' +
+              '<div class="error-title">' + title + '</div>' +
+              '<div class="error-desc">' + desc + '<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>' +
+            '</div>';
+          if (refreshInterval) clearInterval(refreshInterval);
+        });
+      }
+
+      return res.json().then(function(data) {
+        render(data);
+        if (data.status === '이동중') {
+          if (!refreshInterval) {
+            refreshInterval = setInterval(loadSession, 10000);
+          }
+        } else {
+          if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+        }
+      });
+    })
+    .catch(function(e) {
+      clearTimeout(fetchTimeout);
+      if (e && e.name === 'AbortError') return; // 타임아웃 처리됨
+      console.error('[세션] fetch 실패:', e);
+      dbg('dbg-api', '네트워크 오류 ❌', '#f87171');
+      document.getElementById('app').innerHTML =
+        '<div class="error-card">' +
+          '<div class="error-icon">📡</div>' +
+          '<div class="error-title">네트워크 오류</div>' +
+          '<div class="error-desc">위치 정보를 불러오지 못했습니다.<br>인터넷 연결을 확인해 주세요.<br><br>문의: <a href="tel:031-8042-7310" style="color:#FF6B35">031-8042-7310</a></div>' +
+        '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 초기 실행: 세션 로딩과 SDK 로딩을 독립적으로 병렬 실행
+// ═══════════════════════════════════════════════════════════════════════════
+loadSession();       // 1. 세션 데이터 로드 (지도와 무관하게 즉시 실행)
+loadKakaoMapSdk();   // 2. SDK 로드 (세션 로드와 병렬 실행)
 </script>
 </body>
 </html>

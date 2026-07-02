@@ -1459,6 +1459,15 @@ export const appRouter = router({
         await db.setSetting("leak_alert_phones", value);
         return { ok: true };
       }),
+    // 누수 알림 발송 내역 조회
+    getNotificationLogs: publicProcedure
+      .input(z.object({ limit: z.number().default(50) }).optional())
+      .query(async ({ input }) => {
+        const logs = await db.getNotificationLogs();
+        return logs
+          .filter((l: any) => l.messageType?.startsWith("누수감지"))
+          .slice(0, input?.limit ?? 50);
+      }),
   }),
   // ─── 유량 관리 ──────────────────────────────────────────────────
   flowRate: router({
