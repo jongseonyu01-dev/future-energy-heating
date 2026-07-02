@@ -18,7 +18,7 @@ import {
   stopLocationTracking,
   isTrackingActive,
   getActiveTrackingToken,
-  getCurrentLocation,
+  getCurrentLocationFull,
   sendLocationToServer,
   notifySessionStop,
 } from "@/lib/location-tracking";
@@ -98,13 +98,13 @@ export default function TechScheduleScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백)
+  // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백 — 3초, 차량 이동 기준)
   const startForegroundInterval = useCallback((token: string) => {
     if (fgIntervalRef.current) clearInterval(fgIntervalRef.current);
     fgIntervalRef.current = setInterval(async () => {
-      const loc = await getCurrentLocation();
-      if (loc) await sendLocationToServer(token, loc.lat, loc.lng);
-    }, 10000);
+      const loc = await getCurrentLocationFull();
+      if (loc) await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
+    }, 3000); // 3초 — 차량 이동 기준
   }, []);
 
   const stopForegroundInterval = useCallback(() => {
@@ -176,8 +176,8 @@ export default function TechScheduleScreen() {
       startForegroundInterval(result.token);
 
       // 즉시 현재 위치 전송 (권한 없으면 생략)
-      const loc = await getCurrentLocation();
-      if (loc) await sendLocationToServer(result.token, loc.lat, loc.lng);
+      const loc = await getCurrentLocationFull();
+      if (loc) await sendLocationToServer(result.token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
