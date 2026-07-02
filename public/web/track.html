@@ -190,7 +190,8 @@ var BASE_URL = window.location.origin;
 var token = (window.location.pathname.split('/track/')[1] || '').split('?')[0].split('#')[0];
 // ?debug=1 시에만 디버그 패널 표시 (고객에게 절대 노출 금지)
 var IS_DEBUG = (window.location.search.indexOf('debug=1') !== -1);
-var refreshInterval = null;
+var refreshInterval = null;      // 세션 전체 재조회 인터벌 (상태 변경 감지용 - 30초)
+var locationPollInterval = null; // 위치 좌표만 폴링하는 인터벌 (5초)
 var kakaoMap = null;
 var techMarker = null;
 var destMarker = null;
@@ -204,6 +205,7 @@ var lastTechLng = null;    // 마지막 기사 경도
 var lastDestLat = null;    // 마지막 목적지 위도
 var lastDestLng = null;    // 마지막 목적지 경도
 var updateTimeInterval = null;  // 업데이트 시간 주기적 갱신 인터벌
+var sessionEnded = false;       // 세션 종료 여부 (폴링 중단용)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 디버그 패널 초기화 - ?debug=1 시에만 표시
@@ -664,6 +666,92 @@ function stopUpdateTimeRefresh() {
   if (updateTimeInterval) { clearInterval(updateTimeInterval); updateTimeInterval = null; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 위치 좌표만 폴링 (지도/DOM 바꾸지 않고 마커만 업데이트 - 5초 간격)
+// ═══════════════════════════════════════════════════════════════════════════
+function pollLocationOnly() {
+  if (sessionEnded || !token) return;
+  fetch(BASE_URL + '/api/location/session/' + token)
+    .then(function(res) {
+      if (!res.ok) {
+        // 410 = 종료된 세션, 404 = 세션 없음
+        if (res.status === 410 || res.status === 404) {
+          sessionEnded = true;
+          stopLocationPoll();
+          stopUpdateTimeRefresh();
+          // 세션 종료 시 전체 세션 재조회하여 종료 화면 표시
+          loadSession();
+        }
+        return;
+      }
+      return res.json().then(function(data) {
+        // 상태가 이동중이 아니면 종료 처리
+        if (data.status !== '이동중') {
+          sessionEnded = true;
+          stopLocationPoll();
+          stopUpdateTimeRefresh();
+          loadSession();
+          return;
+        }
+        var techLat = data.currentLat ? parseFloat(data.currentLat) : null;
+        var techLng = data.currentLng ? parseFloat(data.currentLng) : null;
+        var destLat = data.customerLat ? parseFloat(data.customerLat) : null;
+        var destLng = data.customerLng ? parseFloat(data.customerLng) : null;
+
+        // 디버그 패널 업데이트
+        dbg('dbg-tech-lat', data.currentLat || 'null', data.currentLat ? '#4ade80' : '#f87171');
+        dbg('dbg-tech-lng', data.currentLng || 'null', data.currentLng ? '#4ade80' : '#f87171');
+
+        // 마커 위치 업데이트 (지도 재생성 없이 setPosition만)
+        if (techLat && techLng) {
+          updateTechMarkerOnly(techLat, techLng);
+          lastTechLat = techLat;
+          lastTechLng = techLng;
+        }
+
+        // ETA 업데이트
+        var eta = estimateArrival(techLat, techLng, destLat, destLng);
+        var etaEl = document.querySelector('.status-card [style*="FFF3E0"]');
+        if (etaEl && eta) { etaEl.textContent = '⏱ ' + eta; }
+
+        // 마지막 업데이트 시간 갱신
+        if (data.currentUpdatedAt) {
+          _lastCurrentUpdatedAt = data.currentUpdatedAt;
+          var updateTimeEl = document.getElementById('update-time');
+          if (updateTimeEl) {
+            updateTimeEl.textContent = formatLastUpdate(data.currentUpdatedAt);
+          }
+        }
+
+        // 지도 헤더 서브 텍스트 갱신
+        var mapHeaderSub = document.getElementById('map-header-sub');
+        if (mapHeaderSub && techLat && techLng) {
+          mapHeaderSub.textContent = '실시간 업데이트';
+        }
+
+        console.log('[폴링] 위치 업데이트:', techLat, techLng, data.currentUpdatedAt);
+      });
+    })
+    .catch(function(e) {
+      console.warn('[폴링] 위치 조회 실패 (retry in 5s):', e.message);
+    });
+}
+
+function startLocationPoll() {
+  if (locationPollInterval) return;  // 이미 실행 중
+  if (sessionEnded) return;
+  console.log('[폴링] 위치 폴링 시작 (5초 간격)');
+  locationPollInterval = setInterval(pollLocationOnly, 5000);
+}
+
+function stopLocationPoll() {
+  if (locationPollInterval) {
+    clearInterval(locationPollInterval);
+    locationPollInterval = null;
+    console.log('[폴링] 위치 폴링 중단');
+  }
+}
+
 function render(data) {
   var app = document.getElementById('app');
   if (!app) return;
@@ -713,35 +801,8 @@ function render(data) {
   var hasLocation = !!(techLat && techLng);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 폴링 업데이트: 지도가 이미 초기화된 경우 DOM 전체 재생성 없이 마커/ETA/시간만 업데이트
-  // ───────────────────────────────────────────────────────────────────────────
-  if (!isFirstRender && mapInitialized) {
-    // 마커 위치 업데이트 (지도 재생성 없이)
-    if (hasLocation) {
-      updateTechMarkerOnly(techLat, techLng);
-    }
-    // ETA 업데이트
-    var etaEl = document.querySelector('.status-card [style*="FFF3E0"]');
-    if (etaEl && eta) { etaEl.textContent = '⏱ ' + eta; }
-    // 마지막 업데이트 시간 갱신
-    var updateTimeEl = document.getElementById('update-time');
-    if (updateTimeEl) {
-      updateTimeEl.textContent = data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음';
-    }
-    // 마지막 수신 시각 갱신
-    if (data.currentUpdatedAt) {
-      _lastCurrentUpdatedAt = data.currentUpdatedAt;
-    }
-    // 지도 헤더 서브 텍스트 갱신
-    var mapHeaderSub = document.getElementById('map-header-sub');
-    if (mapHeaderSub) {
-      mapHeaderSub.textContent = hasLocation ? '실시간 업데이트' : '위치 수신 대기 중';
-    }
-    return;  // DOM 전체 재생성 안 함
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
   // 최초 렌더링: DOM 전체 생성 + 지도 초기화
+  // (폴링 업데이트는 pollLocationOnly가 도맡하므로 render는 최초 1회만 실행됨)
   // ───────────────────────────────────────────────────────────────────────────
   isFirstRender = false;
   lastTechLat = techLat;
@@ -867,10 +928,14 @@ function loadSession() {
       return res.json().then(function(data) {
         render(data);
         if (data.status === '이동중') {
-          if (!refreshInterval) {
-            refreshInterval = setInterval(loadSession, 10000);
-          }
+          // 위치 좌표만 5초마다 폴링 시작 (지도 초기화 완료 후 시작하도록 1초 지연)
+          setTimeout(function() {
+            startLocationPoll();
+          }, 1000);
         } else {
+          sessionEnded = true;
+          stopLocationPoll();
+          stopUpdateTimeRefresh();
           if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
         }
       });
