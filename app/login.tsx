@@ -101,7 +101,12 @@ export default function LoginScreen() {
       }
       await finishLogin(data);
     },
-    onError: () => setError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요."),
+    onError: (err) => {
+      const msg = err?.message || "";
+      const shape = (err as any)?.data?.httpStatus;
+      const detail = shape ? `(HTTP ${shape})` : "";
+      setError(`서버 연결 실패 ${detail}\n서버: https://futureenergytech.co.kr\n오류: ${msg || "네트워크 오류"}`);
+    },
   });
 
   const changePwMutation = trpc.auth.changePassword.useMutation({

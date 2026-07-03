@@ -21,6 +21,8 @@ import {
   getCurrentLocationFull,
   sendLocationToServer,
   notifySessionStop,
+  subscribeDebug,
+  type LocationDebugState,
 } from "@/lib/location-tracking";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -49,6 +51,14 @@ export default function TechScheduleScreen() {
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
   const fgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  // 디버그 상태 구독
+  useEffect(() => {
+    const unsub = subscribeDebug((s: LocationDebugState) => setDebugState({ ...s }));
+    return unsub;
+  }, []);
 
   // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
   const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
@@ -403,13 +413,41 @@ export default function TechScheduleScreen() {
     <ScreenContainer>
       {/* 위치 공유 중 배너 */}
       {trackingToken && (
-        <View style={s.trackingBanner}>
+        <TouchableOpacity
+          style={s.trackingBanner}
+          onPress={() => setShowDebug((v) => !v)}
+          activeOpacity={0.85}
+        >
           <Text style={s.trackingBannerIcon}>📍</Text>
           <View style={s.trackingBannerText}>
-            <Text style={s.trackingBannerTitle}>위치 공유 중</Text>
-            <Text style={s.trackingBannerSub}>고객에게 실시간 위치가 전송되고 있습니다</Text>
+            <Text style={s.trackingBannerTitle}>위치 공유 중 {debugState?.serverOk === true ? '✅' : debugState?.serverOk === false ? '⚠️' : ''}</Text>
+            <Text style={s.trackingBannerSub}>
+              {debugState?.lastSuccessAt
+                ? `마지막 전송: ${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 · ${debugState.sendCount}회`
+                : '전송 대기 중...'}
+            </Text>
           </View>
-          <View style={s.trackingDot} />
+          <Text style={{ color: '#fff', fontSize: 11 }}>{showDebug ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* GPS 디버그 패널 */}
+      {trackingToken && showDebug && (
+        <View style={s.debugPanel}>
+          <Text style={s.debugTitle}>📡 GPS 디버그</Text>
+          <Text style={s.debugRow}>위도: {debugState?.lat?.toFixed(6) ?? '-'}</Text>
+          <Text style={s.debugRow}>경도: {debugState?.lng?.toFixed(6) ?? '-'}</Text>
+          <Text style={s.debugRow}>정확도: {debugState?.accuracy != null ? `${Math.round(debugState.accuracy)}m` : '-'}</Text>
+          <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}</Text>
+          <Text style={s.debugRow}>방향: {debugState?.heading != null ? `${Math.round(debugState.heading)}°` : '-'}</Text>
+          <Text style={s.debugRow}>전송 횟수: {debugState?.sendCount ?? 0}회</Text>
+          <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
+          <Text style={[s.debugRow, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#9BA1A6' }]}>
+            서버 응답: {debugState?.serverOk === true ? '✅ 성공' : debugState?.serverOk === false ? `❌ ${debugState?.serverError}` : '대기'}
+          </Text>
+          <Text style={s.debugRow}>
+            마지막 성공: {debugState?.lastSuccessAt ? new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR') : '-'}
+          </Text>
         </View>
       )}
 
@@ -602,4 +640,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     alignItems: "center",
   },
   cancelBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  // GPS 디버그 패널
+  debugPanel: {
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  debugTitle: { color: '#FF6B35', fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  debugRow: { color: '#9BA1A6', fontSize: 12, fontFamily: 'monospace' },
 });
