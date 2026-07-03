@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Linking, Platform, ActivityIndicator, Alert, AppState,
+  Linking, Platform, ActivityIndicator, Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -14,16 +14,8 @@ import { openNavigation } from "@/lib/navigation";
 import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
 import {
   requestLocationPermissions,
-  startLocationTracking,
-  stopLocationTracking,
-  isTrackingActive,
-  getActiveTrackingToken,
-  getCurrentLocationFull,
-  sendLocationToServer,
-  notifySessionStop,
-  subscribeDebug,
-  type LocationDebugState,
 } from "@/lib/location-tracking";
+import { useLocationTracking } from "@/lib/location-tracking-context";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280",
@@ -46,20 +38,23 @@ export default function TechScheduleScreen() {
 
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
-  const [trackingRequestId, setTrackingRequestId] = useState<number | null>(null);
-  const [trackingToken, setTrackingToken] = useState<string | null>(null);
-  const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
-  const fgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
   const [showDebug, setShowDebug] = useState(false);
-  const [permStatus, setPermStatus] = useState<{ fg: string; bg: string }>({ fg: '확인 중...', bg: '확인 중...' });
 
-  // 디버그 상태 구독
-  useEffect(() => {
-    const unsub = subscribeDebug((s: LocationDebugState) => setDebugState({ ...s }));
-    return unsub;
-  }, []);
+  // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
+  const {
+    isTracking,
+    trackingToken,
+    trackingRequestId,
+    trackingUrl,
+    debugState,
+    permStatus,
+    startTracking,
+    stopTracking,
+    checkPermissions,
+  } = useLocationTracking();
+
+
 
   // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
   const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
@@ -88,61 +83,9 @@ export default function TechScheduleScreen() {
     { enabled: !!trackingRequestId, refetchInterval: 10000 }
   );
 
-  // 앱 시작 시 이전에 추적 중이던 세션 복구 (안전 모드: 위치 권한 요청 없이 상태만 복구)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const active = await isTrackingActive();
-        const token = await getActiveTrackingToken();
-        if (!cancelled && active && token) {
-          // 위치 권한 요청 없이 상태만 복구 (인터벌은 시작하지 않음)
-          setTrackingToken(token);
-          // 포그라운드 인터벌은 출발 버튼 클릭 시에만 시작
-          // 앱 재시작 후에는 기사가 직접 재출발 버튼을 눌러야 함
-        }
-      } catch (e) {
-        // AsyncStorage 오류 무시 - 앱 크래시 방지
-        console.warn('[TechSchedule] 추적 상태 복구 실패 (무시):', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
-  // 위치 권한 상태 확인
-  const checkPermissions = useCallback(async () => {
-    if (Platform.OS === 'web') { setPermStatus({ fg: '웹 불가', bg: '웹 불가' }); return; }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Location = require('expo-location');
-      const fg = await Location.getForegroundPermissionsAsync();
-      const bg = await Location.getBackgroundPermissionsAsync();
-      setPermStatus({
-        fg: fg.status === 'granted' ? '✅ 허용됨' : `❌ ${fg.status}`,
-        bg: bg.status === 'granted' ? '✅ 항상 허용' : `⚠️ ${bg.status}`,
-      });
-    } catch (e) {
-      setPermStatus({ fg: '확인 실패', bg: '확인 실패' });
-    }
-  }, []);
 
-  useEffect(() => { checkPermissions(); }, [checkPermissions]);
 
-  // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백 — 10초)
-  const startForegroundInterval = useCallback((token: string) => {
-    if (fgIntervalRef.current) clearInterval(fgIntervalRef.current);
-    fgIntervalRef.current = setInterval(async () => {
-      const loc = await getCurrentLocationFull();
-      if (loc) await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
-    }, 10000); // 10초
-  }, []);
-
-  const stopForegroundInterval = useCallback(() => {
-    if (fgIntervalRef.current) {
-      clearInterval(fgIntervalRef.current);
-      fgIntervalRef.current = null;
-    }
-  }, []);
 
   // 출발 버튼 처리
   const handleDepart = async (work: any) => {
@@ -202,20 +145,15 @@ export default function TechScheduleScreen() {
 
       if (!result.success || !result.token) throw new Error("세션 시작 실패");
 
-      // 로컬 추적 시작 (상태는 항상 갱신하여 카드가 도착/취소 버튼으로 전환되도록 함)
-      try {
-        await startLocationTracking(result.token);
-      } catch (e) {
-        console.warn('[TechSchedule] 로컬 추적 시작 실패 (세션은 유지):', e);
+      // 전역 위치 추적 컨텍스트로 시작 (화면 이동 후에도 위치 전송 유지)
+      const trackResult = await startTracking({
+        token: result.token,
+        requestId: work.id,
+        trackingUrl: result.trackingUrl,
+      });
+      if (!trackResult.ok) {
+        console.warn('[TechSchedule] 전역 추적 시작 실패:', trackResult.error);
       }
-      setTrackingToken(result.token);
-      setTrackingRequestId(work.id);
-      setTrackingUrl(result.trackingUrl);
-      startForegroundInterval(result.token);
-
-      // 즉시 현재 위치 전송 (권한 없으면 생략)
-      const loc = await getCurrentLocationFull();
-      if (loc) await sendLocationToServer(result.token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -248,12 +186,7 @@ export default function TechScheduleScreen() {
           text: "도착 완료",
           onPress: async () => {
             if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            await notifySessionStop(trackingToken, "도착완료");
-            await stopLocationTracking();
-            stopForegroundInterval();
-            setTrackingToken(null);
-            setTrackingRequestId(null);
-            setTrackingUrl(null);
+            await stopTracking("도착완료");
             refetch();
             Alert.alert("도착 완료", "위치 공유가 종료되었습니다.\n고객용 링크가 만료됩니다.");
           },
@@ -275,12 +208,7 @@ export default function TechScheduleScreen() {
           onPress: async () => {
             if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             if (trackingToken && trackingRequestId === work.id) {
-              await notifySessionStop(trackingToken, "업무취소");
-              await stopLocationTracking();
-              stopForegroundInterval();
-              setTrackingToken(null);
-              setTrackingRequestId(null);
-              setTrackingUrl(null);
+              await stopTracking("업무취소");
             }
             refetch();
           },
