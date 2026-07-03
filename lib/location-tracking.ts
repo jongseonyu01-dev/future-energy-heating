@@ -2,10 +2,10 @@
  * 기사 위치 추적 모듈 (네이티브 APK 전용)
  *
  * ⚠️ 핵심 원칙:
- * - TaskManager.defineTask 는 반드시 전역 스코프에서 호출 (컴포넌트 X)
+ * - TaskManager.defineTask 는 반드시 전역 스코프에서 호용 (컴포넌트 X)
  * - 출발 버튼 클릭 시에만 추적 시작
- * - Android Foreground Service + 3초 간격 위치 전송
- * - 화면 꺼짐 / 내비 사용 중에도 위치 전송 유지
+ * - Android Foreground Service + 10초 간격 위치 전송
+ * - 화면 꺼짘 / 내비 사용 중에도 위치 전송 유지
  */
 
 import { Platform } from "react-native";
@@ -66,7 +66,7 @@ export function startGlobalFgInterval() {
     if (!loc) return;
     emitDebug({ lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy, speed: loc.speed, heading: loc.heading, source: "foreground-interval", lastSentAt: Date.now() });
     await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
-  }, 3000);
+  }, 10000);
 }
 
 export function stopGlobalFgInterval() {
@@ -181,7 +181,7 @@ export async function startLocationTracking(token: string): Promise<void> {
 
     await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
       accuracy: Location.Accuracy.High,
-      timeInterval: 3000,           // 3초 간격
+      timeInterval: 10000,          // 10초 간격
       distanceInterval: 5,          // 5m 이동 시 즉시
       foregroundService: {
         notificationTitle: "퓨처에너지테크 기사 앱",
