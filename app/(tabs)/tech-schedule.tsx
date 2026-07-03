@@ -283,15 +283,46 @@ export default function TechScheduleScreen() {
           <Text style={[s.detail, { color: colors.muted }]} numberOfLines={2}>{work.detailContent}</Text>
         ) : null}
 
-        {/* 위치 공유 링크 표시 */}
-        {isThisTracking && trackingUrl && (
-          <TouchableOpacity
-            style={s.trackingLinkBox}
-            onPress={() => Linking.openURL(trackingUrl)}
-            activeOpacity={0.8}
-          >
-            <Text style={s.trackingLinkText}>🔗 고객 위치 확인 링크 보기</Text>
-          </TouchableOpacity>
+        {/* 위치 전송 상태 카드 (기사 전용 — 고객용 화면 아님) */}
+        {isThisTracking && (
+          <View style={s.locationStatusCard}>
+            <Text style={s.locationStatusTitle}>📡 위치 전송 상태</Text>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>전송 상태</Text>
+              <Text style={[s.locationStatusValue, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#F59E0B' }]}>
+                {debugState?.serverOk === true ? '✅ 서버 전송 성공' : debugState?.serverOk === false ? '❌ 전송 실패' : '⏳ 전송 대기 중'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 전송</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.lastSuccessAt
+                  ? `${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 (${new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR')})`
+                  : '아직 전송 없음'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>전송 횟수</Text>
+              <Text style={s.locationStatusValue}>{debugState?.sendCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>현재 좌표</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.lat != null ? `${debugState.lat.toFixed(5)}, ${debugState.lng?.toFixed(5)}` : '위치 수신 중...'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>속도</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>위치 권한</Text>
+              <Text style={s.locationStatusValue}>{permStatus.bg}</Text>
+            </View>
+            <Text style={s.locationStatusNote}>💡 고객은 문자로 받은 링크에서 위치를 확인합니다</Text>
+          </View>
         )}
 
         {/* 출발/도착/취소 버튼 */}
@@ -608,4 +639,43 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   debugTitle: { color: '#FF6B35', fontSize: 13, fontWeight: '800', marginBottom: 4 },
   debugRow: { color: '#9BA1A6', fontSize: 12, fontFamily: 'monospace' },
+  locationStatusCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  locationStatusTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#166534',
+    marginBottom: 8,
+  },
+  locationStatusRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#D1FAE5',
+  },
+  locationStatusLabel: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500' as const,
+  },
+  locationStatusValue: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '600' as const,
+    flex: 1,
+    textAlign: 'right' as const,
+  },
+  locationStatusNote: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 8,
+    fontStyle: 'italic' as const,
+  },
 });
