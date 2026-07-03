@@ -53,6 +53,7 @@ export default function TechScheduleScreen() {
   const fgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [permStatus, setPermStatus] = useState<{ fg: string; bg: string }>({ fg: '확인 중...', bg: '확인 중...' });
 
   // 디버그 상태 구독
   useEffect(() => {
@@ -108,13 +109,32 @@ export default function TechScheduleScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백 — 3초, 차량 이동 기준)
+  // 위치 권한 상태 확인
+  const checkPermissions = useCallback(async () => {
+    if (Platform.OS === 'web') { setPermStatus({ fg: '웹 불가', bg: '웹 불가' }); return; }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Location = require('expo-location');
+      const fg = await Location.getForegroundPermissionsAsync();
+      const bg = await Location.getBackgroundPermissionsAsync();
+      setPermStatus({
+        fg: fg.status === 'granted' ? '✅ 허용됨' : `❌ ${fg.status}`,
+        bg: bg.status === 'granted' ? '✅ 항상 허용' : `⚠️ ${bg.status}`,
+      });
+    } catch (e) {
+      setPermStatus({ fg: '확인 실패', bg: '확인 실패' });
+    }
+  }, []);
+
+  useEffect(() => { checkPermissions(); }, [checkPermissions]);
+
+  // 포그라운드 위치 전송 인터벌 (앱 켜진 상태 폴백 — 10초)
   const startForegroundInterval = useCallback((token: string) => {
     if (fgIntervalRef.current) clearInterval(fgIntervalRef.current);
     fgIntervalRef.current = setInterval(async () => {
       const loc = await getCurrentLocationFull();
       if (loc) await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);
-    }, 3000); // 3초 — 차량 이동 기준
+    }, 10000); // 10초
   }, []);
 
   const stopForegroundInterval = useCallback(() => {
@@ -140,16 +160,24 @@ export default function TechScheduleScreen() {
   const doDepart = async (work: any) => {
     setIsStartingTracking(true);
     try {
-      // 위치 권한 요청 (웹은 geolocation 권한이 없어도 세션은 시작하고, 위치 전송만 생략)
-      const { granted } = await requestLocationPermissions();
+      // 위치 권한 요청
+      const { granted, backgroundGranted } = await requestLocationPermissions();
+      await checkPermissions();
       if (!granted && Platform.OS !== "web") {
         Alert.alert(
           "위치 권한 필요",
-          "위치 공유를 위해 위치 권한이 필요합니다. 설정에서 허용해 주세요.",
+          "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 앱 사용 중 허용",
           [{ text: "확인" }]
         );
         setIsStartingTracking(false);
         return;
+      }
+      if (!backgroundGranted && Platform.OS !== "web") {
+        Alert.alert(
+          "백그라운드 위치 권한 권장",
+          "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면\n위치 권한을 '항상 허용'으로 설정해 주세요.\n\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용\n\n(지금은 앱 켜진 상태에서만 위치가 전송됩니다)",
+          [{ text: "나중에" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+        );
       }
 
       // 목적지 좌표 - 접수건에 저장된 좌표 사용 (카카오 지오코딩 연동 시 자동 저장됨)
@@ -448,6 +476,9 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>
             마지막 성공: {debugState?.lastSuccessAt ? new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR') : '-'}
           </Text>
+          <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
+          <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
+          <Text style={s.debugRow}>API 서버: https://futureenergytech.co.kr</Text>
         </View>
       )}
 
