@@ -51,9 +51,16 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSLocationWhenInUseUsageDescription: "기사 방문 중 고객에게 위치를 공유하기 위해 위치 접근 권한이 필요합니다.",
+      NSLocationAlwaysAndWhenInUseUsageDescription: "출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.",
+      NSLocationAlwaysUsageDescription: "출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.",
+      NSCameraUsageDescription: "고장 사진 첨부를 위해 카메라 접근 권한이 필요합니다.",
+      NSPhotoLibraryUsageDescription: "고장 사진 첨부를 위해 사진 접근 권한이 필요합니다.",
+      NSPhotoLibraryAddUsageDescription: "작업 완료 사진을 저장하기 위해 사진 저장 권한이 필요합니다.",
+      NSMicrophoneUsageDescription: "음성 메모 기능을 위해 마이크 접근 권한이 필요합니다."
+    }
   },
   android: {
     allowBackup: false,

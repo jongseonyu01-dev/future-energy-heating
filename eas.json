@@ -45,9 +45,16 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "",
+        "appleId": "jongseonyu@gmail.com",
         "ascAppId": "",
-        "appleTeamId": ""
+        "appleTeamId": "83MU3C8JZN"
+      }
+    },
+    "testflight": {
+      "ios": {
+        "appleId": "jongseonyu@gmail.com",
+        "ascAppId": "",
+        "appleTeamId": "83MU3C8JZN"
       }
     }
   }
