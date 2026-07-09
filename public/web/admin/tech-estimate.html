@@ -284,14 +284,14 @@ let me = null;
   if (!raw) { location.href = '/web/login.html'; return; }
   try {
     me = JSON.parse(raw);
-    const allowed = ['technician','staff','admin','branch_manager','headquarters'];
+    const allowed = ['technician','staff','admin','branch_manager','headquarters','hq_admin'];
     if (!allowed.includes(me.appRole)) {
       alert('접근 권한이 없습니다.');
       location.href = '/web/login.html';
       return;
     }
   } catch(e) { location.href = '/web/login.html'; return; }
-  const roleLabel = { technician:'기사', staff:'직원', admin:'관리자', branch_manager:'지사장', headquarters:'본사' };
+  const roleLabel = { technician:'기사', staff:'직원', admin:'관리자', branch_manager:'지사장', headquarters:'본사', hq_admin:'본사 관리자' };
   document.getElementById('meInfo').textContent = (me.name||'사용자') + ' · ' + (roleLabel[me.appRole]||me.appRole);
   if (me.appRole === 'technician') {
     document.getElementById('techBanner').style.display = 'block';
