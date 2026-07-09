@@ -36,8 +36,8 @@
     .port-btn:hover { border-color: #93c5fd; }
     .port-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
     /* 온도조절기 옵션 */
-    .thermo-grid { display: flex; flex-direction: column; gap: 8px; }
-    .thermo-btn { padding: 11px 14px; border: 2px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; text-align: left; transition: all .15s; }
+    .thermo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .thermo-btn { padding: 11px 10px; border: 2px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; text-align: center; transition: all .15s; }
     .thermo-btn:hover { border-color: #93c5fd; background: #eff6ff; }
     .thermo-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
     /* 직접 수량 입력 */
@@ -45,14 +45,14 @@
     .thermo-custom.show { display: flex; }
     .thermo-custom-row { display: flex; align-items: center; gap: 8px; }
     .thermo-custom-row label { font-size: 13px; color: #475569; min-width: 90px; }
-    .thermo-custom-row input { flex: 1; padding: 9px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 14px; text-align: center; }
+    .thermo-custom-row input, .thermo-custom-row select { flex: 1; padding: 9px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 14px; text-align: center; }
     .apply-btn { width: 100%; padding: 12px; background: #1e3a5f; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; }
     .apply-btn:hover { background: #1e40af; }
     /* 배관청소 평형 */
     .pipe-input-wrap { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
     .pipe-input-wrap input { flex: 1; padding: 11px 14px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 15px; text-align: center; }
     .pipe-preview { font-size: 13px; color: #059669; font-weight: 600; margin-top: 6px; min-height: 18px; }
-    /* 직접선택 모달 */
+    /* 직접선택 */
     .direct-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
     .cat-btn { padding: 7px 12px; border: 1.5px solid #e5e7eb; border-radius: 20px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151; }
     .cat-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
@@ -62,6 +62,11 @@
     .item-name { font-size: 14px; font-weight: 600; color: #1f2937; }
     .item-price { font-size: 12px; color: #6b7280; margin-top: 2px; }
     .item-add-btn { padding: 7px 14px; background: #1e3a5f; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    /* 수기 입력 */
+    .manual-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .manual-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .manual-row input { padding: 9px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+    .manual-row input:focus { outline: none; border-color: #1e3a5f; }
     /* 품목 목록 */
     .items-empty { text-align: center; padding: 30px 20px; color: #9ca3af; font-size: 14px; }
     .item-card { border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #fafafa; }
@@ -72,6 +77,7 @@
     .item-card-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
     .item-mode-btn { padding: 5px 10px; border: 1.5px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #6b7280; }
     .item-mode-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    .item-mode-btn.dist-only { border-color: #f59e0b; background: #fef3c7; color: #92400e; cursor: default; }
     .item-qty-wrap { display: flex; align-items: center; gap: 6px; }
     .item-qty-wrap label { font-size: 12px; color: #9ca3af; }
     .item-qty-wrap input { width: 60px; padding: 5px 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 13px; text-align: center; }
@@ -95,6 +101,29 @@
     .submit-btn:hover { background: #c2410c; }
     .save-btn { width: 100%; padding: 13px; background: #fff; color: #1e3a5f; border: 2px solid #1e3a5f; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
     .save-btn:hover { background: #eff6ff; }
+    /* 대시보드 */
+    .dash-hero { background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%); color: #fff; border-radius: 16px; padding: 24px 20px; margin-bottom: 14px; }
+    .dash-hero h2 { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+    .dash-hero p { font-size: 13px; opacity: .8; }
+    .dash-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .stat-card { background: #fff; border-radius: 12px; padding: 14px 10px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .stat-num { font-size: 26px; font-weight: 800; color: #1e3a5f; }
+    .stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .stat-amount { font-size: 14px; font-weight: 700; color: #e85d04; }
+    .quick-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .quick-btn { padding: 18px 12px; border: none; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; text-align: center; transition: all .15s; }
+    .quick-btn-primary { background: #e85d04; color: #fff; }
+    .quick-btn-primary:hover { background: #c2410c; }
+    .quick-btn-secondary { background: #1e3a5f; color: #fff; }
+    .quick-btn-secondary:hover { background: #1e40af; }
+    .quick-btn .icon { font-size: 22px; display: block; margin-bottom: 6px; }
+    .recent-list { display: flex; flex-direction: column; gap: 10px; }
+    .recent-item { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); display: flex; justify-content: space-between; align-items: center; }
+    .recent-item-left .name { font-size: 14px; font-weight: 700; color: #1f2937; }
+    .recent-item-left .meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .recent-item-right .amount { font-size: 15px; font-weight: 800; color: #1e3a5f; }
+    .recent-item-right .status { font-size: 11px; color: #6b7280; text-align: right; margin-top: 2px; }
+    .empty-recent { text-align: center; padding: 30px 20px; color: #9ca3af; font-size: 14px; }
     /* 토스트 */
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
     .toast.show { opacity: 1; }
@@ -103,6 +132,7 @@
       .total-amount { font-size: 24px; }
       .item-card-row { gap: 6px; }
       .item-price-wrap input { width: 80px; }
+      .thermo-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -118,9 +148,53 @@
   </div>
 </div>
 
-<div class="container">
+<!-- ===== 대시보드 화면 ===== -->
+<div class="container" id="pageDashboard">
+  <div class="info-banner" id="techBannerDash" style="display:none">
+    ⚠️ <strong>기사 견적 안내</strong> — 작성한 견적은 <strong>본사/지사 검토 후 고객에게 발송</strong>됩니다.
+  </div>
+  <div class="dash-hero">
+    <h2>📋 견적 자동 생성기</h2>
+    <p>퓨처에너지테크 지역난방센터</p>
+  </div>
+  <div class="dash-stats">
+    <div class="stat-card">
+      <div class="stat-num" id="statTotal">-</div>
+      <div class="stat-label">전체 견적 수</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statMonth">-</div>
+      <div class="stat-label">이번 달 견적</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-amount" id="statAmount">-</div>
+      <div class="stat-label">이번 달 총액</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">⚡ 빠른 실행</div>
+    <div class="quick-btns">
+      <button class="quick-btn quick-btn-primary" onclick="showForm()">
+        <span class="icon">✏️</span>
+        <span id="btnNewEstLabel">새 견적 작성</span>
+      </button>
+      <button class="quick-btn quick-btn-secondary" onclick="showEstimateList()">
+        <span class="icon">📄</span>
+        견적 목록 보기
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🕐 최근 견적</div>
+    <div id="recentList"><div class="empty-recent">불러오는 중...</div></div>
+  </div>
+</div>
 
-  <!-- 기사 안내 배너 -->
+<!-- ===== 견적 작성 폼 화면 ===== -->
+<div class="container" id="pageForm" style="display:none">
+  <div style="margin-bottom:12px;">
+    <button class="btn-sm" style="background:#1e3a5f;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;" onclick="showDashboard()">← 대시보드로</button>
+  </div>
   <div class="info-banner" id="techBanner" style="display:none">
     ⚠️ <strong>기사 견적 안내</strong> — 작성한 견적은 <strong>본사/지사 검토 후 고객에게 발송</strong>됩니다.
   </div>
@@ -155,31 +229,54 @@
 
     <!-- 분배기 교체 - 구수 선택 -->
     <div class="sub-section" id="sec-dist" style="display:none">
-      <div class="sub-title">💡 분배기 구수를 선택하면 분배기·유량밸브·스트레이너가 분배기시공 할인단가로 자동 추가됩니다.</div>
+      <div class="sub-title">🔵 분배기 구수를 선택하세요</div>
       <div class="port-grid" id="portGrid"></div>
+
       <!-- 온도조절기 옵션 -->
       <div id="thermoSec" style="display:none; margin-top:14px;">
-        <div class="sub-title">🌡️ 온도조절기 옵션을 선택하세요</div>
+        <div class="sub-title">🌡️ 온도조절기 유형을 선택하세요</div>
         <div class="thermo-grid">
-          <button class="thermo-btn" id="th-all" onclick="selectThermo('all')">각 방마다 온도조절기 있음 (구수만큼)</button>
-          <button class="thermo-btn" id="th-one" onclick="selectThermo('one')">거실에 1개만 있음</button>
-          <button class="thermo-btn" id="th-none" onclick="selectThermo('none')">온도조절기 없음</button>
-          <button class="thermo-btn" id="th-custom" onclick="selectThermo('custom')">직접 수량 입력</button>
+          <button class="thermo-btn" id="th-all" onclick="selectThermo('all')">각 방마다<br/>온도조절기 있음</button>
+          <button class="thermo-btn" id="th-one" onclick="selectThermo('one')">거실에<br/>1개만 있음</button>
+          <button class="thermo-btn" id="th-none" onclick="selectThermo('none')">온도조절기<br/>없음</button>
+          <button class="thermo-btn" id="th-custom" onclick="selectThermo('custom')">직접 수량<br/>입력</button>
         </div>
+        <!-- 각방 온도조절기 선택 시 추가 옵션 -->
+        <div id="thermoAllExtra" style="display:none; margin-top:10px;">
+          <div class="sub-title" style="margin-bottom:8px;">🔧 구동기 유형을 선택하세요</div>
+          <div class="thermo-grid">
+            <button class="thermo-btn" id="act-paraffin" onclick="selectActuator('paraffin')">구동기<br/>파라핀</button>
+            <button class="thermo-btn" id="act-motor" onclick="selectActuator('motor')">구동기<br/>모터타입</button>
+          </div>
+          <div class="sub-title" style="margin-top:10px; margin-bottom:8px;">🎛️ 제어기 유형을 선택하세요</div>
+          <div class="thermo-grid">
+            <button class="thermo-btn" id="ctrl-none" onclick="selectController('none')">제어기<br/>없음</button>
+            <button class="thermo-btn" id="ctrl-basic" onclick="selectController('basic')">제어기<br/>141,000원</button>
+            <button class="thermo-btn" id="ctrl-wifi" onclick="selectController('wifi')">와이파이형<br/>220,000원</button>
+            <button class="thermo-btn" id="ctrl-vtype" onclick="selectController('vtype')">조절기<br/>V타입</button>
+          </div>
+        </div>
+        <!-- 직접 수량 입력 -->
         <div class="thermo-custom" id="thermoCustom">
           <div class="thermo-custom-row">
-            <label>온도조절기 수량</label>
+            <label>디지털 온도조절기</label>
             <input type="number" id="customThermo" min="0" max="20" value="0" placeholder="0" />
           </div>
           <div class="thermo-custom-row">
-            <label>구동기 수량</label>
-            <input type="number" id="customActuator" min="0" max="20" value="0" placeholder="0" />
+            <label>구동기 파라핀</label>
+            <input type="number" id="customActParaffin" min="0" max="20" value="0" placeholder="0" />
           </div>
           <div class="thermo-custom-row">
-            <label>제어기 포함</label>
+            <label>구동기 모터타입</label>
+            <input type="number" id="customActMotor" min="0" max="20" value="0" placeholder="0" />
+          </div>
+          <div class="thermo-custom-row">
+            <label>제어기 유형</label>
             <select id="customController">
-              <option value="1">포함 (1개)</option>
-              <option value="0">미포함</option>
+              <option value="none">없음</option>
+              <option value="basic">제어기 (141,000원)</option>
+              <option value="wifi">와이파이형 (220,000원)</option>
+              <option value="vtype">V타입 (110,000원)</option>
             </select>
           </div>
           <button class="apply-btn" onclick="applyCustomThermo()">적용</button>
@@ -209,6 +306,22 @@
       <div class="sub-title">📝 공사 항목을 선택하세요</div>
       <div class="direct-cats" id="directCats"></div>
       <div class="item-list" id="directList"></div>
+      <!-- 수기 입력 -->
+      <div style="margin-top:14px; border-top:1px solid #e5e7eb; padding-top:12px;">
+        <div class="sub-title" style="margin-bottom:8px;">✏️ 기타 직접 입력</div>
+        <div class="manual-form">
+          <div class="manual-row">
+            <input type="text" id="manualName" placeholder="품목명" />
+            <input type="text" id="manualSpec" placeholder="규격" />
+          </div>
+          <div class="manual-row">
+            <input type="number" id="manualQty" placeholder="수량" min="1" value="1" />
+            <input type="number" id="manualPrice" placeholder="단가" />
+          </div>
+          <input type="text" id="manualNote" placeholder="비고 (선택)" style="padding:9px 12px; border:1.5px solid #d1d5db; border-radius:8px; font-size:13px;" />
+          <button class="apply-btn" onclick="addManualItem()">직접 입력 추가</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -254,16 +367,27 @@
       <label>주소</label>
       <input type="text" id="custAddr" placeholder="경기도 안산시..." />
     </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label>평형 <span style="font-size:11px;color:#9ca3af">(배관청소 자동계산)</span></label>
+        <input type="number" id="custArea" placeholder="예: 32" min="10" max="200" oninput="onAreaChange()" />
+      </div>
+      <div class="form-row">
+        <label>고객 유형</label>
+        <select id="custType">
+          <option value="general">일반 고객</option>
+          <option value="group">단체/아파트</option>
+        </select>
+      </div>
+    </div>
     <div class="form-row">
       <label>메모</label>
       <textarea id="custMemo" rows="2" placeholder="특이사항, 요청사항 등"></textarea>
     </div>
   </div>
 
-  <!-- 제출 버튼 -->
   <button class="submit-btn" onclick="submitEstimate()">📤 견적 보고하기</button>
   <button class="save-btn" onclick="saveDraft()">💾 임시 저장</button>
-
 </div>
 
 <div class="toast" id="toast"></div>
@@ -277,8 +401,65 @@ function getApiBase() {
   return '';
 }
 const API = getApiBase();
-
 let me = null;
+
+// ─── 화면 전환 ─────────────────────────────────────────────
+function showDashboard() {
+  document.getElementById('pageDashboard').style.display = 'block';
+  document.getElementById('pageForm').style.display = 'none';
+  loadDashboardStats();
+}
+function showForm() {
+  document.getElementById('pageDashboard').style.display = 'none';
+  document.getElementById('pageForm').style.display = 'block';
+  document.getElementById('estDate').value = new Date().toISOString().slice(0,10);
+  restoreDraft();
+}
+function showEstimateList() {
+  const el = document.getElementById('recentList');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+  toast('최근 견적 목록을 확인하세요.', 2000);
+}
+
+async function loadDashboardStats() {
+  const el = document.getElementById('recentList');
+  try {
+    const r = await callApi('estimates.list', { limit: 10, userId: me.userId }, true);
+    const list = r?.items || r || [];
+    const now = new Date();
+    const thisMonth = list.filter(e => {
+      const d = new Date(e.createdAt || e.sentAt || 0);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+    document.getElementById('statTotal').textContent = list.length;
+    document.getElementById('statMonth').textContent = thisMonth.length;
+    const totalAmt = thisMonth.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    document.getElementById('statAmount').textContent = totalAmt > 0 ? (totalAmt / 10000).toFixed(0) + '만원' : '0원';
+    if (list.length === 0) {
+      el.innerHTML = '<div class="empty-recent">아직 작성된 견적이 없습니다.</div>';
+    } else {
+      const statusLabel = { draft:'임시저장', pending:'검토대기', sent:'발송완료', approved:'승인', rejected:'반려' };
+      el.innerHTML = list.slice(0, 5).map(e => {
+        const amt = Number(e.amount) || 0;
+        const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('ko-KR') : '-';
+        const st = statusLabel[e.status] || e.status || '-';
+        return `<div class="recent-item">
+          <div class="recent-item-left">
+            <div class="name">${e.customerName || e.title || '고객'}</div>
+            <div class="meta">${d} · ${e.buildingName || ''}</div>
+          </div>
+          <div class="recent-item-right">
+            <div class="amount">${amt > 0 ? amt.toLocaleString() + '원' : '-'}</div>
+            <div class="status">${st}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    el.innerHTML = '<div class="empty-recent">견적 목록을 불러올 수 없습니다.</div>';
+  }
+}
+
 (function() {
   const raw = sessionStorage.getItem('authUser') || localStorage.getItem('authUser');
   if (!raw) { location.href = '/web/login.html'; return; }
@@ -294,17 +475,16 @@ let me = null;
   const roleLabel = { technician:'기사', staff:'직원', admin:'관리자', branch_manager:'지사장', headquarters:'본사', hq_admin:'본사 관리자' };
   document.getElementById('meInfo').textContent = (me.name||'사용자') + ' · ' + (roleLabel[me.appRole]||me.appRole);
   if (me.appRole === 'technician') {
+    document.getElementById('techBannerDash').style.display = 'block';
     document.getElementById('techBanner').style.display = 'block';
     document.querySelector('.submit-btn').textContent = '📤 본사에 견적 보고하기';
+    document.getElementById('btnNewEstLabel').textContent = '현장 견적 작성';
   } else {
     document.querySelector('.submit-btn').textContent = '📤 견적 생성하기';
+    document.getElementById('btnNewEstLabel').textContent = '새 견적 작성';
   }
-  // 오늘 날짜 기본값
-  document.getElementById('estDate').value = new Date().toISOString().slice(0,10);
-  // 임시저장 복원
-  restoreDraft();
-  // 서버에서 단가 로드
   loadPricesFromServer();
+  showDashboard();
 })();
 
 function logout() {
@@ -334,70 +514,98 @@ function toast(msg, dur) {
   setTimeout(() => t.classList.remove('show'), dur || 2200);
 }
 
-// ─── 단가 DB (서버에서 동적 로드) ─────────────────────────────────────────────
-let PRICES = { dist: {}, valve: {std:0,disc:0}, strainer: {std:0,disc:0}, thermo: {std:0,disc:0}, actuator: {std:0,disc:0}, controller: {std:0,disc:0}, partial: {}, direct: [] };
+// ─── 단가 DB ─────────────────────────────────────────────────
+// 분배기시공시 할인 적용 가능 품목 (유량밸브15A, 스트레이너25A, 메인밸브)
+const DIST_DISCOUNT_ITEMS = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+
+let PRICES = {
+  dist: {},          // { 2: {std, disc}, 3: ... }
+  valve15A: null,    // 유량밸브 15A (분배기시공시 할인단가)
+  strainer25A: null, // 스트레이너 25A
+  mainValve20Dist: null, // 메인밸브 20A 분배기교체
+  mainValve25Dist: null, // 메인밸브 25A 분배기교체
+  mainValve20Ind: null,  // 메인밸브 20A 독립시공
+  mainValve25Ind: null,  // 메인밸브 25A 독립시공
+  thermoDigital: null,   // 디지털 온도조절기
+  thermoAnalog: null,    // 아날로그 조절기
+  controller: null,      // 제어기
+  controllerWifi: null,  // 와이파이형 제어기
+  controllerVtype: null, // 조절기 V타입
+  actuatorParaffin: null,// 구동기 파라핀
+  actuatorMotor: null,   // 구동기 모터타입
+  partial: {},       // 부분수리 항목 { name: {std, disc} }
+  direct: [],        // 직접선택 목록
+};
 let pricesLoaded = false;
 
 async function loadPricesFromServer() {
   try {
     const items = await callApi('prices.listActive', {}, true);
     if (!items || !items.length) return;
-    const newPrices = { dist: {}, valve: null, strainer: null, thermo: null, actuator: null, controller: null, partial: {}, direct: [] };
+    const np = { dist: {}, partial: {}, direct: [] };
     for (const item of items) {
       const pr = { std: item.stdPrice, disc: item.discPrice };
-      const distMatch = item.name.match(/^분배기 교체 \((\d+)구\)$/);
-      if (distMatch) { newPrices.dist[parseInt(distMatch[1])] = pr; }
-      if (item.name === '유량밸브 교체') newPrices.valve = pr;
-      if (item.name === '스트레이너 교체') newPrices.strainer = pr;
-      if (item.name === '온도조절기 교체') newPrices.thermo = pr;
-      if (item.name === '구동기 교체') newPrices.actuator = pr;
-      if (item.name === '제어기 교체') newPrices.controller = pr;
-      if (item.category !== '분배기교체') { newPrices.partial[item.name] = pr; }
-      newPrices.direct.push({ cat: item.category === '분배기교체' ? '밸브/배관' : item.category, name: item.name, std: item.stdPrice, disc: item.discPrice });
+      // 분배기 본체
+      const dm = item.name.match(/^분배기 교체 \((\d+)구\)$/);
+      if (dm) { np.dist[parseInt(dm[1])] = pr; continue; }
+      // 분배기시공시 할인 품목
+      if (item.name === '유량밸브 15A') { PRICES.valve15A = pr; }
+      else if (item.name === '스트레이너 25A') { PRICES.strainer25A = pr; }
+      else if (item.name === '메인밸브 20A (분배기교체)') { PRICES.mainValve20Dist = pr; }
+      else if (item.name === '메인밸브 25A (분배기교체)') { PRICES.mainValve25Dist = pr; }
+      else if (item.name === '메인밸브 20A (독립시공)') { PRICES.mainValve20Ind = pr; }
+      else if (item.name === '메인밸브 25A (독립시공)') { PRICES.mainValve25Ind = pr; }
+      // 온도조절기/제어기/구동기
+      else if (item.name === '디지털 온도조절기') { PRICES.thermoDigital = pr; }
+      else if (item.name === '아날로그 조절기') { PRICES.thermoAnalog = pr; }
+      else if (item.name === '제어기') { PRICES.controller = pr; }
+      else if (item.name === '와이파이형 제어기') { PRICES.controllerWifi = pr; }
+      else if (item.name === '조절기 V타입') { PRICES.controllerVtype = pr; }
+      else if (item.name === '구동기 파라핀') { PRICES.actuatorParaffin = pr; }
+      else if (item.name === '구동기 모터타입') { PRICES.actuatorMotor = pr; }
+      // 직접선택 목록 (분배기 본체 제외)
+      if (item.category !== '분배기교체') {
+        np.partial[item.name] = pr;
+        np.direct.push({ cat: item.category, name: item.name, std: item.stdPrice, disc: item.discPrice, distOnly: DIST_DISCOUNT_ITEMS.includes(item.name) });
+      }
     }
-    PRICES.dist = newPrices.dist;
-    if (newPrices.valve) PRICES.valve = newPrices.valve;
-    if (newPrices.strainer) PRICES.strainer = newPrices.strainer;
-    if (newPrices.thermo) PRICES.thermo = newPrices.thermo;
-    if (newPrices.actuator) PRICES.actuator = newPrices.actuator;
-    if (newPrices.controller) PRICES.controller = newPrices.controller;
-    PRICES.partial = newPrices.partial;
-    PRICES.direct = newPrices.direct;
+    Object.assign(PRICES, np);
     pricesLoaded = true;
   } catch(e) {
-    console.warn('단가 로드 실패, 기본값 사용:', e);
+    console.warn('단가 로드 실패:', e);
   }
 }
 
 // ─── 상태 ───────────────────────────────────────────────────
-let priceMode = 'standard'; // 'standard' | 'discount'
+let priceMode = 'standard';
 let currentType = null;
 let selectedPorts = 0;
 let selectedThermo = null;
-let items = []; // { id, name, qty, unitPrice, mode, auto }
+let selectedActuator = null;  // 'paraffin' | 'motor'
+let selectedController = null; // 'none' | 'basic' | 'wifi' | 'vtype'
+let items = [];
 let itemIdSeq = 0;
 
 function setPriceMode(mode) {
   priceMode = mode;
   document.getElementById('modeStd').classList.toggle('active', mode === 'standard');
   document.getElementById('modeDisc').classList.toggle('active', mode === 'discount');
-  // 전체 품목 단가 업데이트 (수동 수정 안 한 것만)
   items.forEach(item => {
-    if (!item.manualPrice) {
-      item.mode = mode;
-      const p = getItemBasePrice(item);
-      if (p !== null) item.unitPrice = p;
+    if (!item.manualPrice && item.priceRef) {
+      // 분배기시공시 할인 품목은 항상 disc 단가 사용
+      if (item.distOnly) {
+        item.unitPrice = item.priceRef.disc;
+      } else {
+        item.mode = mode;
+        item.unitPrice = mode === 'standard' ? item.priceRef.std : item.priceRef.disc;
+      }
     }
   });
   renderItems();
-}
-
-function getItemBasePrice(item) {
-  const m = item.mode || priceMode;
-  if (item.priceRef) {
-    return m === 'standard' ? item.priceRef.std : item.priceRef.disc;
-  }
-  return null;
+  // 부분수리/직접선택 목록 갱신
+  if (currentType === 'partial') renderPartialGrid();
+  if (currentType === 'direct') renderDirectList();
+  if (currentType === 'pipe') calcPipe();
 }
 
 // ─── 공사 유형 선택 ───────────────────────────────────────
@@ -414,36 +622,54 @@ function selectType(type) {
 
 // ─── 분배기 구수 선택 ───────────────────────────────────────
 function renderPortGrid() {
-  const ports = [2,3,4,5,6,7,8,9,10,'기타'];
+  const ports = [2,3,4,5,6,7,8,9,10];
   document.getElementById('portGrid').innerHTML = ports.map(p =>
-    '<button class="port-btn' + (selectedPorts === p ? ' active' : '') + '" onclick="selectPort(' + (typeof p === 'number' ? p : "'기타'") + ')">' + p + '구</button>'
-  ).join('');
+    '<button class="port-btn' + (selectedPorts === p ? ' active' : '') + '" onclick="selectPort(' + p + ')">' + p + '구</button>'
+  ).join('') + '<button class="port-btn" onclick="selectPort(\'기타\')">기타</button>';
 }
 
 function selectPort(port) {
   selectedPorts = port;
   renderPortGrid();
-  // 분배기 패키지 추가
-  if (typeof port === 'number') {
-    const pr = PRICES.dist[port];
-    if (!pr) { toast('해당 구수 단가가 등록되지 않았습니다.'); return; }
-    // 기존 분배기 관련 자동 품목 제거
-    items = items.filter(i => !i.auto || !['분배기','유량밸브','스트레이너','온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
-    // 분배기 교체
-    addItem({ name: '분배기 교체 (' + port + '구)', qty: 1, priceRef: pr, auto: false });
-    // 유량밸브, 스트레이너 (분배기 패키지 포함가)
-    addItem({ name: '유량밸브 교체', qty: 1, priceRef: PRICES.valve, auto: true });
-    addItem({ name: '스트레이너 교체', qty: 1, priceRef: PRICES.strainer, auto: true });
-    renderItems();
-    // 온도조절기 옵션 표시
-    document.getElementById('thermoSec').style.display = 'block';
-    selectedThermo = null;
-    ['all','one','none','custom'].forEach(k => document.getElementById('th-' + k).classList.remove('active'));
-    document.getElementById('thermoCustom').classList.remove('show');
-  } else {
-    // 기타 - 직접 입력
+  if (typeof port !== 'number') {
     toast('기타 구수는 직접선택 탭에서 추가해 주세요.');
+    return;
   }
+  const pr = PRICES.dist[port];
+  if (!pr) { toast('해당 구수 단가가 등록되지 않았습니다.'); return; }
+
+  // 기존 분배기 관련 자동 품목 제거
+  items = items.filter(i => !i.distAuto);
+
+  // 1. 분배기 본체 (표준시공가/단체할인가 선택 가능)
+  addItem({ name: '분배기 교체 (' + port + '구)', qty: 1, priceRef: pr, auto: false, distAuto: false });
+
+  // 2. 스트레이너 25A (단체할인가 고정 — 분배기 교체 시 자동 추가)
+  if (PRICES.strainer25A) {
+    addItem({ name: '스트레이너 25A', qty: 1, priceRef: PRICES.strainer25A, auto: true, distAuto: true, distOnly: true });
+  }
+
+  // 3. 배관청소 자동 추가 (분배기 교체 시)
+  const areaEl = document.getElementById('custArea');
+  const area = areaEl ? parseInt(areaEl.value) || 0 : 0;
+  if (area >= 10) {
+    const std = area * 1000 + 140000;
+    const disc = area * 1000 + 80000;
+    addItem({ name: '배관청소 (' + area + '평)', qty: 1, priceRef: { std, disc }, auto: true, distAuto: true });
+  } else {
+    // 평형 미입력 시 0원 플레이스홀더 추가 (사용자가 평형 입력 후 수동 추가 유도)
+    addItem({ name: '배관청소 (평형 입력 필요)', qty: 1, priceRef: { std: 0, disc: 0 }, auto: true, distAuto: true, needsArea: true });
+  }
+
+  renderItems();
+  // 온도조절기 옵션 표시
+  document.getElementById('thermoSec').style.display = 'block';
+  document.getElementById('thermoAllExtra').style.display = 'none';
+  document.getElementById('thermoCustom').classList.remove('show');
+  selectedThermo = null;
+  selectedActuator = null;
+  selectedController = null;
+  ['all','one','none','custom'].forEach(k => document.getElementById('th-' + k).classList.remove('active'));
 }
 
 // ─── 온도조절기 옵션 ───────────────────────────────────────
@@ -451,46 +677,110 @@ function selectThermo(opt) {
   selectedThermo = opt;
   ['all','one','none','custom'].forEach(k => document.getElementById('th-' + k).classList.toggle('active', k === opt));
   document.getElementById('thermoCustom').classList.toggle('show', opt === 'custom');
-  if (opt !== 'custom') applyThermo(opt);
+  document.getElementById('thermoAllExtra').style.display = opt === 'all' ? 'block' : 'none';
+
+  // 기존 온도조절기/구동기/제어기 자동 품목 제거
+  items = items.filter(i => !i.thermoAuto);
+
+  const port = typeof selectedPorts === 'number' ? selectedPorts : 1;
+
+  if (opt === 'all') {
+    // 유량밸브 15A: 구수만큼 자동 추가 (분배기시공시 할인단가 고정)
+    if (PRICES.valve15A) {
+      addItem({ name: '유량밸브 15A', qty: port, priceRef: PRICES.valve15A, auto: true, distAuto: true, thermoAuto: true, distOnly: true });
+    }
+    // 디지털 온도조절기: 각방 선택만으로는 자동 추가 안 함
+    // → 제어기(basic/wifi) 선택 시에만 3개 자동 추가됨 (selectController 참조)
+    // 구동기/제어기는 아래 selectActuator/selectController에서 추가
+    selectedActuator = null;
+    selectedController = null;
+    ['act-paraffin','act-motor'].forEach(k => document.getElementById(k).classList.remove('active'));
+    ['ctrl-none','ctrl-basic','ctrl-wifi','ctrl-vtype'].forEach(k => document.getElementById(k).classList.remove('active'));
+  } else if (opt === 'one') {
+    // 거실 1개: 유량밸브 자동 추가 없음, 정유량밸브 필요 안내
+    toast('거실에 온도조절기 1개: 유량밸브 자동 추가 없음. 정유량밸브가 필요하면 직접 선택하세요.', 3500);
+  } else if (opt === 'none') {
+    toast('온도조절기 없음: 필요한 품목은 직접 선택 탭에서 추가하세요.', 3000);
+  }
+
+  renderItems();
 }
 
-function applyThermo(opt) {
-  // 기존 온도조절기/구동기/제어기 자동 품목 제거
-  items = items.filter(i => !i.auto || !['온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
+function selectActuator(type) {
+  selectedActuator = type;
+  ['act-paraffin','act-motor'].forEach(k => document.getElementById(k).classList.toggle('active', k === 'act-' + type));
+  // 기존 구동기 제거 후 재추가
+  items = items.filter(i => !i.actuatorAuto);
   const port = typeof selectedPorts === 'number' ? selectedPorts : 1;
-  if (opt === 'all') {
-    addItem({ name: '온도조절기 교체', qty: port, priceRef: PRICES.thermo, auto: true });
-    addItem({ name: '구동기 교체', qty: port, priceRef: PRICES.actuator, auto: true });
-    addItem({ name: '제어기 교체', qty: 1, priceRef: PRICES.controller, auto: true });
-  } else if (opt === 'one') {
-    addItem({ name: '온도조절기 교체', qty: 1, priceRef: PRICES.thermo, auto: true });
-    addItem({ name: '구동기 교체', qty: 1, priceRef: PRICES.actuator, auto: true });
-    addItem({ name: '제어기 교체', qty: 1, priceRef: PRICES.controller, auto: true });
-  } else if (opt === 'none') {
-    // 추가 없음
+  const pr = type === 'paraffin' ? PRICES.actuatorParaffin : PRICES.actuatorMotor;
+  const name = type === 'paraffin' ? '구동기 파라핀' : '구동기 모터타입';
+  if (pr) addItem({ name, qty: port, priceRef: pr, auto: true, thermoAuto: true, actuatorAuto: true });
+  renderItems();
+}
+
+function selectController(type) {
+  selectedController = type;
+  ['ctrl-none','ctrl-basic','ctrl-wifi','ctrl-vtype'].forEach(k => document.getElementById(k).classList.toggle('active', k === 'ctrl-' + type));
+  // 기존 제어기 제거 후 재추가
+  items = items.filter(i => !i.controllerAuto);
+  if (type === 'none') { renderItems(); return; }
+  let pr = null, name = '';
+  if (type === 'basic') { pr = PRICES.controller; name = '제어기'; }
+  else if (type === 'wifi') { pr = PRICES.controllerWifi; name = '와이파이형 제어기'; }
+  else if (type === 'vtype') { pr = PRICES.controllerVtype; name = '조절기 V타입'; }
+  if (pr) {
+    addItem({ name, qty: 1, priceRef: pr, auto: true, thermoAuto: true, controllerAuto: true });
+    // 제어기/와이파이형 선택 시 디지털 온도조절기 3개 자동 추가 (이미 추가된 경우 제외)
+    if ((type === 'basic' || type === 'wifi') && PRICES.thermoDigital) {
+      const port = typeof selectedPorts === 'number' ? selectedPorts : 1;
+      // 이미 추가된 디지털 온도조절기 수량 확인
+      const existing = items.find(i => i.name === '디지털 온도조절기' && i.thermoAuto);
+      if (!existing) {
+        addItem({ name: '디지털 온도조절기', qty: 3, priceRef: PRICES.thermoDigital, auto: true, thermoAuto: true });
+        toast('제어기 선택 시 디지털 온도조절기 3개가 자동 추가됩니다.', 2500);
+      }
+    }
   }
   renderItems();
 }
 
 function applyCustomThermo() {
   const thermoQty = parseInt(document.getElementById('customThermo').value) || 0;
-  const actuatorQty = parseInt(document.getElementById('customActuator').value) || 0;
-  const ctrlQty = parseInt(document.getElementById('customController').value) || 0;
-  items = items.filter(i => !i.auto || !['온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
-  if (thermoQty > 0) addItem({ name: '온도조절기 교체', qty: thermoQty, priceRef: PRICES.thermo, auto: true });
-  if (actuatorQty > 0) addItem({ name: '구동기 교체', qty: actuatorQty, priceRef: PRICES.actuator, auto: true });
-  if (ctrlQty > 0) addItem({ name: '제어기 교체', qty: ctrlQty, priceRef: PRICES.controller, auto: true });
+  const actParaffinQty = parseInt(document.getElementById('customActParaffin').value) || 0;
+  const actMotorQty = parseInt(document.getElementById('customActMotor').value) || 0;
+  const ctrlType = document.getElementById('customController').value;
+
+  items = items.filter(i => !i.thermoAuto);
+
+  if (thermoQty > 0 && PRICES.thermoDigital) {
+    addItem({ name: '디지털 온도조절기', qty: thermoQty, priceRef: PRICES.thermoDigital, auto: true, thermoAuto: true });
+  }
+  if (actParaffinQty > 0 && PRICES.actuatorParaffin) {
+    addItem({ name: '구동기 파라핀', qty: actParaffinQty, priceRef: PRICES.actuatorParaffin, auto: true, thermoAuto: true });
+  }
+  if (actMotorQty > 0 && PRICES.actuatorMotor) {
+    addItem({ name: '구동기 모터타입', qty: actMotorQty, priceRef: PRICES.actuatorMotor, auto: true, thermoAuto: true });
+  }
+  if (ctrlType !== 'none') {
+    let pr = null, name = '';
+    if (ctrlType === 'basic') { pr = PRICES.controller; name = '제어기'; }
+    else if (ctrlType === 'wifi') { pr = PRICES.controllerWifi; name = '와이파이형 제어기'; }
+    else if (ctrlType === 'vtype') { pr = PRICES.controllerVtype; name = '조절기 V타입'; }
+    if (pr) addItem({ name, qty: 1, priceRef: pr, auto: true, thermoAuto: true });
+  }
   renderItems();
   toast('적용되었습니다.');
 }
 
 // ─── 부분수리 항목 ───────────────────────────────────────
 function renderPartialGrid() {
-  const names = Object.keys(PRICES.partial);
+  // 분배기시공시 할인 전용 품목 제외 (유량밸브15A, 스트레이너25A, 메인밸브 분배기교체)
+  const excludeFromPartial = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+  const names = Object.keys(PRICES.partial).filter(n => !excludeFromPartial.includes(n) && !n.startsWith('분배기 교체'));
   document.getElementById('partialGrid').innerHTML = names.map(name => {
     const pr = PRICES.partial[name];
     const p = priceMode === 'standard' ? pr.std : pr.disc;
-    return '<button class="port-btn" onclick="addPartialItem(\'' + name + '\')">' + name + '<br/><small style="font-weight:400;color:#6b7280">' + p.toLocaleString() + '원</small></button>';
+    return '<button class="port-btn" onclick="addPartialItem(\'' + name.replace(/'/g, "\\'") + '\')">' + name + '<br/><small style="font-weight:400;color:#6b7280">' + (p > 0 ? p.toLocaleString() + '원' : '별도') + '</small></button>';
   }).join('');
 }
 
@@ -500,6 +790,23 @@ function addPartialItem(name) {
   addItem({ name, qty: 1, priceRef: pr, auto: false });
   renderItems();
   toast(name + ' 추가됨');
+}
+
+// ─── 평형 입력 시 배관청소 자동 업데이트 ───────────────────────────────────────
+function onAreaChange() {
+  const area = parseInt(document.getElementById('custArea').value) || 0;
+  // 분배기 교체 선택 중일 때만 배관청소 자동 업데이트
+  if (currentType !== 'dist' || !selectedPorts) return;
+  // 기존 배관청소 자동 품목 제거 (needsArea 포함)
+  items = items.filter(i => !(i.distAuto && (i.name.startsWith('배관청소') || i.needsArea)));
+  if (area >= 10) {
+    const std = area * 1000 + 140000;
+    const disc = area * 1000 + 80000;
+    addItem({ name: '배관청소 (' + area + '평)', qty: 1, priceRef: { std, disc }, auto: true, distAuto: true });
+  } else {
+    addItem({ name: '배관청소 (평형 입력 필요)', qty: 1, priceRef: { std: 0, disc: 0 }, auto: true, distAuto: true, needsArea: true });
+  }
+  renderItems();
 }
 
 // ─── 배관청소 평형 계산 ───────────────────────────────────────
@@ -517,7 +824,6 @@ function addPipeItem() {
   if (!area || area < 10) { toast('올바른 평형을 입력하세요 (10평 이상)'); return; }
   const std = area * 1000 + 140000;
   const disc = area * 1000 + 80000;
-  const price = priceMode === 'standard' ? std : disc;
   addItem({ name: '배관청소 (' + area + '평)', qty: 1, priceRef: { std, disc }, auto: false });
   renderItems();
   document.getElementById('pipeArea').value = '';
@@ -528,7 +834,10 @@ function addPipeItem() {
 // ─── 직접 선택 ───────────────────────────────────────
 let directCat = '전체';
 function renderDirectSection() {
-  const cats = ['전체', ...new Set(PRICES.direct.map(i => i.cat))];
+  // 분배기시공시 할인 전용 품목 제외
+  const excludeFromDirect = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+  const filtered = PRICES.direct.filter(i => !excludeFromDirect.includes(i.name) && !i.name.startsWith('분배기 교체 ('));
+  const cats = ['전체', ...new Set(filtered.map(i => i.cat))];
   document.getElementById('directCats').innerHTML = cats.map(c =>
     '<button class="cat-btn' + (directCat === c ? ' active' : '') + '" onclick="setDirectCat(\'' + c + '\')">' + c + '</button>'
   ).join('');
@@ -539,7 +848,9 @@ function setDirectCat(cat) {
   renderDirectSection();
 }
 function renderDirectList() {
-  const filtered = directCat === '전체' ? PRICES.direct : PRICES.direct.filter(i => i.cat === directCat);
+  const excludeFromDirect = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+  let filtered = PRICES.direct.filter(i => !excludeFromDirect.includes(i.name) && !i.name.startsWith('분배기 교체 ('));
+  if (directCat !== '전체') filtered = filtered.filter(i => i.cat === directCat);
   document.getElementById('directList').innerHTML = filtered.map(item => {
     const p = priceMode === 'standard' ? item.std : item.disc;
     return '<div class="item-row">' +
@@ -555,19 +866,51 @@ function addDirectItem(item) {
   toast(item.name + ' 추가됨');
 }
 
+// ─── 수기 입력 ───────────────────────────────────────
+function addManualItem() {
+  const name = document.getElementById('manualName').value.trim();
+  const spec = document.getElementById('manualSpec').value.trim();
+  const qty = parseInt(document.getElementById('manualQty').value) || 1;
+  const price = parseInt(document.getElementById('manualPrice').value) || 0;
+  const note = document.getElementById('manualNote').value.trim();
+  if (!name) { toast('품목명을 입력하세요.'); return; }
+  const fullName = name + (spec ? ' (' + spec + ')' : '') + (note ? ' [' + note + ']' : '');
+  addItem({ name: fullName, qty, priceRef: { std: price, disc: price }, auto: false, manualPrice: true });
+  renderItems();
+  document.getElementById('manualName').value = '';
+  document.getElementById('manualSpec').value = '';
+  document.getElementById('manualQty').value = '1';
+  document.getElementById('manualPrice').value = '';
+  document.getElementById('manualNote').value = '';
+  toast(name + ' 추가됨');
+}
+
 // ─── 품목 추가/삭제 ───────────────────────────────────────
 function addItem(opts) {
   const mode = opts.mode || priceMode;
-  const unitPrice = opts.priceRef ? (mode === 'standard' ? opts.priceRef.std : opts.priceRef.disc) : 0;
+  let unitPrice;
+  if (opts.manualPrice) {
+    unitPrice = opts.priceRef ? opts.priceRef.std : 0;
+  } else if (opts.distOnly) {
+    // 분배기시공시 할인 품목: 항상 disc 단가
+    unitPrice = opts.priceRef ? opts.priceRef.disc : 0;
+  } else {
+    unitPrice = opts.priceRef ? (mode === 'standard' ? opts.priceRef.std : opts.priceRef.disc) : 0;
+  }
   items.push({
     id: ++itemIdSeq,
     name: opts.name,
     qty: opts.qty || 1,
     unitPrice,
-    mode,
+    mode: opts.distOnly ? 'dist_discount' : mode,
     priceRef: opts.priceRef || null,
     auto: opts.auto || false,
-    manualPrice: false,
+    distAuto: opts.distAuto || false,
+    thermoAuto: opts.thermoAuto || false,
+    actuatorAuto: opts.actuatorAuto || false,
+    controllerAuto: opts.controllerAuto || false,
+    distOnly: opts.distOnly || false,
+    manualPrice: opts.manualPrice || false,
   });
 }
 
@@ -592,18 +935,16 @@ function updateItemPrice(id, price) {
 
 function updateItemMode(id, mode) {
   const item = items.find(i => i.id === id);
-  if (item) {
-    item.mode = mode;
-    item.manualPrice = false;
-    if (item.priceRef) item.unitPrice = mode === 'standard' ? item.priceRef.std : item.priceRef.disc;
-  }
+  if (!item || item.distOnly) return; // 분배기시공시 할인 품목은 변경 불가
+  item.mode = mode;
+  item.manualPrice = false;
+  if (item.priceRef) item.unitPrice = mode === 'standard' ? item.priceRef.std : item.priceRef.disc;
   renderItems();
 }
 
 // ─── 렌더링 ───────────────────────────────────────
 function renderItems() {
   const container = document.getElementById('itemsContainer');
-  const empty = document.getElementById('itemsEmpty');
   if (!items.length) {
     container.innerHTML = '<div class="items-empty" id="itemsEmpty">아직 추가된 공사 품목이 없습니다.<br/>위에서 공사 유형을 선택하세요.</div>';
     renderTotal();
@@ -611,6 +952,19 @@ function renderItems() {
   }
   container.innerHTML = items.map(item => {
     const subtotal = item.qty * item.unitPrice;
+    const modeStdActive = item.mode === 'standard' ? ' active' : '';
+    const modeDiscActive = item.mode === 'discount' ? ' active' : '';
+    const modeDistActive = item.distOnly ? ' active' : '';
+
+    let modeBtns;
+    if (item.distOnly) {
+      // 분배기시공시 할인 품목: 단체할인가 고정 표시
+      modeBtns = '<span class="item-mode-btn dist-only">단체할인가</span>';
+    } else {
+      modeBtns = '<button class="item-mode-btn' + modeStdActive + '" onclick="updateItemMode(' + item.id + ',\'standard\')">표준</button>' +
+                 '<button class="item-mode-btn' + modeDiscActive + '" onclick="updateItemMode(' + item.id + ',\'discount\')">단체</button>';
+    }
+
     return '<div class="item-card">' +
       '<div class="item-card-head">' +
         '<div><div class="item-card-name">' + item.name + '</div>' +
@@ -618,8 +972,7 @@ function renderItems() {
         '<button class="item-del" onclick="deleteItem(' + item.id + ')">✕</button>' +
       '</div>' +
       '<div class="item-card-row">' +
-        '<button class="item-mode-btn' + (item.mode === 'standard' ? ' active' : '') + '" onclick="updateItemMode(' + item.id + ',\'standard\')">표준</button>' +
-        '<button class="item-mode-btn' + (item.mode === 'discount' ? ' active' : '') + '" onclick="updateItemMode(' + item.id + ',\'discount\')">단체</button>' +
+        modeBtns +
         '<div class="item-qty-wrap"><label>수량</label><input type="number" min="1" value="' + item.qty + '" onchange="updateItemQty(' + item.id + ',this.value)" /></div>' +
         '<div class="item-price-wrap"><label>단가</label><input type="number" value="' + item.unitPrice + '" onchange="updateItemPrice(' + item.id + ',this.value)" /></div>' +
         '<div class="item-subtotal">' + subtotal.toLocaleString() + '원</div>' +
@@ -647,6 +1000,7 @@ function saveDraftAuto() {
         custPhone: document.getElementById('custPhone').value,
         custBuilding: document.getElementById('custBuilding').value,
         custAddr: document.getElementById('custAddr').value,
+        custArea: document.getElementById('custArea').value,
         custMemo: document.getElementById('custMemo').value,
         estDate: document.getElementById('estDate').value,
       }));
@@ -655,7 +1009,6 @@ function saveDraftAuto() {
 }
 
 function saveDraft() {
-  saveDraftAuto();
   clearTimeout(draftTimer);
   try {
     localStorage.setItem('techEstimateDraft', JSON.stringify({
@@ -664,6 +1017,7 @@ function saveDraft() {
       custPhone: document.getElementById('custPhone').value,
       custBuilding: document.getElementById('custBuilding').value,
       custAddr: document.getElementById('custAddr').value,
+      custArea: document.getElementById('custArea').value,
       custMemo: document.getElementById('custMemo').value,
       estDate: document.getElementById('estDate').value,
     }));
@@ -676,16 +1030,14 @@ function restoreDraft() {
     const raw = localStorage.getItem('techEstimateDraft');
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (d.items && d.items.length) {
-      items = d.items;
-      itemIdSeq = Math.max(...items.map(i => i.id), 0);
-      renderItems();
-    }
+    // 품목은 자동 복원하지 않음 — 초기 화면은 항상 빈 견적으로 시작
+    // if (d.items && d.items.length) { ... } — 제거됨
     if (d.priceMode) setPriceMode(d.priceMode);
     if (d.custName) document.getElementById('custName').value = d.custName;
     if (d.custPhone) document.getElementById('custPhone').value = d.custPhone;
     if (d.custBuilding) document.getElementById('custBuilding').value = d.custBuilding;
     if (d.custAddr) document.getElementById('custAddr').value = d.custAddr;
+    if (d.custArea) document.getElementById('custArea').value = d.custArea;
     if (d.custMemo) document.getElementById('custMemo').value = d.custMemo;
     if (d.estDate) document.getElementById('estDate').value = d.estDate;
   } catch(e) {}
@@ -707,14 +1059,13 @@ async function submitEstimate() {
 
   try {
     if (me.appRole === 'technician') {
-      // 기사: 본사에 보고 (SMS 없이 저장)
       const r = await callApi('estimates.saveDraft', {
         title: custName + ' 고객 견적',
         amount: total,
         description: desc,
         customerName: custName,
         customerPhone: document.getElementById('custPhone').value.trim(),
-        addressFull: (document.getElementById('custAddr').value.trim()),
+        addressFull: document.getElementById('custAddr').value.trim(),
         buildingName: document.getElementById('custBuilding').value.trim(),
         requestMemo: document.getElementById('custMemo').value.trim(),
         sentBy: me.userId,
@@ -729,7 +1080,6 @@ async function submitEstimate() {
         throw new Error('저장 실패');
       }
     } else {
-      // 직원/관리자: 견적 생성 (기존 방식)
       toast('견적 생성 기능은 관리자 대시보드에서 완성해 주세요.', 3000);
     }
   } catch(err) {
@@ -740,8 +1090,7 @@ async function submitEstimate() {
   }
 }
 
-// 입력 변경 시 자동 저장
-['custName','custPhone','custBuilding','custAddr','custMemo','estDate'].forEach(id => {
+['custName','custPhone','custBuilding','custAddr','custArea','custMemo','estDate'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('input', saveDraftAuto);
 });
