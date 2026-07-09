@@ -25,9 +25,7 @@
     },
     "testflight": {
       "distribution": "store",
-      "ios": {
-        "autoIncrement": true
-      },
+      "ios": {},
       "android": {
         "buildType": "app-bundle"
       }
@@ -37,22 +35,20 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "ios": {
-        "autoIncrement": true
-      }
+      "ios": {}
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "jongseonyu@gmail.com",
+        "appleId": "jongseonyu01@gmail.com",
         "ascAppId": "6788993921",
         "appleTeamId": "83MU3C8JZN"
       }
     },
     "testflight": {
       "ios": {
-        "appleId": "jongseonyu@gmail.com",
+        "appleId": "jongseonyu01@gmail.com",
         "ascAppId": "6788993921",
         "appleTeamId": "83MU3C8JZN"
       }

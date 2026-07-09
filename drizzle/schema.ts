@@ -538,6 +538,19 @@ export const phoneVerifications = mysqlTable("phone_verifications", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── 단가 항목 테이블 ───────────────────────────────────────────
+export const priceItems = mysqlTable("price_items", {
+  id: int("id").autoincrement().primaryKey(),
+  category: varchar("category", { length: 50 }).notNull(), // 분배기교체|밸브/배관|제어/조절|열량/계량|청소/점검|기타
+  name: varchar("name", { length: 100 }).notNull(),
+  stdPrice: int("stdPrice").notNull().default(0),   // 표준시공가
+  discPrice: int("discPrice").notNull().default(0), // 단체할인가
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
 // ─── 타입 내보내기 ───────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -581,3 +594,5 @@ export type Estimate = typeof estimates.$inferSelect;
 export type InsertEstimate = typeof estimates.$inferInsert;
 export type EstimateMessageLog = typeof estimateMessageLogs.$inferSelect;
 export type InsertEstimateMessageLog = typeof estimateMessageLogs.$inferInsert;
+export type PriceItem = typeof priceItems.$inferSelect;
+export type InsertPriceItem = typeof priceItems.$inferInsert;

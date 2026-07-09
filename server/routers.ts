@@ -2212,6 +2212,104 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return db.getEstimatesByRequestId(input.requestId);
       }),
+
+    // 기사 견적 보고 (고객 SMS 없이 저장만)
+    saveDraft: publicProcedure
+      .input(z.object({
+        title: z.string().optional(),
+        amount: z.number().min(0).default(0),
+        description: z.string().optional(),
+        customerName: z.string().min(1),
+        customerPhone: z.string().default(""),
+        addressFull: z.string().optional(),
+        buildingName: z.string().optional(),
+        buildingDong: z.string().optional(),
+        buildingHo: z.string().optional(),
+        sentBy: z.number().optional(),
+        branchId: z.number().nullable().optional(),
+        branchName: z.string().optional(),
+        requestMemo: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const token = crypto.randomBytes(24).toString("base64url");
+        const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const estimateId = await db.createEstimate({
+          requestId: null,
+          token,
+          title: input.title ?? null,
+          amount: String(input.amount),
+          description: input.description ?? null,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone.replace(/[^0-9]/g, ""),
+          fileUrl: "",
+          fileName: null,
+          fileType: null,
+          fileSize: null,
+          ownerType: "unassigned",
+          branchId: input.branchId ?? null,
+          branchName: input.branchName ?? null,
+          status: "pending",
+          sentAt: new Date(),
+          validUntil,
+          sentBy: input.sentBy ?? null,
+          senderRole: "technician",
+          addressFull: input.addressFull ?? null,
+          buildingName: input.buildingName ?? null,
+          buildingDong: input.buildingDong ?? null,
+          buildingHo: input.buildingHo ?? null,
+          requestMemo: input.requestMemo ?? null,
+        } as any);
+        return { success: true, estimateId, token };
+      }),
+
+    // 기사 본인 견적 목록 조회
+    listByTechnicianUser: publicProcedure
+      .input(z.object({ sentBy: z.number() }))
+      .query(async ({ input }) => {
+        const all = await db.listEstimates({ branchId: null });
+        return all.filter(e => e.sentBy === input.sentBy && e.senderRole === "technician");
+      }),
+  }),
+
+  // ─── 단가 관리 ─────────────────────────────────────────────────────
+  prices: router({
+    // 전체 단가 목록 (관리자용)
+    listAll: publicProcedure.query(async () => db.getAllPriceItems()),
+
+    // 활성 단가 목록 (기사 견적 화면용)
+    listActive: publicProcedure.query(async () => db.getActivePriceItems()),
+
+    // 단가 항목 추가/수정
+    upsert: publicProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        category: z.string().min(1).max(50),
+        name: z.string().min(1).max(100),
+        stdPrice: z.number().min(0),
+        discPrice: z.number().min(0),
+        sortOrder: z.number().default(0),
+        isActive: z.boolean().default(true),
+      }))
+      .mutation(async ({ input }) => {
+        const item = await db.upsertPriceItem(input as any);
+        return { success: true, item };
+      }),
+
+    // 단가 항목 삭제
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deletePriceItem(input.id);
+        return { success: true };
+      }),
+
+    // 단가 항목 활성/비활성 토글
+    toggleActive: publicProcedure
+      .input(z.object({ id: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        await db.togglePriceItemActive(input.id, input.isActive);
+        return { success: true };
+      }),
   }),
 });
 export type AppRouter = typeof appRouter;

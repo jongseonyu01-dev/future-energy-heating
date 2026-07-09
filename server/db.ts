@@ -1432,3 +1432,50 @@ export async function getBranchPhone(branchId: number): Promise<string | null> {
   const b = await getBranchById(branchId);
   return b?.phoneNumber ?? null;
 }
+
+// ─── 단가 항목 (price_items) ────────────────────────────────────────
+import { priceItems, PriceItem, InsertPriceItem } from "../drizzle/schema";
+
+export async function getAllPriceItems(): Promise<PriceItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(priceItems).orderBy(priceItems.sortOrder, priceItems.id);
+}
+
+export async function getActivePriceItems(): Promise<PriceItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(priceItems)
+    .where(eq(priceItems.isActive, true))
+    .orderBy(priceItems.sortOrder, priceItems.id);
+}
+
+export async function upsertPriceItem(data: InsertPriceItem): Promise<PriceItem | null> {
+  const db = await getDb();
+  if (!db) return null;
+  if (data.id) {
+    await db.update(priceItems)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(priceItems.id, data.id as number));
+    const rows = await db.select().from(priceItems).where(eq(priceItems.id, data.id as number)).limit(1);
+    return rows[0] ?? null;
+  } else {
+    const result = await db.insert(priceItems).values(data);
+    const insertId = (result as any)[0]?.insertId;
+    if (!insertId) return null;
+    const rows = await db.select().from(priceItems).where(eq(priceItems.id, insertId)).limit(1);
+    return rows[0] ?? null;
+  }
+}
+
+export async function deletePriceItem(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(priceItems).where(eq(priceItems.id, id));
+}
+
+export async function togglePriceItemActive(id: number, isActive: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(priceItems).set({ isActive, updatedAt: new Date() }).where(eq(priceItems.id, id));
+}

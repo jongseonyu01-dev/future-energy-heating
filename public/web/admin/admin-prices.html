@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>단가표 관리 - 퓨처에너지테크</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+  .header { background: #1e3a5f; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header .back-btn { background: rgba(255,255,255,0.15); border: none; color: #fff; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .header .back-btn:hover { background: rgba(255,255,255,0.25); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .top-bar h2 { font-size: 20px; font-weight: 700; color: #1e293b; }
+  .btn { padding: 10px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: #1e3a5f; color: #fff; }
+  .btn-primary:hover { background: #162d4a; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success:hover { background: #15803d; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-outline { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
+  .btn-outline:hover { background: #f9fafb; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .notice { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #1d4ed8; line-height: 1.6; }
+  .category-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .cat-tab { padding: 8px 16px; border-radius: 20px; border: 1.5px solid #e2e8f0; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b; transition: all .15s; }
+  .cat-tab.active { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .cat-tab:hover:not(.active) { border-color: #94a3b8; color: #334155; }
+  .table-wrap { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: #f1f5f9; padding: 12px 16px; font-size: 13px; font-weight: 700; color: #475569; text-align: left; border-bottom: 1px solid #e2e8f0; }
+  tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody td { padding: 12px 16px; font-size: 14px; color: #334155; vertical-align: middle; }
+  .price-cell { font-weight: 600; color: #1e3a5f; }
+  .disc-cell { font-weight: 600; color: #16a34a; }
+  .inactive-row td { opacity: 0.45; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .badge-active { background: #dcfce7; color: #16a34a; }
+  .badge-inactive { background: #fee2e2; color: #dc2626; }
+  .actions { display: flex; gap: 6px; }
+  .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 14px; }
+  /* 모달 */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 16px; max-width: 480px; width: 100%; padding: 24px; }
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+  .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 14px; color: #1e293b; }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: #1e3a5f; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; z-index: 9999; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+    thead th:nth-child(4), tbody td:nth-child(4) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-btn" onclick="history.back()">← 뒤로</button>
+  <h1>💰 단가표 관리</h1>
+</div>
+
+<div class="container">
+  <div class="top-bar">
+    <h2>단가 항목 관리</h2>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" onclick="loadPrices()">🔄 새로고침</button>
+      <button class="btn btn-primary" onclick="openAddModal()">+ 항목 추가</button>
+    </div>
+  </div>
+
+  <div class="notice">
+    💡 이 단가표는 <strong>기사용 자동견적 화면</strong>에서 실시간으로 사용됩니다. 단가를 수정하면 즉시 반영됩니다.<br>
+    비활성화된 항목은 기사 견적 화면에 표시되지 않지만 데이터는 유지됩니다.
+  </div>
+
+  <div class="category-tabs" id="catTabs">
+    <button class="cat-tab active" data-cat="전체" onclick="filterCat('전체', this)">전체</button>
+    <button class="cat-tab" data-cat="분배기교체" onclick="filterCat('분배기교체', this)">분배기교체</button>
+    <button class="cat-tab" data-cat="밸브/배관" onclick="filterCat('밸브/배관', this)">밸브/배관</button>
+    <button class="cat-tab" data-cat="제어/조절" onclick="filterCat('제어/조절', this)">제어/조절</button>
+    <button class="cat-tab" data-cat="열량/계량" onclick="filterCat('열량/계량', this)">열량/계량</button>
+    <button class="cat-tab" data-cat="청소/점검" onclick="filterCat('청소/점검', this)">청소/점검</button>
+    <button class="cat-tab" data-cat="기타" onclick="filterCat('기타', this)">기타</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>카테고리</th>
+          <th>항목명</th>
+          <th>표준시공가</th>
+          <th>단체할인가</th>
+          <th>정렬</th>
+          <th>상태</th>
+          <th>관리</th>
+        </tr>
+      </thead>
+      <tbody id="pricesTbody">
+        <tr><td colspan="7" class="empty">불러오는 중...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 추가/수정 모달 -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3 id="modalTitle">단가 항목 추가</h3>
+    <input type="hidden" id="editId">
+    <div class="form-group">
+      <label>카테고리</label>
+      <select id="editCategory">
+        <option value="분배기교체">분배기교체</option>
+        <option value="밸브/배관">밸브/배관</option>
+        <option value="제어/조절">제어/조절</option>
+        <option value="열량/계량">열량/계량</option>
+        <option value="청소/점검">청소/점검</option>
+        <option value="기타">기타</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>항목명</label>
+      <input type="text" id="editName" placeholder="예: 분배기 교체 (4구)" maxlength="100">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>표준시공가 (원)</label>
+        <input type="number" id="editStdPrice" placeholder="0" min="0" step="1000">
+      </div>
+      <div class="form-group">
+        <label>단체할인가 (원)</label>
+        <input type="number" id="editDiscPrice" placeholder="0" min="0" step="1000">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>정렬 순서</label>
+        <input type="number" id="editSortOrder" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>상태</label>
+        <select id="editIsActive">
+          <option value="true">활성</option>
+          <option value="false">비활성</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">취소</button>
+      <button class="btn btn-success" onclick="saveItem()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>항목 삭제</h3>
+    <p style="font-size:14px;color:#374151;margin-bottom:20px;line-height:1.6">
+      <strong id="deleteItemName"></strong> 항목을 삭제하시겠습니까?<br>
+      삭제된 데이터는 복구할 수 없습니다.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeDeleteModal()">취소</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">🗑️ 삭제</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:3000/api/trpc'
+    : '/api/trpc';
+
+  let allItems = [];
+  let currentCat = '전체';
+  let deleteTargetId = null;
+
+  // ─── 인증 ───────────────────────────────────────────────────
+  function getToken() { return localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken') || ''; }
+  function authHeaders() { const t = getToken(); return t ? { 'Authorization': 'Bearer ' + t } : {}; }
+
+  // ─── tRPC 헬퍼 ─────────────────────────────────────────────
+  async function trpc(proc, input, isMutation) {
+    try {
+      const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => !['_mutation','_query','_dummy'].includes(k))) : {};
+      let url = API + '/' + proc;
+      let opts = { headers: { 'Content-Type': 'application/json', ...authHeaders() } };
+      if (!isMutation) {
+        url += '?input=' + encodeURIComponent(JSON.stringify({ json: cleanInput }));
+        opts.method = 'GET';
+      } else {
+        opts.method = 'POST';
+        opts.body = JSON.stringify({ json: cleanInput });
+      }
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      return data.result?.data?.json;
+    } catch(e) { console.error('tRPC error:', e); return null; }
+  }
+
+  // ─── 단가 목록 불러오기 ─────────────────────────────────────
+  async function loadPrices() {
+    const tbody = document.getElementById('pricesTbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">불러오는 중...</td></tr>';
+    const items = await trpc('prices.listAll', {});
+    if (!items) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty" style="color:#dc2626">불러오기 실패. 로그인 상태를 확인하세요.</td></tr>';
+      return;
+    }
+    allItems = items;
+    renderTable();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('pricesTbody');
+    const filtered = currentCat === '전체' ? allItems : allItems.filter(i => i.category === currentCat);
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">항목이 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = filtered.map(item => `
+      <tr class="${item.isActive ? '' : 'inactive-row'}">
+        <td><span style="background:#e0f2fe;color:#0369a1;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600">${item.category}</span></td>
+        <td style="font-weight:600">${item.name}</td>
+        <td class="price-cell">${item.stdPrice ? Number(item.stdPrice).toLocaleString() + '원' : '-'}</td>
+        <td class="disc-cell">${item.discPrice ? Number(item.discPrice).toLocaleString() + '원' : '-'}</td>
+        <td style="color:#94a3b8;font-size:13px">${item.sortOrder}</td>
+        <td>
+          <span class="badge ${item.isActive ? 'badge-active' : 'badge-inactive'}">${item.isActive ? '활성' : '비활성'}</span>
+        </td>
+        <td>
+          <div class="actions">
+            <button class="btn btn-outline btn-sm" onclick="openEditModal(${item.id})">✏️ 수정</button>
+            <button class="btn btn-sm" style="background:${item.isActive ? '#fef3c7' : '#dcfce7'};color:${item.isActive ? '#92400e' : '#166534'};border:1.5px solid ${item.isActive ? '#fde68a' : '#bbf7d0'}" onclick="toggleActive(${item.id}, ${!item.isActive})">${item.isActive ? '비활성화' : '활성화'}</button>
+            <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${item.id}, '${item.name.replace(/'/g, "\\'")}')">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ─── 카테고리 필터 ─────────────────────────────────────────
+  function filterCat(cat, btn) {
+    currentCat = cat;
+    document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    renderTable();
+  }
+
+  // ─── 추가 모달 ─────────────────────────────────────────────
+  function openAddModal() {
+    document.getElementById('modalTitle').textContent = '단가 항목 추가';
+    document.getElementById('editId').value = '';
+    document.getElementById('editCategory').value = '분배기교체';
+    document.getElementById('editName').value = '';
+    document.getElementById('editStdPrice').value = '';
+    document.getElementById('editDiscPrice').value = '';
+    document.getElementById('editSortOrder').value = '0';
+    document.getElementById('editIsActive').value = 'true';
+    document.getElementById('editModal').classList.add('show');
+  }
+
+  // ─── 수정 모달 ─────────────────────────────────────────────
+  function openEditModal(id) {
+    const item = allItems.find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('modalTitle').textContent = '단가 항목 수정';
+    document.getElementById('editId').value = item.id;
+    document.getElementById('editCategory').value = item.category;
+    document.getElementById('editName').value = item.name;
+    document.getElementById('editStdPrice').value = item.stdPrice;
+    document.getElementById('editDiscPrice').value = item.discPrice;
+    document.getElementById('editSortOrder').value = item.sortOrder;
+    document.getElementById('editIsActive').value = item.isActive ? 'true' : 'false';
+    document.getElementById('editModal').classList.add('show');
+  }
+
+  function closeModal() { document.getElementById('editModal').classList.remove('show'); }
+
+  // ─── 저장 ──────────────────────────────────────────────────
+  async function saveItem() {
+    const id = document.getElementById('editId').value;
+    const category = document.getElementById('editCategory').value.trim();
+    const name = document.getElementById('editName').value.trim();
+    const stdPrice = parseInt(document.getElementById('editStdPrice').value) || 0;
+    const discPrice = parseInt(document.getElementById('editDiscPrice').value) || 0;
+    const sortOrder = parseInt(document.getElementById('editSortOrder').value) || 0;
+    const isActive = document.getElementById('editIsActive').value === 'true';
+
+    if (!name) { toast('항목명을 입력하세요.'); return; }
+
+    const payload = { category, name, stdPrice, discPrice, sortOrder, isActive };
+    if (id) payload.id = parseInt(id);
+
+    const result = await trpc('prices.upsert', payload, true);
+    if (result?.success) {
+      toast(id ? '✅ 수정되었습니다.' : '✅ 추가되었습니다.');
+      closeModal();
+      loadPrices();
+    } else {
+      toast('❌ 저장 실패. 다시 시도하세요.');
+    }
+  }
+
+  // ─── 활성/비활성 토글 ─────────────────────────────────────
+  async function toggleActive(id, isActive) {
+    const result = await trpc('prices.toggleActive', { id, isActive }, true);
+    if (result?.success) {
+      toast(isActive ? '✅ 활성화되었습니다.' : '⚪ 비활성화되었습니다.');
+      loadPrices();
+    } else {
+      toast('❌ 변경 실패.');
+    }
+  }
+
+  // ─── 삭제 모달 ─────────────────────────────────────────────
+  function openDeleteModal(id, name) {
+    deleteTargetId = id;
+    document.getElementById('deleteItemName').textContent = name;
+    document.getElementById('deleteModal').classList.add('show');
+  }
+  function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('show'); deleteTargetId = null; }
+
+  async function confirmDelete() {
+    if (!deleteTargetId) return;
+    const result = await trpc('prices.delete', { id: deleteTargetId }, true);
+    if (result?.success) {
+      toast('🗑️ 삭제되었습니다.');
+      closeDeleteModal();
+      loadPrices();
+    } else {
+      toast('❌ 삭제 실패.');
+    }
+  }
+
+  // ─── 토스트 ────────────────────────────────────────────────
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  // ─── 모달 외부 클릭 닫기 ───────────────────────────────────
+  document.getElementById('editModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+  document.getElementById('deleteModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+
+  // ─── 초기 로드 ─────────────────────────────────────────────
+  loadPrices();
+</script>
+</body>
+</html>

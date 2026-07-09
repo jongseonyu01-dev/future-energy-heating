@@ -134,6 +134,7 @@
     <div class="nav-section">견적서</div>
     <div class="nav-item" id="nav-estimate-send" onclick="showPanel('estimate-send')"><span class="icon">📤</span> 견적서 전송하기</div>
     <div class="nav-item" id="nav-estimate-manage" onclick="showPanel('estimate-manage')"><span class="icon">🧾</span> 견적서 관리</div>
+    <div class="nav-item" id="nav-prices" onclick="window.open('/web/admin/admin-prices.html','_blank')"><span class="icon">💰</span> 단가표 관리</div>
   </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" onclick="doLogout()">🚪 로그아웃</button>
@@ -2291,11 +2292,9 @@
     const filter = document.getElementById('es-filter')?.value || '';
     tbody.innerHTML = '<tr class="loading-row"><td colspan="8">불러오는 중...</td></tr>';
     try {
-      const res = await fetch(getApiBase() + '/api/estimate/list' + (filter ? '?status=' + filter : ''), {
-        headers: authHeaders()
-      });
-      const d = await res.json();
-      const list = d.estimates || d.data || d || [];
+      const input = { branchId: null, _query: true };
+      if (filter) input.status = filter;
+      const list = await trpc('estimates.list', input) || [];
       if (!Array.isArray(list) || !list.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">발송된 견적서가 없습니다.</td></tr>'; return; }
       const statusLabel = { pending:'🟡 발송됨', viewed:'🟣 고객 확인', approved:'🟢 승인', rejected:'🔴 거절', expired:'⚪ 만료' };
       tbody.innerHTML = list.map(e => {

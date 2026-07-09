@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>견적 자동 생성기 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f1f5f9; color: #1f2937; padding-bottom: 60px; }
+    .topbar { background: #1e3a5f; color: #fff; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 20; }
+    .topbar-left h1 { font-size: 16px; font-weight: 700; }
+    .topbar-left .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
+    .topbar-right { display: flex; gap: 8px; }
+    .btn-sm { background: rgba(255,255,255,.15); border: none; color: #fff; padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-sm:hover { background: rgba(255,255,255,.25); }
+    .container { max-width: 640px; margin: 0 auto; padding: 14px 14px; }
+    .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .card-title { font-size: 15px; font-weight: 700; color: #1e3a5f; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+    .info-banner { background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #92400e; margin-bottom: 14px; }
+    /* 가격 방식 */
+    .price-mode-wrap { display: flex; gap: 8px; margin-bottom: 4px; }
+    .price-mode-btn { flex: 1; padding: 11px; border: 2px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 14px; font-weight: 600; cursor: pointer; color: #6b7280; transition: all .15s; }
+    .price-mode-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    .price-mode-hint { font-size: 12px; color: #9ca3af; }
+    /* 공사 유형 */
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .type-btn { padding: 16px 10px; border: 2px solid #e5e7eb; border-radius: 12px; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; text-align: center; color: #374151; transition: all .15s; }
+    .type-btn:hover { border-color: #93c5fd; background: #eff6ff; }
+    .type-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    .type-btn .icon { font-size: 22px; display: block; margin-bottom: 4px; }
+    /* 구수 선택 */
+    .sub-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-top: 12px; }
+    .sub-title { font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 10px; }
+    .port-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .port-btn { padding: 9px 14px; border: 2px solid #e5e7eb; border-radius: 8px; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; transition: all .15s; }
+    .port-btn:hover { border-color: #93c5fd; }
+    .port-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    /* 온도조절기 옵션 */
+    .thermo-grid { display: flex; flex-direction: column; gap: 8px; }
+    .thermo-btn { padding: 11px 14px; border: 2px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; text-align: left; transition: all .15s; }
+    .thermo-btn:hover { border-color: #93c5fd; background: #eff6ff; }
+    .thermo-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    /* 직접 수량 입력 */
+    .thermo-custom { display: none; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .thermo-custom.show { display: flex; }
+    .thermo-custom-row { display: flex; align-items: center; gap: 8px; }
+    .thermo-custom-row label { font-size: 13px; color: #475569; min-width: 90px; }
+    .thermo-custom-row input { flex: 1; padding: 9px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 14px; text-align: center; }
+    .apply-btn { width: 100%; padding: 12px; background: #1e3a5f; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+    .apply-btn:hover { background: #1e40af; }
+    /* 배관청소 평형 */
+    .pipe-input-wrap { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+    .pipe-input-wrap input { flex: 1; padding: 11px 14px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 15px; text-align: center; }
+    .pipe-preview { font-size: 13px; color: #059669; font-weight: 600; margin-top: 6px; min-height: 18px; }
+    /* 직접선택 모달 */
+    .direct-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .cat-btn { padding: 7px 12px; border: 1.5px solid #e5e7eb; border-radius: 20px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151; }
+    .cat-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    .item-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+    .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 10px; background: #fff; }
+    .item-row:hover { border-color: #93c5fd; background: #eff6ff; }
+    .item-name { font-size: 14px; font-weight: 600; color: #1f2937; }
+    .item-price { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .item-add-btn { padding: 7px 14px; background: #1e3a5f; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    /* 품목 목록 */
+    .items-empty { text-align: center; padding: 30px 20px; color: #9ca3af; font-size: 14px; }
+    .item-card { border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #fafafa; }
+    .item-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .item-card-name { font-size: 14px; font-weight: 700; color: #1f2937; }
+    .item-card-auto { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .item-del { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
+    .item-card-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .item-mode-btn { padding: 5px 10px; border: 1.5px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #6b7280; }
+    .item-mode-btn.active { border-color: #1e3a5f; background: #1e3a5f; color: #fff; }
+    .item-qty-wrap { display: flex; align-items: center; gap: 6px; }
+    .item-qty-wrap label { font-size: 12px; color: #9ca3af; }
+    .item-qty-wrap input { width: 60px; padding: 5px 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 13px; text-align: center; }
+    .item-price-wrap { display: flex; align-items: center; gap: 6px; }
+    .item-price-wrap label { font-size: 12px; color: #9ca3af; }
+    .item-price-wrap input { width: 100px; padding: 5px 8px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 13px; text-align: right; }
+    .item-subtotal { font-size: 13px; font-weight: 700; color: #1e3a5f; margin-left: auto; }
+    /* 합계 */
+    .total-box { background: #1e3a5f; color: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .total-label { font-size: 13px; opacity: .8; margin-bottom: 6px; }
+    .total-amount { font-size: 28px; font-weight: 800; }
+    .total-vat { font-size: 12px; opacity: .7; margin-top: 4px; }
+    /* 고객 정보 */
+    .form-row { margin-bottom: 12px; }
+    .form-row label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .form-row input, .form-row textarea, .form-row select { width: 100%; padding: 11px 14px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 14px; color: #1f2937; background: #fff; }
+    .form-row input:focus, .form-row textarea:focus { outline: none; border-color: #1e3a5f; }
+    .form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* 제출 버튼 */
+    .submit-btn { width: 100%; padding: 16px; background: #e85d04; color: #fff; border: none; border-radius: 14px; font-size: 16px; font-weight: 800; cursor: pointer; margin-bottom: 10px; }
+    .submit-btn:hover { background: #c2410c; }
+    .save-btn { width: 100%; padding: 13px; background: #fff; color: #1e3a5f; border: 2px solid #1e3a5f; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .save-btn:hover { background: #eff6ff; }
+    /* 토스트 */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+    @media (max-width: 480px) {
+      .form-2col { grid-template-columns: 1fr; }
+      .total-amount { font-size: 24px; }
+      .item-card-row { gap: 6px; }
+      .item-price-wrap input { width: 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>📋 견적 자동 생성기</h1>
+    <div class="sub" id="meInfo">로딩 중...</div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-sm" onclick="history.back()">← 뒤로</button>
+    <button class="btn-sm" onclick="logout()">로그아웃</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 기사 안내 배너 -->
+  <div class="info-banner" id="techBanner" style="display:none">
+    ⚠️ <strong>기사 견적 안내</strong> — 작성한 견적은 <strong>본사/지사 검토 후 고객에게 발송</strong>됩니다.
+  </div>
+
+  <!-- 가격 방식 선택 -->
+  <div class="card">
+    <div class="card-title">💰 가격 방식 선택</div>
+    <div class="price-mode-wrap">
+      <button class="price-mode-btn active" id="modeStd" onclick="setPriceMode('standard')">📋 표준시공가</button>
+      <button class="price-mode-btn" id="modeDisc" onclick="setPriceMode('discount')">🏷️ 단체할인가</button>
+    </div>
+    <div class="price-mode-hint">각 품목별로도 개별 변경 가능합니다.</div>
+  </div>
+
+  <!-- 공사 유형 선택 -->
+  <div class="card">
+    <div class="card-title">🔧 공사 유형 선택</div>
+    <div class="type-grid">
+      <button class="type-btn" id="type-dist" onclick="selectType('dist')">
+        <span class="icon">🔵</span>분배기 교체
+      </button>
+      <button class="type-btn" id="type-partial" onclick="selectType('partial')">
+        <span class="icon">🔧</span>부분 수리
+      </button>
+      <button class="type-btn" id="type-pipe" onclick="selectType('pipe')">
+        <span class="icon">🚿</span>배관 청소
+      </button>
+      <button class="type-btn" id="type-direct" onclick="selectType('direct')">
+        <span class="icon">📝</span>직접 선택
+      </button>
+    </div>
+
+    <!-- 분배기 교체 - 구수 선택 -->
+    <div class="sub-section" id="sec-dist" style="display:none">
+      <div class="sub-title">💡 분배기 구수를 선택하면 분배기·유량밸브·스트레이너가 분배기시공 할인단가로 자동 추가됩니다.</div>
+      <div class="port-grid" id="portGrid"></div>
+      <!-- 온도조절기 옵션 -->
+      <div id="thermoSec" style="display:none; margin-top:14px;">
+        <div class="sub-title">🌡️ 온도조절기 옵션을 선택하세요</div>
+        <div class="thermo-grid">
+          <button class="thermo-btn" id="th-all" onclick="selectThermo('all')">각 방마다 온도조절기 있음 (구수만큼)</button>
+          <button class="thermo-btn" id="th-one" onclick="selectThermo('one')">거실에 1개만 있음</button>
+          <button class="thermo-btn" id="th-none" onclick="selectThermo('none')">온도조절기 없음</button>
+          <button class="thermo-btn" id="th-custom" onclick="selectThermo('custom')">직접 수량 입력</button>
+        </div>
+        <div class="thermo-custom" id="thermoCustom">
+          <div class="thermo-custom-row">
+            <label>온도조절기 수량</label>
+            <input type="number" id="customThermo" min="0" max="20" value="0" placeholder="0" />
+          </div>
+          <div class="thermo-custom-row">
+            <label>구동기 수량</label>
+            <input type="number" id="customActuator" min="0" max="20" value="0" placeholder="0" />
+          </div>
+          <div class="thermo-custom-row">
+            <label>제어기 포함</label>
+            <select id="customController">
+              <option value="1">포함 (1개)</option>
+              <option value="0">미포함</option>
+            </select>
+          </div>
+          <button class="apply-btn" onclick="applyCustomThermo()">적용</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 부분 수리 - 항목 선택 -->
+    <div class="sub-section" id="sec-partial" style="display:none">
+      <div class="sub-title">🔧 수리할 항목을 선택하세요</div>
+      <div class="port-grid" id="partialGrid"></div>
+    </div>
+
+    <!-- 배관 청소 - 평형 입력 -->
+    <div class="sub-section" id="sec-pipe" style="display:none">
+      <div class="sub-title">🚿 아파트 평형을 입력하세요</div>
+      <div class="pipe-input-wrap">
+        <input type="number" id="pipeArea" min="10" max="200" placeholder="예: 32" oninput="calcPipe()" />
+        <span style="font-size:14px;color:#374151;font-weight:600;">평형</span>
+        <button class="apply-btn" style="width:auto;margin-top:0;padding:11px 18px;" onclick="addPipeItem()">추가</button>
+      </div>
+      <div class="pipe-preview" id="pipePreview"></div>
+    </div>
+
+    <!-- 직접 선택 -->
+    <div class="sub-section" id="sec-direct" style="display:none">
+      <div class="sub-title">📝 공사 항목을 선택하세요</div>
+      <div class="direct-cats" id="directCats"></div>
+      <div class="item-list" id="directList"></div>
+    </div>
+  </div>
+
+  <!-- 견적 품목 목록 -->
+  <div class="card">
+    <div class="card-title">📦 견적 품목 목록</div>
+    <div id="itemsContainer">
+      <div class="items-empty" id="itemsEmpty">아직 추가된 공사 품목이 없습니다.<br/>위에서 공사 유형을 선택하세요.</div>
+    </div>
+  </div>
+
+  <!-- 총 견적 금액 -->
+  <div class="total-box">
+    <div class="total-label">총 견적 금액</div>
+    <div class="total-amount" id="totalAmount">0원</div>
+    <div class="total-vat">* 부가세 별도</div>
+  </div>
+
+  <!-- 고객 정보 -->
+  <div class="card">
+    <div class="card-title">👤 고객 정보</div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label>견적일자 *</label>
+        <input type="date" id="estDate" />
+      </div>
+      <div class="form-row">
+        <label>고객명 *</label>
+        <input type="text" id="custName" placeholder="홍길동" />
+      </div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label>연락처</label>
+        <input type="tel" id="custPhone" placeholder="010-0000-0000" />
+      </div>
+      <div class="form-row">
+        <label>아파트명</label>
+        <input type="text" id="custBuilding" placeholder="행복아파트" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label>주소</label>
+      <input type="text" id="custAddr" placeholder="경기도 안산시..." />
+    </div>
+    <div class="form-row">
+      <label>메모</label>
+      <textarea id="custMemo" rows="2" placeholder="특이사항, 요청사항 등"></textarea>
+    </div>
+  </div>
+
+  <!-- 제출 버튼 -->
+  <button class="submit-btn" onclick="submitEstimate()">📤 견적 보고하기</button>
+  <button class="save-btn" onclick="saveDraft()">💾 임시 저장</button>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── API ───────────────────────────────────────────────────
+function getApiBase() {
+  const host = window.location.hostname;
+  const devMatch = host.match(/^(808\d)-(.*)/);
+  if (devMatch) return window.location.protocol + '//' + '3000-' + devMatch[2];
+  return '';
+}
+const API = getApiBase();
+
+let me = null;
+(function() {
+  const raw = sessionStorage.getItem('authUser') || localStorage.getItem('authUser');
+  if (!raw) { location.href = '/web/login.html'; return; }
+  try {
+    me = JSON.parse(raw);
+    const allowed = ['technician','staff','admin','branch_manager','headquarters'];
+    if (!allowed.includes(me.appRole)) {
+      alert('접근 권한이 없습니다.');
+      location.href = '/web/login.html';
+      return;
+    }
+  } catch(e) { location.href = '/web/login.html'; return; }
+  const roleLabel = { technician:'기사', staff:'직원', admin:'관리자', branch_manager:'지사장', headquarters:'본사' };
+  document.getElementById('meInfo').textContent = (me.name||'사용자') + ' · ' + (roleLabel[me.appRole]||me.appRole);
+  if (me.appRole === 'technician') {
+    document.getElementById('techBanner').style.display = 'block';
+    document.querySelector('.submit-btn').textContent = '📤 본사에 견적 보고하기';
+  } else {
+    document.querySelector('.submit-btn').textContent = '📤 견적 생성하기';
+  }
+  // 오늘 날짜 기본값
+  document.getElementById('estDate').value = new Date().toISOString().slice(0,10);
+  // 임시저장 복원
+  restoreDraft();
+  // 서버에서 단가 로드
+  loadPricesFromServer();
+})();
+
+function logout() {
+  sessionStorage.removeItem('authUser');
+  localStorage.removeItem('authUser');
+  location.href = '/web/login.html';
+}
+
+async function callApi(proc, payload, isQuery) {
+  let url = API + '/api/trpc/' + proc;
+  let opt;
+  if (isQuery) {
+    url += '?input=' + encodeURIComponent(JSON.stringify({ json: payload }));
+    opt = { method: 'GET' };
+  } else {
+    opt = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ json: payload }) };
+  }
+  const res = await fetch(url, opt);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error?.json?.message || '요청 오류');
+  return data.result?.data?.json;
+}
+
+function toast(msg, dur) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur || 2200);
+}
+
+// ─── 단가 DB (서버에서 동적 로드) ─────────────────────────────────────────────
+let PRICES = { dist: {}, valve: {std:0,disc:0}, strainer: {std:0,disc:0}, thermo: {std:0,disc:0}, actuator: {std:0,disc:0}, controller: {std:0,disc:0}, partial: {}, direct: [] };
+let pricesLoaded = false;
+
+async function loadPricesFromServer() {
+  try {
+    const items = await callApi('prices.listActive', {}, true);
+    if (!items || !items.length) return;
+    const newPrices = { dist: {}, valve: null, strainer: null, thermo: null, actuator: null, controller: null, partial: {}, direct: [] };
+    for (const item of items) {
+      const pr = { std: item.stdPrice, disc: item.discPrice };
+      const distMatch = item.name.match(/^분배기 교체 \((\d+)구\)$/);
+      if (distMatch) { newPrices.dist[parseInt(distMatch[1])] = pr; }
+      if (item.name === '유량밸브 교체') newPrices.valve = pr;
+      if (item.name === '스트레이너 교체') newPrices.strainer = pr;
+      if (item.name === '온도조절기 교체') newPrices.thermo = pr;
+      if (item.name === '구동기 교체') newPrices.actuator = pr;
+      if (item.name === '제어기 교체') newPrices.controller = pr;
+      if (item.category !== '분배기교체') { newPrices.partial[item.name] = pr; }
+      newPrices.direct.push({ cat: item.category === '분배기교체' ? '밸브/배관' : item.category, name: item.name, std: item.stdPrice, disc: item.discPrice });
+    }
+    PRICES.dist = newPrices.dist;
+    if (newPrices.valve) PRICES.valve = newPrices.valve;
+    if (newPrices.strainer) PRICES.strainer = newPrices.strainer;
+    if (newPrices.thermo) PRICES.thermo = newPrices.thermo;
+    if (newPrices.actuator) PRICES.actuator = newPrices.actuator;
+    if (newPrices.controller) PRICES.controller = newPrices.controller;
+    PRICES.partial = newPrices.partial;
+    PRICES.direct = newPrices.direct;
+    pricesLoaded = true;
+  } catch(e) {
+    console.warn('단가 로드 실패, 기본값 사용:', e);
+  }
+}
+
+// ─── 상태 ───────────────────────────────────────────────────
+let priceMode = 'standard'; // 'standard' | 'discount'
+let currentType = null;
+let selectedPorts = 0;
+let selectedThermo = null;
+let items = []; // { id, name, qty, unitPrice, mode, auto }
+let itemIdSeq = 0;
+
+function setPriceMode(mode) {
+  priceMode = mode;
+  document.getElementById('modeStd').classList.toggle('active', mode === 'standard');
+  document.getElementById('modeDisc').classList.toggle('active', mode === 'discount');
+  // 전체 품목 단가 업데이트 (수동 수정 안 한 것만)
+  items.forEach(item => {
+    if (!item.manualPrice) {
+      item.mode = mode;
+      const p = getItemBasePrice(item);
+      if (p !== null) item.unitPrice = p;
+    }
+  });
+  renderItems();
+}
+
+function getItemBasePrice(item) {
+  const m = item.mode || priceMode;
+  if (item.priceRef) {
+    return m === 'standard' ? item.priceRef.std : item.priceRef.disc;
+  }
+  return null;
+}
+
+// ─── 공사 유형 선택 ───────────────────────────────────────
+function selectType(type) {
+  currentType = type;
+  ['dist','partial','pipe','direct'].forEach(t => {
+    document.getElementById('type-' + t).classList.toggle('active', t === type);
+    document.getElementById('sec-' + t).style.display = t === type ? 'block' : 'none';
+  });
+  if (type === 'dist') renderPortGrid();
+  if (type === 'partial') renderPartialGrid();
+  if (type === 'direct') renderDirectSection();
+}
+
+// ─── 분배기 구수 선택 ───────────────────────────────────────
+function renderPortGrid() {
+  const ports = [2,3,4,5,6,7,8,9,10,'기타'];
+  document.getElementById('portGrid').innerHTML = ports.map(p =>
+    '<button class="port-btn' + (selectedPorts === p ? ' active' : '') + '" onclick="selectPort(' + (typeof p === 'number' ? p : "'기타'") + ')">' + p + '구</button>'
+  ).join('');
+}
+
+function selectPort(port) {
+  selectedPorts = port;
+  renderPortGrid();
+  // 분배기 패키지 추가
+  if (typeof port === 'number') {
+    const pr = PRICES.dist[port];
+    if (!pr) { toast('해당 구수 단가가 등록되지 않았습니다.'); return; }
+    // 기존 분배기 관련 자동 품목 제거
+    items = items.filter(i => !i.auto || !['분배기','유량밸브','스트레이너','온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
+    // 분배기 교체
+    addItem({ name: '분배기 교체 (' + port + '구)', qty: 1, priceRef: pr, auto: false });
+    // 유량밸브, 스트레이너 (분배기 패키지 포함가)
+    addItem({ name: '유량밸브 교체', qty: 1, priceRef: PRICES.valve, auto: true });
+    addItem({ name: '스트레이너 교체', qty: 1, priceRef: PRICES.strainer, auto: true });
+    renderItems();
+    // 온도조절기 옵션 표시
+    document.getElementById('thermoSec').style.display = 'block';
+    selectedThermo = null;
+    ['all','one','none','custom'].forEach(k => document.getElementById('th-' + k).classList.remove('active'));
+    document.getElementById('thermoCustom').classList.remove('show');
+  } else {
+    // 기타 - 직접 입력
+    toast('기타 구수는 직접선택 탭에서 추가해 주세요.');
+  }
+}
+
+// ─── 온도조절기 옵션 ───────────────────────────────────────
+function selectThermo(opt) {
+  selectedThermo = opt;
+  ['all','one','none','custom'].forEach(k => document.getElementById('th-' + k).classList.toggle('active', k === opt));
+  document.getElementById('thermoCustom').classList.toggle('show', opt === 'custom');
+  if (opt !== 'custom') applyThermo(opt);
+}
+
+function applyThermo(opt) {
+  // 기존 온도조절기/구동기/제어기 자동 품목 제거
+  items = items.filter(i => !i.auto || !['온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
+  const port = typeof selectedPorts === 'number' ? selectedPorts : 1;
+  if (opt === 'all') {
+    addItem({ name: '온도조절기 교체', qty: port, priceRef: PRICES.thermo, auto: true });
+    addItem({ name: '구동기 교체', qty: port, priceRef: PRICES.actuator, auto: true });
+    addItem({ name: '제어기 교체', qty: 1, priceRef: PRICES.controller, auto: true });
+  } else if (opt === 'one') {
+    addItem({ name: '온도조절기 교체', qty: 1, priceRef: PRICES.thermo, auto: true });
+    addItem({ name: '구동기 교체', qty: 1, priceRef: PRICES.actuator, auto: true });
+    addItem({ name: '제어기 교체', qty: 1, priceRef: PRICES.controller, auto: true });
+  } else if (opt === 'none') {
+    // 추가 없음
+  }
+  renderItems();
+}
+
+function applyCustomThermo() {
+  const thermoQty = parseInt(document.getElementById('customThermo').value) || 0;
+  const actuatorQty = parseInt(document.getElementById('customActuator').value) || 0;
+  const ctrlQty = parseInt(document.getElementById('customController').value) || 0;
+  items = items.filter(i => !i.auto || !['온도조절기','구동기','제어기'].some(k => i.name.includes(k)));
+  if (thermoQty > 0) addItem({ name: '온도조절기 교체', qty: thermoQty, priceRef: PRICES.thermo, auto: true });
+  if (actuatorQty > 0) addItem({ name: '구동기 교체', qty: actuatorQty, priceRef: PRICES.actuator, auto: true });
+  if (ctrlQty > 0) addItem({ name: '제어기 교체', qty: ctrlQty, priceRef: PRICES.controller, auto: true });
+  renderItems();
+  toast('적용되었습니다.');
+}
+
+// ─── 부분수리 항목 ───────────────────────────────────────
+function renderPartialGrid() {
+  const names = Object.keys(PRICES.partial);
+  document.getElementById('partialGrid').innerHTML = names.map(name => {
+    const pr = PRICES.partial[name];
+    const p = priceMode === 'standard' ? pr.std : pr.disc;
+    return '<button class="port-btn" onclick="addPartialItem(\'' + name + '\')">' + name + '<br/><small style="font-weight:400;color:#6b7280">' + p.toLocaleString() + '원</small></button>';
+  }).join('');
+}
+
+function addPartialItem(name) {
+  const pr = PRICES.partial[name];
+  if (!pr) return;
+  addItem({ name, qty: 1, priceRef: pr, auto: false });
+  renderItems();
+  toast(name + ' 추가됨');
+}
+
+// ─── 배관청소 평형 계산 ───────────────────────────────────────
+function calcPipe() {
+  const area = parseInt(document.getElementById('pipeArea').value) || 0;
+  if (!area) { document.getElementById('pipePreview').textContent = ''; return; }
+  const std = area * 1000 + 140000;
+  const disc = area * 1000 + 80000;
+  const p = priceMode === 'standard' ? std : disc;
+  document.getElementById('pipePreview').textContent = area + '평 → ' + p.toLocaleString() + '원 (' + (priceMode === 'standard' ? '표준시공가' : '단체할인가') + ')';
+}
+
+function addPipeItem() {
+  const area = parseInt(document.getElementById('pipeArea').value) || 0;
+  if (!area || area < 10) { toast('올바른 평형을 입력하세요 (10평 이상)'); return; }
+  const std = area * 1000 + 140000;
+  const disc = area * 1000 + 80000;
+  const price = priceMode === 'standard' ? std : disc;
+  addItem({ name: '배관청소 (' + area + '평)', qty: 1, priceRef: { std, disc }, auto: false });
+  renderItems();
+  document.getElementById('pipeArea').value = '';
+  document.getElementById('pipePreview').textContent = '';
+  toast('배관청소 (' + area + '평) 추가됨');
+}
+
+// ─── 직접 선택 ───────────────────────────────────────
+let directCat = '전체';
+function renderDirectSection() {
+  const cats = ['전체', ...new Set(PRICES.direct.map(i => i.cat))];
+  document.getElementById('directCats').innerHTML = cats.map(c =>
+    '<button class="cat-btn' + (directCat === c ? ' active' : '') + '" onclick="setDirectCat(\'' + c + '\')">' + c + '</button>'
+  ).join('');
+  renderDirectList();
+}
+function setDirectCat(cat) {
+  directCat = cat;
+  renderDirectSection();
+}
+function renderDirectList() {
+  const filtered = directCat === '전체' ? PRICES.direct : PRICES.direct.filter(i => i.cat === directCat);
+  document.getElementById('directList').innerHTML = filtered.map(item => {
+    const p = priceMode === 'standard' ? item.std : item.disc;
+    return '<div class="item-row">' +
+      '<div><div class="item-name">' + item.name + '</div>' +
+      '<div class="item-price">' + (p > 0 ? p.toLocaleString() + '원' : '단가 별도') + '</div></div>' +
+      '<button class="item-add-btn" onclick="addDirectItem(' + JSON.stringify(item).replace(/'/g,"&#39;") + ')">추가</button>' +
+      '</div>';
+  }).join('');
+}
+function addDirectItem(item) {
+  addItem({ name: item.name, qty: 1, priceRef: { std: item.std, disc: item.disc }, auto: false });
+  renderItems();
+  toast(item.name + ' 추가됨');
+}
+
+// ─── 품목 추가/삭제 ───────────────────────────────────────
+function addItem(opts) {
+  const mode = opts.mode || priceMode;
+  const unitPrice = opts.priceRef ? (mode === 'standard' ? opts.priceRef.std : opts.priceRef.disc) : 0;
+  items.push({
+    id: ++itemIdSeq,
+    name: opts.name,
+    qty: opts.qty || 1,
+    unitPrice,
+    mode,
+    priceRef: opts.priceRef || null,
+    auto: opts.auto || false,
+    manualPrice: false,
+  });
+}
+
+function deleteItem(id) {
+  items = items.filter(i => i.id !== id);
+  renderItems();
+}
+
+function updateItemQty(id, qty) {
+  const item = items.find(i => i.id === id);
+  if (item) { item.qty = Math.max(1, parseInt(qty) || 1); }
+  renderTotal();
+  saveDraftAuto();
+}
+
+function updateItemPrice(id, price) {
+  const item = items.find(i => i.id === id);
+  if (item) { item.unitPrice = parseInt(price) || 0; item.manualPrice = true; }
+  renderTotal();
+  saveDraftAuto();
+}
+
+function updateItemMode(id, mode) {
+  const item = items.find(i => i.id === id);
+  if (item) {
+    item.mode = mode;
+    item.manualPrice = false;
+    if (item.priceRef) item.unitPrice = mode === 'standard' ? item.priceRef.std : item.priceRef.disc;
+  }
+  renderItems();
+}
+
+// ─── 렌더링 ───────────────────────────────────────
+function renderItems() {
+  const container = document.getElementById('itemsContainer');
+  const empty = document.getElementById('itemsEmpty');
+  if (!items.length) {
+    container.innerHTML = '<div class="items-empty" id="itemsEmpty">아직 추가된 공사 품목이 없습니다.<br/>위에서 공사 유형을 선택하세요.</div>';
+    renderTotal();
+    return;
+  }
+  container.innerHTML = items.map(item => {
+    const subtotal = item.qty * item.unitPrice;
+    return '<div class="item-card">' +
+      '<div class="item-card-head">' +
+        '<div><div class="item-card-name">' + item.name + '</div>' +
+        (item.auto ? '<div class="item-card-auto">↳ 자동 추가</div>' : '') + '</div>' +
+        '<button class="item-del" onclick="deleteItem(' + item.id + ')">✕</button>' +
+      '</div>' +
+      '<div class="item-card-row">' +
+        '<button class="item-mode-btn' + (item.mode === 'standard' ? ' active' : '') + '" onclick="updateItemMode(' + item.id + ',\'standard\')">표준</button>' +
+        '<button class="item-mode-btn' + (item.mode === 'discount' ? ' active' : '') + '" onclick="updateItemMode(' + item.id + ',\'discount\')">단체</button>' +
+        '<div class="item-qty-wrap"><label>수량</label><input type="number" min="1" value="' + item.qty + '" onchange="updateItemQty(' + item.id + ',this.value)" /></div>' +
+        '<div class="item-price-wrap"><label>단가</label><input type="number" value="' + item.unitPrice + '" onchange="updateItemPrice(' + item.id + ',this.value)" /></div>' +
+        '<div class="item-subtotal">' + subtotal.toLocaleString() + '원</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  renderTotal();
+  saveDraftAuto();
+}
+
+function renderTotal() {
+  const total = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+  document.getElementById('totalAmount').textContent = total.toLocaleString() + '원';
+}
+
+// ─── 임시저장 ───────────────────────────────────────
+let draftTimer = null;
+function saveDraftAuto() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    try {
+      localStorage.setItem('techEstimateDraft', JSON.stringify({
+        items, priceMode,
+        custName: document.getElementById('custName').value,
+        custPhone: document.getElementById('custPhone').value,
+        custBuilding: document.getElementById('custBuilding').value,
+        custAddr: document.getElementById('custAddr').value,
+        custMemo: document.getElementById('custMemo').value,
+        estDate: document.getElementById('estDate').value,
+      }));
+    } catch(e) {}
+  }, 800);
+}
+
+function saveDraft() {
+  saveDraftAuto();
+  clearTimeout(draftTimer);
+  try {
+    localStorage.setItem('techEstimateDraft', JSON.stringify({
+      items, priceMode,
+      custName: document.getElementById('custName').value,
+      custPhone: document.getElementById('custPhone').value,
+      custBuilding: document.getElementById('custBuilding').value,
+      custAddr: document.getElementById('custAddr').value,
+      custMemo: document.getElementById('custMemo').value,
+      estDate: document.getElementById('estDate').value,
+    }));
+    toast('임시 저장되었습니다.');
+  } catch(e) { toast('저장 실패: ' + e.message); }
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem('techEstimateDraft');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.items && d.items.length) {
+      items = d.items;
+      itemIdSeq = Math.max(...items.map(i => i.id), 0);
+      renderItems();
+    }
+    if (d.priceMode) setPriceMode(d.priceMode);
+    if (d.custName) document.getElementById('custName').value = d.custName;
+    if (d.custPhone) document.getElementById('custPhone').value = d.custPhone;
+    if (d.custBuilding) document.getElementById('custBuilding').value = d.custBuilding;
+    if (d.custAddr) document.getElementById('custAddr').value = d.custAddr;
+    if (d.custMemo) document.getElementById('custMemo').value = d.custMemo;
+    if (d.estDate) document.getElementById('estDate').value = d.estDate;
+  } catch(e) {}
+}
+
+// ─── 견적 제출 ───────────────────────────────────────
+async function submitEstimate() {
+  const custName = document.getElementById('custName').value.trim();
+  if (!custName) { toast('고객명을 입력하세요.'); return; }
+  if (!items.length) { toast('공사 품목을 1개 이상 추가하세요.'); return; }
+
+  const total = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+  const desc = items.map(i => i.name + ' ' + i.qty + '개 × ' + i.unitPrice.toLocaleString() + '원 = ' + (i.qty * i.unitPrice).toLocaleString() + '원').join('\n') +
+    '\n\n총 견적 금액: ' + total.toLocaleString() + '원';
+
+  const btn = document.querySelector('.submit-btn');
+  btn.disabled = true;
+  btn.textContent = '처리 중...';
+
+  try {
+    if (me.appRole === 'technician') {
+      // 기사: 본사에 보고 (SMS 없이 저장)
+      const r = await callApi('estimates.saveDraft', {
+        title: custName + ' 고객 견적',
+        amount: total,
+        description: desc,
+        customerName: custName,
+        customerPhone: document.getElementById('custPhone').value.trim(),
+        addressFull: (document.getElementById('custAddr').value.trim()),
+        buildingName: document.getElementById('custBuilding').value.trim(),
+        requestMemo: document.getElementById('custMemo').value.trim(),
+        sentBy: me.userId,
+        branchId: me.branchId || null,
+        branchName: me.branchName || undefined,
+      }, false);
+      if (r && r.success) {
+        localStorage.removeItem('techEstimateDraft');
+        toast('✅ 본사에 견적이 보고되었습니다!', 3000);
+        setTimeout(() => { items = []; renderItems(); document.getElementById('custName').value = ''; document.getElementById('custPhone').value = ''; }, 500);
+      } else {
+        throw new Error('저장 실패');
+      }
+    } else {
+      // 직원/관리자: 견적 생성 (기존 방식)
+      toast('견적 생성 기능은 관리자 대시보드에서 완성해 주세요.', 3000);
+    }
+  } catch(err) {
+    toast('오류: ' + err.message, 3000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = me.appRole === 'technician' ? '📤 본사에 견적 보고하기' : '📤 견적 생성하기';
+  }
+}
+
+// 입력 변경 시 자동 저장
+['custName','custPhone','custBuilding','custAddr','custMemo','estDate'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', saveDraftAuto);
+});
+</script>
+</body>
+</html>
