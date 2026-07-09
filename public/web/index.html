@@ -3,17 +3,25 @@
 <head>
   
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>퓨처에너지테크 - 24시간 난방 전문 서비스</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA / Safari 홈 화면 추가 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="퓨처에너지테크" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#e85d04" />
+  <link rel="apple-touch-icon" href="/web/apple-touch-icon.png" />
+  <link rel="manifest" href="/web/manifest.json" />
+  <title>퓨처에너지테크 - 믿을 수 있는 난방 전문 서비스</title>
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="퓨처에너지테크" />
-  <meta property="og:title" content="퓨처에너지테크 - 24시간 난방 전문 서비스" />
-  <meta property="og:description" content="전국 지사 운영, 24시간 긴급출동, 난방 고장 접수 및 배관청소 전문 서비스" />
-  <meta property="og:url" content="https://xn--2z1bw8k1pjz5ccumkb516e.kr" />
-  <meta property="og:image" content="https://xn--2z1bw8k1pjz5ccumkb516e.kr/web/og-image.jpg" />
+  <meta property="og:title" content="퓨처에너지테크 - 믿을 수 있는 난방 전문 서비스" />
+  <meta property="og:description" content="전국 지사 운영, 신속한 접수 및 출동 안내, 난방 고장 접수 및 배관청소 전문 서비스" />
+  <meta property="og:url" content="https://퓨처에너지테크.kr" />
+  <meta property="og:image" content="https://퓨처에너지테크.kr/web/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="canonical" href="https://xn--2z1bw8k1pjz5ccumkb516e.kr" />
-  <meta name="description" content="전국 지사 운영, 24시간 긴급출동, 난방 고장 접수 및 배관청소 전문 서비스" />
+  <link rel="canonical" href="https://퓨처에너지테크.kr" />
+  <meta name="description" content="전국 지사 운영, 신속한 접수 및 출동 안내, 난방 고장 접수 및 배관청소 전문 서비스" />
   <style>
     :root {
       --primary: #e85d04;
@@ -52,6 +60,9 @@
     nav a:hover { background: var(--primary-light); color: var(--primary); }
     .nav-cta { background: var(--primary) !important; color: #fff !important; font-weight: 600; }
     .nav-cta:hover { background: var(--primary-dark) !important; }
+    .nav-login { border: 1.5px solid var(--primary) !important; color: var(--primary) !important; font-weight: 700; }
+    .nav-login:hover { background: var(--primary) !important; color: #fff !important; }
+    .mobile-login { display: block; text-align: center; background: var(--primary); color: #fff !important; font-weight: 700; border-radius: 8px; margin-bottom: 8px; padding: 12px 0 !important; border-bottom: none !important; }
     .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
     .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); margin: 5px 0; border-radius: 2px; transition: .3s; }
     .mobile-nav { display: none; background: var(--bg); border-top: 1px solid var(--border); padding: 12px 24px; }
@@ -185,7 +196,26 @@
       .hero-stats { gap: 20px; }
       .app-inner { flex-direction: column; text-align: center; }
       .footer-inner { flex-direction: column; gap: 24px; }
+      /* iPhone Safari 안전 영역 */
+      .header-inner { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+      .hero { padding-top: max(60px, calc(env(safe-area-inset-top) + 40px)); }
+      /* 버튼 터치 영역 확보 */
+      .cta-btn, .hero-btn { min-height: 48px; font-size: 16px; }
+      /* 서비스 그리드 1열 */
+      .service-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+      /* 리뷰 그리드 1열 */
+      .reviews-grid { grid-template-columns: 1fr; }
+      /* 하단 안전 영역 */
+      footer { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
     }
+    /* iOS 입력 zoom 방지 */
+    input, select, textarea { font-size: 16px !important; }
+    /* iOS Safari 고정 헤더 스크롤 버그 방지 */
+    header { -webkit-transform: translateZ(0); }
+    /* 터치 하이라이트 제거 */
+    a, button { -webkit-tap-highlight-color: transparent; }
+    /* iOS 스크롤 관성 */
+    .mobile-nav { -webkit-overflow-scrolling: touch; }
   </style>
 </head>
 <body>
@@ -211,12 +241,14 @@
       <a href="/web/faq.html">FAQ</a>
       <a href="/web/contact.html">고객센터</a>
       <a href="/web/download.html" class="nav-cta">앱 다운로드</a>
+      <a href="/web/admin/login.html" class="nav-login">🔐 직원 로그인</a>
     </nav>
     <button class="hamburger" onclick="toggleMenu()" aria-label="메뉴">
       <span></span><span></span><span></span>
     </button>
   </div>
   <div class="mobile-nav" id="mobileNav">
+    <a href="/web/admin/login.html" class="mobile-login">🔐 본사 · 지사 · 기사 로그인</a>
     <a href="/web/about.html">🏢 회사소개</a>
     <a href="/web/report.html">🔧 난방 고장 접수</a>
     <a href="/web/pipe-cleaning.html">🚿 배관청소 신청</a>
@@ -227,14 +259,13 @@
     <a href="/web/faq.html">❓ 자주 묻는 질문</a>
     <a href="/web/contact.html">📞 고객센터</a>
     <a href="/web/download.html">📱 앱 다운로드</a>
-    <a href="/web/admin/login.html" style="color:#e85d04;font-weight:700;">🔐 직원 로그인</a>
   </div>
 </header>
 
 <!-- 긴급출동 배너 -->
 <div class="emergency-banner" onclick="openEmergencyModal()" style="cursor:pointer;">
-  <div style="font-size:clamp(18px,4vw,28px);font-weight:800;">📞 24시간 긴급출동: 031-8042-7310 &nbsp;|&nbsp; 휴대폰: 010-5754-7310</div>
-  <p>평일 08:00~18:00 정규 서비스 · 24시간 긴급출동 가능 · <strong style="color:#ffe0b2;">눌러서 바로 연결 ▶</strong></p>
+  <div style="font-size:clamp(18px,4vw,28px);font-weight:800;">📞 신속한 접수 및 출동 안내: 031-8042-7310 &nbsp;|&nbsp; 휴대폰: 010-5754-7310</div>
+  <p>평일 08:00~18:00 정규 서비스 · 신속한 접수 및 출동 안내 · <strong style="color:#ffe0b2;">눌러서 바로 연결 ▶</strong></p>
 </div>
 
 <!-- 긴급출동 모달 -->
@@ -242,7 +273,7 @@
   <div style="background:#fff;border-radius:20px;padding:32px 24px;max-width:420px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:40px;margin-bottom:8px;">🚨</div>
-      <h2 style="font-size:22px;font-weight:800;color:#1a1a2e;">24시간 긴급출동</h2>
+      <h2 style="font-size:22px;font-weight:800;color:#1a1a2e;">신속한 접수 및 출동 안내</h2>
       <p style="font-size:14px;color:#6b7280;margin-top:8px;line-height:1.6;">긴급한 난방 문제나 누수가 발생한 경우<br/>아래 방법을 선택해 주세요.</p>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -265,7 +296,7 @@
 
 <!-- 히어로 -->
 <section class="hero">
-  <div class="hero-badge">⚡ 전국 지사 운영 · 24시간 긴급출동</div>
+  <div class="hero-badge">⚡ 전국 지사 운영 · 신속한 접수 및 출동 안내</div>
   <h1>난방 문제,<br /><span>퓨처에너지테크</span>가 해결합니다</h1>
   <p>고장 접수부터 배관청소, 누수센서 설치까지<br />전국 어디서나 빠르고 믿을 수 있는 난방 전문 서비스</p>
   <div class="hero-buttons">
@@ -275,7 +306,7 @@
   <div class="hero-stats">
     <div class="stat"><div class="stat-num">15,000+</div><div class="stat-label">누적 서비스 건수</div></div>
     <div class="stat"><div class="stat-num">98%</div><div class="stat-label">고객 만족도</div></div>
-    <div class="stat"><div class="stat-num">24H</div><div class="stat-label">긴급출동 가능</div></div>
+    <div class="stat"><div class="stat-num">신속</div><div class="stat-label">접수 및 출동</div></div>
     <div class="stat"><div class="stat-num">전국</div><div class="stat-label">지사 네트워크</div></div>
   </div>
 </section>
@@ -303,7 +334,7 @@
     <a href="/web/heat-status.html" class="service-card">
       <div class="service-icon">🌡️</div>
       <div class="service-title">우리 집 난방 상태</div>
-      <div class="service-desc">유량·압력·난방 상태를 한눈에 확인하세요</div>
+      <div class="service-desc">우리 집 난방 상태를 한눈에 확인하세요</div>
     </a>
     <a href="/web/branches.html" class="service-card">
       <div class="service-icon">📍</div>
@@ -429,6 +460,25 @@
   </div>
 </section>
 
+<!-- 직원/관리자 로그인 진입 배너 -->
+<section style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);padding:56px 24px;">
+  <div style="max-width:860px;margin:0 auto;text-align:center;">
+    <div style="display:inline-block;background:rgba(255,255,255,.1);color:#93c5fd;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;letter-spacing:.05em;margin-bottom:16px">🔒 직원 전용</div>
+    <h2 style="color:#fff;font-size:clamp(22px,4vw,34px);font-weight:800;margin-bottom:10px;">본사 · 지사 · 기사 로그인</h2>
+    <p style="color:rgba(255,255,255,.65);font-size:15px;margin-bottom:32px;">퓨처에너지테크 임직원은 아래 버튼을 눌러 로그인하세요.<br/>기존 아이디와 비밀번호로 바로 접속할 수 있습니다.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:28px;">
+      <a href="/web/admin/login.html" style="display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#e85d04;color:#fff;font-size:15px;font-weight:700;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px rgba(232,93,4,.4);">🏢 본사 관리자 로그인</a>
+      <a href="/web/admin/login.html" style="display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#0ea5e9;color:#fff;font-size:15px;font-weight:700;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px rgba(14,165,233,.4);">🏗️ 지사 관리자 로그인</a>
+      <a href="/web/admin/login.html" style="display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#16a34a;color:#fff;font-size:15px;font-weight:700;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px rgba(22,163,74,.4);">🔧 기사 로그인</a>
+    </div>
+    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
+      <div style="color:rgba(255,255,255,.5);font-size:13px;">✅ 본사: 전체 견적 확인 · 단가표 관리</div>
+      <div style="color:rgba(255,255,255,.5);font-size:13px;">✅ 지사: 지사 견적 확인 · 기사 배정</div>
+      <div style="color:rgba(255,255,255,.5);font-size:13px;">✅ 기사: 견적 작성 · 견적 보고하기</div>
+    </div>
+  </div>
+</section>
+
 <!-- FAQ -->
 <section class="faq-section">
   <h2 class="section-title">자주 묻는 질문</h2>
@@ -475,7 +525,7 @@
   <div class="footer-inner">
     <div class="footer-brand">
       <div class="logo-text">퓨처에너지테크</div>
-      <p>전국 지사 운영 · 24시간 긴급출동<br />대표: 유종선 &nbsp;|&nbsp; 휴대폰: 010-5754-7310<br />전화: 031-8042-7310 &nbsp;|&nbsp; 팩스: 031-403-7310<br />이메일: yerusun@naver.com<br />주소: 안산시 단원구 원포공원1로 67, 409호</p>
+      <p>전국 지사 운영 · 신속한 접수 및 출동 안내<br />대표: 유종선 &nbsp;|&nbsp; 휴대폰: 010-5754-7310<br />전화: 031-8042-7310 &nbsp;|&nbsp; 팩스: 031-403-7310<br />이메일: yerusun@naver.com<br />주소: 경기도 안산시 단원구 초지동 743-1 비전타운 409호</p>
     </div>
     <div class="footer-links">
       <h4>서비스</h4>
@@ -494,14 +544,15 @@
     </div>
     <div class="footer-links">
       <h4>직원 로그인</h4>
-      <a href="/web/admin/login.html">본사 관리자</a>
-      <a href="/web/admin/login.html">지사장</a>
+      <a href="/web/admin/login.html">🏢 본사 관리자</a>
+      <a href="/web/admin/login.html">🏗️ 지사 관리자</a>
+      <a href="/web/admin/login.html">🔧 기사</a>
       <a href="/web/about.html">회사소개</a>
     </div>
   </div>
   <div class="footer-bottom">
     <span>© 2025 퓨처에너지테크. All rights reserved.</span>
-    <span>대표: 유종선 · 안산시 단원구 원포공원1로 67, 409호</span>
+    <span>대표: 유종선 · 경기도 안산시 단원구 초지동 743-1 비전타운 409호</span>
   </div>
 </footer>
 
