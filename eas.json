@@ -46,14 +46,14 @@
     "production": {
       "ios": {
         "appleId": "jongseonyu@gmail.com",
-        "ascAppId": "",
+        "ascAppId": "6788993921",
         "appleTeamId": "83MU3C8JZN"
       }
     },
     "testflight": {
       "ios": {
         "appleId": "jongseonyu@gmail.com",
-        "ascAppId": "",
+        "ascAppId": "6788993921",
         "appleTeamId": "83MU3C8JZN"
       }
     }
