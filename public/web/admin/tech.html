@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="version" content="20260708-v3" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>기사 작업 - 퓨처에너지테크</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -43,6 +47,26 @@
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s; pointer-events: none; }
     .toast.show { opacity: 1; }
     .gps-banner { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #92400e; margin-bottom: 14px; display: none; }
+    /* 디버그 패널 */
+    #debugPanel {
+      display: none;
+      background: #0f172a;
+      color: #94a3b8;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      font-family: monospace;
+      line-height: 1.7;
+    }
+    #debugPanel.active { display: block; }
+    #debugPanel .dtitle { color: #f8fafc; font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    #debugPanel .drow { display: flex; justify-content: space-between; border-bottom: 1px solid #1e293b; padding: 3px 0; }
+    #debugPanel .dk { color: #64748b; }
+    #debugPanel .dv { color: #e2e8f0; font-weight: 600; }
+    #debugPanel .dv.ok { color: #4ade80; }
+    #debugPanel .dv.fail { color: #f87171; }
+    #debugPanel .dv.warn { color: #fbbf24; }
   </style>
 </head>
 <body>
@@ -55,14 +79,46 @@
 </div>
 
 <div class="container">
-  <div class="gps-banner" id="gpsBanner">위치 공유 중입니다. 이 화면을 켠 채로 이동해 주세요. 현재 위치가 고객에게 실시간 전송됩니다.</div>
+  <!-- 현장 견적 작성 / 보고 바로가기 | v20260708 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <a href="/web/admin/tech-estimate.html" style="display:block;background:#0ea5e9;color:#fff;border-radius:12px;padding:14px 16px;text-align:center;font-size:15px;font-weight:700;text-decoration:none">
+      ✏️ 견적 자동 생성기
+    </a>
+    <a href="/web/admin/tech-estimate.html#report" style="display:block;background:#f59e0b;color:#fff;border-radius:12px;padding:14px 16px;text-align:center;font-size:15px;font-weight:700;text-decoration:none">
+      📋 견적 보고하기
+    </a>
+  </div>
+    <div class="gps-banner" id="gpsBanner">
+    📡 <strong>위치 전송 중</strong> — 이 화면을 켠 채로 이동해 주세요.<br/>
+    <span style="font-size:12px;color:#78350f;">⚠️ 화면이 꺼지거나 다른 앱을 사용하면 위치 전송이 중단될 수 있습니다.<br/>배터리 최적화 → 앱 제외 설정을 권장합니다.</span>
+    <div id="gpsSendStatus" style="margin-top:6px;font-size:12px;color:#92400e;">마지막 전송: -</div>
+  </div>
+
+  <!-- 디버그 패널 (위치 공유 중에만 표시) -->
+  <div id="debugPanel">
+    <div class="dtitle">
+      <span>📡 GPS 전송 디버그 (차량 이동 기준)</span>
+      <span id="dbSendCount" style="color:#94a3b8;font-size:11px;">전송 0회</span>
+    </div>
+    <div class="drow"><span class="dk">전송 주기</span><span class="dv ok" id="dbInterval">10초 (heartbeat)</span></div>
+    <div class="drow"><span class="dk">마지막 전송 시각</span><span class="dv" id="dbLastSent">-</span></div>
+    <div class="drow"><span class="dk">위도 (Lat)</span><span class="dv" id="dbLat">-</span></div>
+    <div class="drow"><span class="dk">경도 (Lng)</span><span class="dv" id="dbLng">-</span></div>
+    <div class="drow"><span class="dk">속도 (km/h)</span><span class="dv" id="dbSpeed">-</span></div>
+    <div class="drow"><span class="dk">방향 (heading)</span><span class="dv" id="dbHeading">-</span></div>
+    <div class="drow"><span class="dk">정확도 (m)</span><span class="dv" id="dbAccuracy">-</span></div>
+    <div class="drow"><span class="dk">서버 전송 결과</span><span class="dv" id="dbStatus">-</span></div>
+    <div class="drow"><span class="dk">서버 응답 (updatedAt)</span><span class="dv" id="dbServerResp">-</span></div>
+    <div class="drow"><span class="dk">오류 메시지</span><span class="dv fail" id="dbError" style="word-break:break-all;font-size:11px">-</span></div>
+    <div class="drow"><span class="dk">전송 방식</span><span class="dv" id="dbSource">-</span></div>
+    <div class="drow"><span class="dk">성공 횟수</span><span class="dv ok" id="dbOkCount">0</span></div>
+    <div class="drow"><span class="dk">실패 횟수</span><span class="dv fail" id="dbFailCount">0</span></div>
+  </div>
+
   <div class="summary">
     <div class="box"><div class="num" id="cntTotal">0</div><div class="lbl">전체 작업</div></div>
     <div class="box"><div class="num" id="cntActive">0</div><div class="lbl">진행 예정</div></div>
     <div class="box"><div class="num" id="cntDone">0</div><div class="lbl">완료</div></div>
-  </div>
-  <div style="margin-bottom:16px;display:flex;gap:10px;">
-    <button onclick="location.href='/web/admin/tech-estimate.html'" style="flex:1;background:#1d4ed8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">✏️ 견적 자동 생성기</button>
   </div>
   <div id="jobList"></div>
 </div>
@@ -137,15 +193,114 @@
   let sessionsByReq = {}; // requestId -> session
   let geoWatchId = null;
   let activeToken = null;
+  let hbInterval = null; // 10초 하트비트 (차량 이동 기준)
+
+  // 디버그 카운터
+  let sendCount = 0;
+  let lastSentAt = 0;       // 마지막 전송 성공 타임스탬프
+  let hbWatchdog = null;    // 하트비트 감시 타이머 (30초 내 전송 없으면 재시작)
+
+  // GPS 옵션 — 차량 이동 기준: 캐시 금지, 고정밀, 5초 타임아웃
+  const GPS_OPTS = {
+    enableHighAccuracy: true,
+    maximumAge: 0,        // 캐시 좌표 사용 금지 — 항상 최신 GPS 좌표
+    timeout: 5000         // 5초 내 응답 없으면 오류 처리 후 재시도
+  };
+  // 저정밀 fallback 옵션 (GPS 타임아웃 시 사용)
+  const GPS_FALLBACK_OPTS = {
+    enableHighAccuracy: false,
+    maximumAge: 3000,
+    timeout: 4000
+  };
+
+  // 디버그 패널 업데이트
+  let okCount = 0, failCount = 0;
+  function updateDebug(lat, lng, speed, heading, accuracy, status, source, serverResp, errMsg) {
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2,'0') + ':' +
+                    now.getMinutes().toString().padStart(2,'0') + ':' +
+                    now.getSeconds().toString().padStart(2,'0') + '.' +
+                    now.getMilliseconds().toString().padStart(3,'0');
+    document.getElementById('dbLastSent').textContent = timeStr;
+    document.getElementById('dbLat').textContent = lat ? lat.toFixed(6) : '-';
+    document.getElementById('dbLng').textContent = lng ? lng.toFixed(6) : '-';
+    // speed: m/s → km/h 변환
+    if (speed !== null && speed !== undefined && speed >= 0) {
+      const kmh = (speed * 3.6).toFixed(1);
+      const el = document.getElementById('dbSpeed');
+      el.textContent = kmh + ' km/h';
+      el.className = 'dv' + (speed > 0 ? ' ok' : '');
+    } else {
+      document.getElementById('dbSpeed').textContent = '-';
+    }
+    document.getElementById('dbHeading').textContent = (heading !== null && heading !== undefined) ? heading.toFixed(0) + '°' : '-';
+    if (accuracy !== null && accuracy !== undefined) {
+      const el = document.getElementById('dbAccuracy');
+      el.textContent = accuracy.toFixed(0) + ' m';
+      el.className = 'dv' + (accuracy <= 20 ? ' ok' : accuracy <= 50 ? ' warn' : ' fail');
+    } else {
+      document.getElementById('dbAccuracy').textContent = '-';
+    }
+    const statusEl = document.getElementById('dbStatus');
+    if (status === 'ok') {
+      statusEl.textContent = '성공 ✓ (' + timeStr + ')';
+      statusEl.className = 'dv ok';
+      okCount++;
+      document.getElementById('dbOkCount').textContent = okCount;
+    } else if (status === 'fail') {
+      statusEl.textContent = '실패 ✗ (' + timeStr + ')';
+      statusEl.className = 'dv fail';
+      failCount++;
+      document.getElementById('dbFailCount').textContent = failCount;
+    } else {
+      statusEl.textContent = '전송 중...';
+      statusEl.className = 'dv warn';
+    }
+    // 서버 응답 updatedAt
+    if (serverResp && serverResp.updatedAt) {
+      const srvTime = new Date(serverResp.updatedAt);
+      const srvStr = srvTime.getHours().toString().padStart(2,'0') + ':' +
+                     srvTime.getMinutes().toString().padStart(2,'0') + ':' +
+                     srvTime.getSeconds().toString().padStart(2,'0');
+      document.getElementById('dbServerResp').textContent = srvStr + ' (DB저장성공)';
+      document.getElementById('dbServerResp').className = 'dv ok';
+    } else if (serverResp && serverResp.error) {
+      document.getElementById('dbServerResp').textContent = '오류: ' + serverResp.error;
+      document.getElementById('dbServerResp').className = 'dv fail';
+    }
+    // 오류 메시지
+    if (errMsg) {
+      document.getElementById('dbError').textContent = errMsg;
+    } else if (status === 'ok') {
+      document.getElementById('dbError').textContent = '-';
+    }
+    document.getElementById('dbSource').textContent = source || '-';
+    sendCount++;
+    document.getElementById('dbSendCount').textContent = '전송 ' + sendCount + '회';
+    // 배너에도 마지막 전송 시각 표시
+    const statusEl2 = document.getElementById('gpsSendStatus');
+    if (statusEl2) {
+      const now2 = new Date();
+      const ts = now2.getHours().toString().padStart(2,'0') + ':' +
+                 now2.getMinutes().toString().padStart(2,'0') + ':' +
+                 now2.getSeconds().toString().padStart(2,'0');
+      statusEl2.textContent = (status === 'ok' ? '✅ 전송 성공 ' : '❌ 전송 실패 ') + ts + ' (성공 ' + okCount + '회 / 실패 ' + failCount + '회)';
+      statusEl2.style.color = status === 'ok' ? '#065f46' : '#991b1b';
+    }
+  }
 
   async function loadJobs() {
-    if (!me.technicianId) {
-      document.getElementById('jobList').innerHTML = '<div class="empty">기사 정보가 연결되지 않았습니다.<br/>관리자에게 문의해 주세요.</div>';
-      return;
-    }
     try {
-      const jobs = await callApi('repair.listByTechnician', { technicianId: me.technicianId }, true) || [];
-      // 각 작업의 위치 세션 조회
+      let jobs = [];
+      if (me.technicianId) {
+        jobs = await callApi('repair.listByTechnician', { technicianId: me.technicianId }, true) || [];
+      } else if (me.userId) {
+        jobs = await callApi('repair.listByTechnicianUserId', { userId: me.userId }, true) || [];
+        if (jobs.length > 0 && jobs[0].technicianId) me.technicianId = jobs[0].technicianId;
+      } else {
+        document.getElementById('jobList').innerHTML = '<div class="empty">기사 정보가 연결되지 않았습니다.<br/>관리자에게 문의해 주세요.</div>';
+        return;
+      }
       sessionsByReq = {};
       for (const j of jobs) {
         try {
@@ -177,8 +332,6 @@
       const addr = (j.apartmentName ? j.apartmentName + ' ' : '') + (j.addressDetail || j.address || '');
       let trackBlock = '';
       if (isMoving && session) {
-        const base = location.origin.includes('manus.computer') ? location.origin.replace(/^https?:\/\/808\d-/, 'https://808$&').split('-3000')[0] : '';
-        const url = (window.location.protocol + '//' + window.location.host).replace(/3000-/, '8081-');
         trackBlock = '<div class="track-link">고객 위치확인 링크 활성화됨<br/>' + (session.trackingUrl || ('/track/' + session.trackingToken)) + '</div>';
       }
       let actions;
@@ -232,9 +385,10 @@
         });
         if (r && r.success) {
           activeToken = r.token;
+          sendCount = 0;
           // 상태도 이동중으로
           try { await callApi('repair.updateStatus', { id: reqId, status: '이동중', notify: false }); } catch(e) {}
-          await sendPosition(r.token, pos.coords.latitude, pos.coords.longitude);
+          await sendPosition(r.token, pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.heading, pos.coords.accuracy, 'depart');
           startGpsWatch(r.token);
           toast(r.smsSent ? '출발! 고객에게 위치 링크를 문자로 보냈습니다.' : '출발! 위치 공유를 시작했습니다.');
           loadJobs();
@@ -242,30 +396,108 @@
       } catch (err) { toast('오류: ' + err.message); }
     }, (err) => {
       toast('위치 권한이 필요합니다. 설정에서 허용해 주세요.');
-    }, { enableHighAccuracy: true, timeout: 10000 });
+    }, GPS_OPTS);
   }
 
-  async function sendPosition(token, lat, lng) {
-    try { await restCall('/api/location/update', { token, lat, lng }); } catch (e) {}
+  // speed(m/s), heading(도), accuracy(m) 포함 전송
+  async function sendPosition(token, lat, lng, speed, heading, accuracy, source) {
+    updateDebug(lat, lng, speed, heading, accuracy, 'sending', source || 'watch', null, null);
+    try {
+      const resp = await restCall('/api/location/update', {
+        token,
+        lat,
+        lng,
+        speed: (speed !== null && speed !== undefined) ? speed : null,
+        heading: (heading !== null && heading !== undefined) ? heading : null,
+        accuracy: (accuracy !== null && accuracy !== undefined) ? accuracy : null
+      });
+      if (resp && resp.success) {
+        updateDebug(lat, lng, speed, heading, accuracy, 'ok', source || 'watch', resp, null);
+      } else {
+        updateDebug(lat, lng, speed, heading, accuracy, 'fail', source || 'watch', resp, resp ? (resp.error || JSON.stringify(resp)) : '응답 없음');
+      }
+    } catch (e) {
+      updateDebug(lat, lng, speed, heading, accuracy, 'fail', source || 'watch', null, e.message || String(e));
+    }
+  }
+
+  // 하트비트 1회 실행 (고정밀 실패 시 저정밀 fallback)
+  function doHeartbeat(token) {
+    if (!token) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        lastSentAt = Date.now();
+        sendPosition(token, pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.heading, pos.coords.accuracy, 'heartbeat');
+      },
+      (err) => {
+        console.warn('[GPS heartbeat HQ error]', err.code, err.message);
+        // 고정밀 실패 → 저정밀 fallback 즉시 시도
+        navigator.geolocation.getCurrentPosition(
+          (pos2) => {
+            lastSentAt = Date.now();
+            sendPosition(token, pos2.coords.latitude, pos2.coords.longitude, pos2.coords.speed, pos2.coords.heading, pos2.coords.accuracy, 'hb-fallback');
+          },
+          (err2) => { console.warn('[GPS heartbeat LQ error]', err2.code, err2.message); },
+          GPS_FALLBACK_OPTS
+        );
+      },
+      GPS_OPTS
+    );
   }
 
   function startGpsWatch(token) {
     document.getElementById('gpsBanner').style.display = 'block';
+    document.getElementById('debugPanel').classList.add('active');
+    lastSentAt = Date.now();
+
     if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
+
+    // watchPosition: 이동 감지 시 즉시 전송 (maximumAge:0 → 캐시 금지)
     geoWatchId = navigator.geolocation.watchPosition((pos) => {
-      sendPosition(token, pos.coords.latitude, pos.coords.longitude);
-    }, (err) => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+      lastSentAt = Date.now();
+      sendPosition(token, pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.heading, pos.coords.accuracy, 'watch');
+    }, (err) => {
+      console.warn('[GPS watch error]', err.code, err.message);
+    }, GPS_OPTS);
+
+    // 10초 하트비트: 차량 이동 기준 — 정지 중에도 10초마다 강제 전송
+    if (hbInterval) clearInterval(hbInterval);
+    hbInterval = setInterval(() => {
+      if (!activeToken) return;
+      doHeartbeat(activeToken);
+    }, 10000);
+
+    // 감시 타이머: 20초 내 전송이 없으면 즉시 전송 시도 (브라우저 스로틀링 대응)
+    if (hbWatchdog) clearInterval(hbWatchdog);
+    hbWatchdog = setInterval(() => {
+      if (!activeToken) return;
+      const elapsed = Date.now() - lastSentAt;
+      if (elapsed > 20000) {
+        console.warn('[Watchdog] ' + Math.round(elapsed/1000) + '초 미전송 → 즉시 전송 시도');
+        doHeartbeat(activeToken);
+      }
+    }, 10000);
+
+    // 페이지 가시성 변경 시 즉시 전송 (탭 전환 후 복귀 등)
+    document.addEventListener('visibilitychange', function onVis() {
+      if (document.visibilityState === 'visible' && activeToken) {
+        console.log('[Visibility] 화면 복귀 → 즉시 전송');
+        doHeartbeat(activeToken);
+      }
+    });
   }
 
   function stopGpsWatch() {
     if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+    if (hbInterval) { clearInterval(hbInterval); hbInterval = null; }
+    if (hbWatchdog) { clearInterval(hbWatchdog); hbWatchdog = null; }
     document.getElementById('gpsBanner').style.display = 'none';
+    document.getElementById('debugPanel').classList.remove('active');
     activeToken = null;
   }
 
   async function arrive(reqId, token) {
     try {
-      // 도착 처리: 세션 종료 + 단계 갱신 + 고객 도착 안내(서버에서 발송)
       await callApi('location.markArrived', { requestId: reqId, token: (token && token !== 'null') ? token : undefined }, false);
       await callApi('repair.updateStatus', { id: reqId, status: '방문중', notify: false });
       stopGpsWatch();
@@ -279,7 +511,6 @@
     try {
       if (token && token !== 'null') await restCall('/api/location/stop', { token, reason: '도착완료' });
       await callApi('repair.updateStatus', { id: reqId, status: '작업완료', notify: false });
-      // 작업완료 단계 갱신 + 고객 완료 안내 (서버에서 발송)
       await callApi('location.markWorkCompleted', { requestId: reqId }, false);
       stopGpsWatch();
       toast('작업 완료 처리되었습니다. 고객에게 완료 안내가 발송됩니다.');
@@ -303,3 +534,4 @@
 </script>
 </body>
 </html>
+
