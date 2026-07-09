@@ -58,7 +58,7 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
   try {
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : `${process.env.EXPO_PUBLIC_API_URL || "https://futureenergytech.co.kr"}/api/trpc`;
+      : `${process.env.EXPO_PUBLIC_API_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr"}/api/trpc`;
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

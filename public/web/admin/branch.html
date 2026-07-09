@@ -143,10 +143,17 @@
   <nav>
     <div class="nav-section">대시보드</div>
     <div class="nav-item active" onclick="showPanel('overview')"><span>📊</span> 지사 현황</div>
+    <div class="nav-section">견적서</div>
+    <div class="nav-item" id="nav-estimate-send" onclick="showPanel('estimate-send')"><span>📤</span> 견적서 전송하기</div>
+    <div class="nav-item" id="nav-estimate-manage" onclick="showPanel('estimate-manage')"><span>📋</span> 기사 견적 보고 대기 <span id="estimate-pending-badge" style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></div>
+    <div class="nav-item" onclick="showPanel('schedule-requests')"><span>📅</span> 일정요청 확인 <span id="schedule-pending-badge" style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></div>
+    <div class="nav-item" onclick="window.open('/web/admin/tech-estimate.html','_blank')"><span>✏️</span> 견적 자동 생성기</div>
     <div class="nav-section">접수 관리</div>
     <div class="nav-item" onclick="showPanel('requests')"><span>📋</span> 접수 목록</div>
     <div class="nav-item" onclick="showPanel('assign')"><span>👷</span> 기사 배정</div>
     <div class="nav-item" onclick="showPanel('schedule')"><span>📅</span> 방문 일정</div>
+    <div class="nav-section">실시간</div>
+    <div class="nav-item" onclick="showPanel('tracking')"><span>📍</span> 기사 이동 현황</div>
     <div class="nav-section">기사 관리</div>
     <div class="nav-item" onclick="showPanel('technicians')"><span>🔧</span> 기사 목록</div>
     <div class="nav-section">통계</div>
@@ -154,11 +161,6 @@
     <div class="nav-section">기타</div>
     <div class="nav-item" onclick="showPanel('sensors')"><span>📡</span> 누수센서 알림</div>
     <div class="nav-item" onclick="showPanel('materials')"><span>📦</span> 자재 주문</div>
-    <div class="nav-section">견적서</div>
-    <div class="nav-item" id="nav-estimate-send" onclick="showPanel('estimate-send')"><span>📤</span> 견적서 전송하기</div>
-    <div class="nav-item" id="nav-estimate-manage" onclick="showPanel('estimate-manage')"><span>🧾</span> 견적서 관리</div>
-    <div class="nav-section">실시간</div>
-    <div class="nav-item" onclick="showPanel('tracking')"><span>📍</span> 기사 이동 현황</div>
   </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" onclick="doLogout()">🚪 로그아웃</button>

@@ -135,8 +135,8 @@ try {
   console.log("  PW: Admin1234!");
   console.log("  권한: 본사 관리자 (hq_admin)");
   console.log("");
-  console.log("접속 URL: https://futureenergytech.co.kr/web/login.html");
-  console.log("견적서 생성기: https://futureenergytech.co.kr/web/admin/tech-estimate.html");
+  console.log("접속 URL: https://xn--2z1bw8k1pjz5ccumkb516e.kr/web/login.html");
+  console.log("견적서 생성기: https://xn--2z1bw8k1pjz5ccumkb516e.kr/web/admin/tech-estimate.html");
 
 } catch (err) {
   console.error("❌ 오류:", err.message);

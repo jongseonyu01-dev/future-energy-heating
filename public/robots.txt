@@ -5,4 +5,4 @@ Disallow: /preview/admin/
 # 공개 홈페이지는 허용
 Allow: /web/
 
-Sitemap: https://futureheat-htdx5kse.manus.space/sitemap.xml
+Sitemap: https://xn--2z1bw8k1pjz5ccumkb516e.kr/sitemap.xml

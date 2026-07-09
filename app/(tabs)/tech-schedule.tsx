@@ -437,7 +437,7 @@ export default function TechScheduleScreen() {
           </Text>
           <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
           <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
-          <Text style={s.debugRow}>API 서버: https://futureenergytech.co.kr</Text>
+          <Text style={s.debugRow}>API 서버: https://xn--2z1bw8k1pjz5ccumkb516e.kr</Text>
         </View>
       )}
 

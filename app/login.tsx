@@ -105,7 +105,7 @@ export default function LoginScreen() {
       const msg = err?.message || "";
       const shape = (err as any)?.data?.httpStatus;
       const detail = shape ? `(HTTP ${shape})` : "";
-      setError(`서버 연결 실패 ${detail}\n서버: https://futureenergytech.co.kr\n오류: ${msg || "네트워크 오류"}`);
+      setError(`서버 연결 실패 ${detail}\n서버: https://xn--2z1bw8k1pjz5ccumkb516e.kr\n오류: ${msg || "네트워크 오류"}`);
     },
   });
 

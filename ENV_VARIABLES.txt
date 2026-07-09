@@ -7,10 +7,10 @@
 # ============================================================
 
 # ── 필수: 도메인 / 트래킹 링크 (www 없이) ───────────────────
-SITE_URL=https://futureenergytech.co.kr
+SITE_URL=https://xn--2z1bw8k1pjz5ccumkb516e.kr
 
 # ── 필수: 네이버 지도 Client ID ─────────────────────────────
-# 네이버 클라우드 > Maps > Web 서비스 URL에 https://futureenergytech.co.kr 등록 필요
+# 네이버 클라우드 > Maps > Web 서비스 URL에 https://xn--2z1bw8k1pjz5ccumkb516e.kr 등록 필요
 NAVER_MAP_CLIENT_ID=8rfi2gmb9q
 
 # ── 필수: 데이터베이스 (MySQL) ──────────────────────────────
