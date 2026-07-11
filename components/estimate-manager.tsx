@@ -56,7 +56,7 @@ export function EstimateManager({
   branchId: number | null;
   senderId?: number;
 }) {
-  const [tab, setTab] = useState<"send" | "list">("send");
+  const [tab, setTab] = useState<"send" | "list" | "tech_pending">("send");
   const utils = trpc.useUtils();
 
   // ── 전송 폼 상태 ──
@@ -77,6 +77,12 @@ export function EstimateManager({
     { branchId: listBranchId, status: undefined },
     { enabled: tab === "list" },
   );
+  const { data: techPending = [], isLoading: techPendingLoading, refetch: refetchTechPending } = trpc.estimates.listTechPending.useQuery(
+    { branchId: listBranchId },
+    { enabled: tab === "tech_pending" },
+  );
+  const approveMutation = trpc.estimates.approveTechRequest.useMutation();
+  const rejectMutation = trpc.estimates.rejectTechRequest.useMutation();
 
   const uploadMutation = trpc.estimates.uploadFile.useMutation();
   const sendMutation = trpc.estimates.send.useMutation();
@@ -214,7 +220,8 @@ export function EstimateManager({
         {([
           { key: "send", label: "✉️ 견적서 전송" },
           { key: "list", label: "📋 견적서 관리" },
-        ] as { key: "send" | "list"; label: string }[]).map((t) => {
+          { key: "tech_pending", label: "📥 기사 보고" },
+        ] as { key: "send" | "list" | "tech_pending"; label: string }[]).map((t) => {
           const active = tab === t.key;
           return (
             <TouchableOpacity
@@ -235,7 +242,93 @@ export function EstimateManager({
         })}
       </View>
 
-      {tab === "send" ? (
+      {tab === "tech_pending" ? (
+        <View style={{ flex: 1 }}>
+          <View style={{ padding: 16, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 13, color: "#6B7280" }}>기사가 현장에서 작성한 견적입니다. 검토 후 고객에게 발송하세요.</Text>
+          </View>
+          {techPendingLoading ? (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}><ActivityIndicator color="#FF6B35" /></View>
+          ) : (techPending as any[]).length === 0 ? (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 40 }}>
+              <Text style={{ fontSize: 36, marginBottom: 10 }}>📥</Text>
+              <Text style={{ color: "#6B7280", fontSize: 15 }}>기사 보고 대기 견적이 없습니다.</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 60 }}>
+              {(techPending as any[]).map((est) => {
+                let items: any[] = [];
+                try { items = JSON.parse(est.description || "[]"); } catch {}
+                const amt = est.amount ? Number(est.amount).toLocaleString("ko-KR") + "원" : "미정";
+                return (
+                  <View key={est.id} style={{ backgroundColor: "#FFFBEB", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#FCD34D", gap: 8 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "800", color: "#111" }}>{est.customerName}</Text>
+                        <Text style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{est.customerPhone}</Text>
+                      </View>
+                      <Text style={{ fontSize: 16, fontWeight: "800", color: "#D97706" }}>{amt}</Text>
+                    </View>
+                    {items.length > 0 && (
+                      <View style={{ backgroundColor: "#fff", borderRadius: 8, padding: 10, gap: 3 }}>
+                        {items.slice(0, 4).map((it: any, i: number) => (
+                          <Text key={i} style={{ fontSize: 12, color: "#374151" }}>· {it.name} × {it.qty} = {Number(it.subtotal).toLocaleString()}원</Text>
+                        ))}
+                        {items.length > 4 && <Text style={{ fontSize: 12, color: "#6B7280" }}>· 외 {items.length - 4}개 항목</Text>}
+                      </View>
+                    )}
+                    {!!est.requestMemo && <Text style={{ fontSize: 12, color: "#92400E", fontStyle: "italic" }}>📝 {est.requestMemo}</Text>}
+                    <Text style={{ fontSize: 11, color: "#9CA3AF" }}>보고: {est.sentAt ? new Date(est.sentAt).toLocaleString("ko-KR") : "-"}</Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: "#D1FAE5", borderRadius: 10, paddingVertical: 11, alignItems: "center", borderWidth: 1, borderColor: "#6EE7B7" }}
+                        activeOpacity={0.8}
+                        onPress={() => Alert.alert(
+                          "견적 발송",
+                          `[${est.customerName}] 고객에게 견적서를 발송하시겠습니까?`,
+                          [
+                            { text: "취소", style: "cancel" },
+                            { text: "발송", onPress: async () => {
+                              try {
+                                const r = await approveMutation.mutateAsync({ estimateId: est.id });
+                                const msg = r.smsSent ? "✅ 고객에게 견적서가 발송되었습니다." : "⚠️ 상태는 변경되었으나 SMS 발송에 실패했습니다.";
+                                Alert.alert("완료", msg);
+                                refetchTechPending();
+                              } catch(e: any) { Alert.alert("오류", e?.message || "발송 실패"); }
+                            }}
+                          ]
+                        )}
+                      >
+                        <Text style={{ color: "#065F46", fontWeight: "700", fontSize: 13 }}>✅ 검토 후 발송</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: "#FEE2E2", borderRadius: 10, paddingVertical: 11, alignItems: "center", borderWidth: 1, borderColor: "#FCA5A5" }}
+                        activeOpacity={0.8}
+                        onPress={() => Alert.alert(
+                          "반려",
+                          "이 견적을 반려 처리하시겠습니까?",
+                          [
+                            { text: "취소", style: "cancel" },
+                            { text: "반려", style: "destructive", onPress: async () => {
+                              try {
+                                await rejectMutation.mutateAsync({ estimateId: est.id });
+                                Alert.alert("반려 완료", "견적이 반려 처리되었습니다.");
+                                refetchTechPending();
+                              } catch(e: any) { Alert.alert("오류", e?.message || "반려 실패"); }
+                            }}
+                          ]
+                        )}
+                      >
+                        <Text style={{ color: "#991B1B", fontWeight: "700", fontSize: 13 }}>❌ 반려</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      ) : tab === "send" ? (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           <View style={{ backgroundColor: "#EFF6FF", borderRadius: 12, padding: 12 }}>
             <Text style={{ fontSize: 12, color: "#1D4ED8", lineHeight: 18 }}>

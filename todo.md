@@ -532,3 +532,11 @@
 - [ ] versionCode 증가 및 EAS Build (AAB 생성)
 - [ ] Play Console 등록 자료 준비 및 출시 신청
 - [ ] 홈페이지에 기사용 앱 다운로드 버튼 연결 (Play Store 링크)
+
+## 기사 앱 견적서 작성 및 본사 송출 기능 (33차)
+- [x] 서버 API: estimates.techRequest (기사 현장 견적 보고 → 본사/지사 SMS 알림)
+- [x] 서버 API: estimates.listMyTechRequests (기사 본인 보고 목록 조회)
+- [x] 앱: app/tech-estimate.tsx 신규 생성 (단가표 항목 선택 → 견적 작성 → 본사 보고)
+- [x] 앱: tech-works.tsx 헤더에 "견적 작성" 버튼 추가
+- [x] 앱: work-report.tsx 헤더에 "현장견적" 버튼 추가 (고객정보 자동 전달)
+- [x] 체크포인트 저장 및 GitHub 푸시

@@ -50,8 +50,19 @@ export default function TechWorksScreen() {
   return (
     <ScreenContainer>
       <View style={s.header}>
-        <Text style={s.headerTitle}>작업 목록</Text>
-        <Text style={s.headerSub}>{user?.name ? `${user.name}님 · ` : ""}소속: {user?.branchName || "미지정"} · 전체 {works.length}건</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <View>
+            <Text style={s.headerTitle}>작업 목록</Text>
+            <Text style={s.headerSub}>{user?.name ? `${user.name}님 · ` : ""}소속: {user?.branchName || "미지정"} · 전체 {works.length}건</Text>
+          </View>
+          <TouchableOpacity
+            style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}
+            onPress={() => router.push("/tech-estimate" as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>✏️ 견적 작성</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* 검색 */}

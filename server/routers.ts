@@ -2297,6 +2297,124 @@ export const appRouter = router({
         const all = await db.listEstimates({ branchId: null });
         return all.filter(e => e.sentBy === input.sentBy && e.senderRole === "technician");
       }),
+    // ─── 기사 견적 보고 (본사/지사 검토 대기) ─────────────────────────
+    techRequest: publicProcedure
+      .input(z.object({
+        customerName: z.string().min(1),
+        customerPhone: z.string().min(8),
+        title: z.string().optional(),
+        amount: z.number().optional(),
+        estimateItems: z.string(), // JSON 문자열 [{name, qty, unitPrice, subtotal}]
+        memo: z.string().optional(),
+        branchId: z.number().nullable().optional(),
+        technicianId: z.number(),
+        technicianName: z.string(),
+        requestId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const token = crypto.randomBytes(24).toString("base64url");
+        const validUntil = new Date(Date.now() + 72 * 60 * 60 * 1000);
+        let branchName: string | null = null;
+        if (input.branchId) {
+          const b = await db.getBranchById(input.branchId);
+          branchName = b?.name ?? null;
+        }
+        const estimateId = await db.createEstimate({
+          requestId: input.requestId ?? null,
+          token,
+          title: input.title ?? `현장견적_${input.technicianName}_${new Date().toLocaleDateString("ko-KR")}`,
+          amount: input.amount != null ? String(input.amount) : "0",
+          description: input.estimateItems,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone.replace(/[^0-9]/g, ""),
+          fileUrl: null,
+          fileName: null,
+          fileType: null,
+          fileSize: null,
+          ownerType: input.branchId ? "branch" : "headquarters",
+          branchId: input.branchId ?? null,
+          branchName,
+          status: "pending",
+          sentAt: new Date(),
+          validUntil,
+          sentBy: input.technicianId,
+          senderRole: "technician",
+          requestMemo: input.memo ?? null,
+        } as any);
+        // 본사/지사 알림 SMS
+        let adminPhone: string | null = null;
+        if (input.branchId) adminPhone = await db.getBranchPhone(input.branchId);
+        if (!adminPhone) adminPhone = await db.getSetting("hq_admin_phone");
+        if (adminPhone && adminPhone.trim().length >= 9) {
+          const amtStr = input.amount ? input.amount.toLocaleString() + "원" : "미정";
+          const adminMsg = `[퓨처에너지테크] 기사 견적 보고\n기사: ${input.technicianName}\n고객: ${input.customerName}\n금액: ${amtStr}\n검토 후 고객에게 발송해주세요.`;
+          try { await sendNotification(adminPhone.trim(), adminMsg); } catch {}
+        }
+        return { success: true, estimateId, token };
+      }),
+    // 기사 본인 견적 보고 목록 조회
+    listMyTechRequests: publicProcedure
+      .input(z.object({ technicianId: z.number() }))
+      .query(async ({ input }) => {
+        const all = await db.listEstimates({ branchId: null });
+        return all.filter(e => e.sentBy === input.technicianId && e.senderRole === "technician");
+      }),
+    // ─── 기사 견적 보고 대기 목록 (본사/지사 관리자용) ─────────────────────
+    listTechPending: publicProcedure
+      .input(z.object({ branchId: z.number().nullable().optional() }))
+      .query(async ({ input }) => {
+        const all = await db.listEstimates({ branchId: input.branchId ?? null });
+        return all.filter(e => e.senderRole === "technician" && e.status === "pending");
+      }),
+    // ─── 기사 견적 승인 후 고객 SMS 발송 ──────────────────────────────────
+    approveTechRequest: publicProcedure
+      .input(z.object({
+        estimateId: z.number(),
+        approverName: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const est = await db.getEstimateById(input.estimateId);
+        if (!est) throw new Error("견적을 찾을 수 없습니다.");
+        if (est.status !== "pending") throw new Error("이미 처리된 요청입니다.");
+        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const estimateUrl = `${baseUrl}/estimate/${est.token}`;
+        await db.updateEstimateById(est.id, { status: "sent", sentAt: new Date() });
+        const phone = (est.customerPhone ?? "").replace(/[^0-9]/g, "");
+        const msg = buildEstimateDocMessage(est.customerName ?? "고객", estimateUrl, Number(est.amount));
+        let smsSent = false;
+        let smsError: string | undefined;
+        try {
+          const r = await sendNotification(phone, msg);
+          smsSent = r.result === "SUCCESS" || r.result === "REQUESTED";
+          if (!smsSent) smsError = r.errorMessage;
+        } catch (e: any) { smsError = e.message; }
+        try {
+          await db.createEstimateMessageLog({
+            estimateId: est.id,
+            branchId: est.branchId ?? null,
+            customerPhone: phone,
+            customerName: est.customerName ?? undefined,
+            messageType: "estimate_sent",
+            messageBody: msg,
+            linkUrl: estimateUrl,
+            sendStatus: smsSent ? "SUCCESS" : "FAILED",
+          });
+        } catch {}
+        return { success: true, estimateUrl, smsSent, smsError };
+      }),
+    // ─── 기사 견적 반려 ────────────────────────────────────────────────────
+    rejectTechRequest: publicProcedure
+      .input(z.object({
+        estimateId: z.number(),
+        rejectReason: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const est = await db.getEstimateById(input.estimateId);
+        if (!est) throw new Error("견적을 찾을 수 없습니다.");
+        if (est.status !== "pending") throw new Error("이미 처리된 요청입니다.");
+        await db.updateEstimateById(est.id, { status: "cancelled" });
+        return { success: true };
+      }),
   }),
 
   // ─── 단가 관리 ─────────────────────────────────────────────────────
