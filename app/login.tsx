@@ -91,7 +91,11 @@ export default function LoginScreen() {
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async (data) => {
       if (!data.success) {
-        setError(data.error ?? "아이디 또는 비밀번호가 올바르지 않습니다.");
+        if ((data as any).blockedRole === "hq_admin" || (data as any).blockedRole === "branch_manager") {
+          setError("본사와 지사 계정은 홈페이지 관리시스템을 이용해 주세요.\nhttps://퓨처에너지테크.kr");
+        } else {
+          setError(data.error ?? "아이디 또는 비밀번호가 올바르지 않습니다.");
+        }
         return;
       }
       if (data.mustChangePassword) {
@@ -127,7 +131,7 @@ export default function LoginScreen() {
     Keyboard.dismiss();
     clearMsg();
     if (!loginId.trim() || !password.trim()) { setError("아이디와 비밀번호를 입력해주세요."); return; }
-    loginMutation.mutate({ loginId: loginId.trim(), password });
+    loginMutation.mutate({ loginId: loginId.trim(), password, source: "app" });
   };
 
   const handleChangePw = () => {

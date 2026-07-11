@@ -2,6 +2,7 @@
  * 현장 기사 - 작업 보고서 화면
  * - 현장 점검표 작성
  * - 사용 자재 입력
+ * - 작업 전/후 사진 촬영
  * - 작업 메모
  * - 재방문 필요 여부
  * - 작업 완료 보고
@@ -9,7 +10,7 @@
 import React, { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Platform,
+  TextInput, Alert, ActivityIndicator, Platform, Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -18,6 +19,8 @@ import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 
 const CHECK_ITEMS = [
   "온도조절기 작동 확인",
@@ -45,6 +48,14 @@ export default function WorkReportScreen() {
   const [revisitReason, setRevisitReason] = useState("");
   const [saved, setSaved] = useState(false);
 
+  // 사진 상태
+  const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
+  const [afterPhotoUri, setAfterPhotoUri] = useState<string | null>(null);
+  const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | undefined>(undefined);
+  const [afterPhotoUrl, setAfterPhotoUrl] = useState<string | undefined>(undefined);
+  const [uploadingBefore, setUploadingBefore] = useState(false);
+  const [uploadingAfter, setUploadingAfter] = useState(false);
+
   const utils = trpc.useUtils();
 
   const { data: request, isLoading: requestLoading } = trpc.repair.getById.useQuery(
@@ -65,8 +76,111 @@ export default function WorkReportScreen() {
       }
       if (existingReport.usedMaterials) setUsedMaterials(existingReport.usedMaterials);
       if (existingReport.workMemo) setWorkMemo(existingReport.workMemo);
+      if (existingReport.beforePhotoUrl) {
+        setBeforePhotoUrl(existingReport.beforePhotoUrl);
+        setBeforePhotoUri(existingReport.beforePhotoUrl);
+      }
+      if (existingReport.afterPhotoUrl) {
+        setAfterPhotoUrl(existingReport.afterPhotoUrl);
+        setAfterPhotoUri(existingReport.afterPhotoUrl);
+      }
     }
   }, [existingReport]);
+
+  const uploadPhotoMutation = trpc.workReport.uploadPhoto.useMutation();
+
+  const pickPhoto = async (type: "before" | "after") => {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");
+        return;
+      }
+    }
+
+    Alert.alert(
+      "사진 선택",
+      "사진을 어떻게 추가하시겠습니까?",
+      [
+        {
+          text: "카메라 촬영",
+          onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: "images",
+              quality: 0.7,
+              allowsEditing: false,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await handlePhotoSelected(result.assets[0].uri, type);
+            }
+          },
+        },
+        {
+          text: "갤러리에서 선택",
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: "images",
+              quality: 0.7,
+              allowsEditing: false,
+            });
+            if (!result.canceled && result.assets[0]) {
+              await handlePhotoSelected(result.assets[0].uri, type);
+            }
+          },
+        },
+        { text: "취소", style: "cancel" },
+      ]
+    );
+  };
+
+  const handlePhotoSelected = async (uri: string, type: "before" | "after") => {
+    if (type === "before") {
+      setBeforePhotoUri(uri);
+      setUploadingBefore(true);
+    } else {
+      setAfterPhotoUri(uri);
+      setUploadingAfter(true);
+    }
+
+    try {
+      // URI → base64
+      let base64: string;
+      if (Platform.OS === "web") {
+        // 웹: fetch로 base64 변환
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        base64 = `data:image/jpeg;base64,${b64}`;
+      }
+
+      const result = await uploadPhotoMutation.mutateAsync({
+        requestId,
+        photoType: type,
+        base64,
+        mimeType: "image/jpeg",
+      });
+
+      if (type === "before") {
+        setBeforePhotoUrl(result.url);
+      } else {
+        setAfterPhotoUrl(result.url);
+      }
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (err) {
+      Alert.alert("업로드 실패", "사진 업로드 중 오류가 발생했습니다.");
+      if (type === "before") setBeforePhotoUri(null);
+      else setAfterPhotoUri(null);
+    } finally {
+      if (type === "before") setUploadingBefore(false);
+      else setUploadingAfter(false);
+    }
+  };
 
   const saveMutation = trpc.workReport.save.useMutation({
     onSuccess: () => {
@@ -111,6 +225,8 @@ export default function WorkReportScreen() {
       usedMaterials: usedMaterials || undefined,
       workMemo: workMemo || undefined,
       isCompleted: false,
+      beforePhotoUrl,
+      afterPhotoUrl,
     });
   };
 
@@ -134,6 +250,8 @@ export default function WorkReportScreen() {
               usedMaterials: usedMaterials || undefined,
               workMemo: workMemo || undefined,
               isCompleted: !needsRevisit,
+              beforePhotoUrl,
+              afterPhotoUrl,
             });
           }
         }
@@ -204,6 +322,88 @@ export default function WorkReportScreen() {
               <Text style={[s.checkItemText, { color: colors.foreground }]}>{item}</Text>
             </TouchableOpacity>
           ))}
+        </View>
+
+        {/* 현장 사진 */}
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.foreground }]}>📸 현장 사진</Text>
+          <View style={s.photoRow}>
+            {/* 작업 전 사진 */}
+            <View style={s.photoBox}>
+              <Text style={[s.photoLabel, { color: colors.muted }]}>작업 전</Text>
+              {beforePhotoUri ? (
+                <View>
+                  <Image source={{ uri: beforePhotoUri }} style={s.photoPreview} resizeMode="cover" />
+                  {uploadingBefore && (
+                    <View style={s.photoOverlay}>
+                      <ActivityIndicator color="#fff" />
+                      <Text style={{ color: "#fff", fontSize: 12, marginTop: 4 }}>업로드 중...</Text>
+                    </View>
+                  )}
+                  {beforePhotoUrl && !uploadingBefore && (
+                    <View style={s.photoSuccess}>
+                      <Text style={{ color: "#fff", fontSize: 11 }}>✓ 저장됨</Text>
+                    </View>
+                  )}
+                  {!isCompleted && (
+                    <TouchableOpacity style={s.photoRetake} onPress={() => pickPhoto("before")} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 12 }}>다시 찍기</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[s.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={() => !isCompleted && pickPhoto("before")}
+                  activeOpacity={isCompleted ? 1 : 0.7}
+                  disabled={isCompleted}
+                >
+                  <Text style={{ fontSize: 28 }}>📷</Text>
+                  <Text style={[s.photoPlaceholderText, { color: colors.muted }]}>
+                    {isCompleted ? "사진 없음" : "사진 추가"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* 작업 후 사진 */}
+            <View style={s.photoBox}>
+              <Text style={[s.photoLabel, { color: colors.muted }]}>작업 후</Text>
+              {afterPhotoUri ? (
+                <View>
+                  <Image source={{ uri: afterPhotoUri }} style={s.photoPreview} resizeMode="cover" />
+                  {uploadingAfter && (
+                    <View style={s.photoOverlay}>
+                      <ActivityIndicator color="#fff" />
+                      <Text style={{ color: "#fff", fontSize: 12, marginTop: 4 }}>업로드 중...</Text>
+                    </View>
+                  )}
+                  {afterPhotoUrl && !uploadingAfter && (
+                    <View style={s.photoSuccess}>
+                      <Text style={{ color: "#fff", fontSize: 11 }}>✓ 저장됨</Text>
+                    </View>
+                  )}
+                  {!isCompleted && (
+                    <TouchableOpacity style={s.photoRetake} onPress={() => pickPhoto("after")} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 12 }}>다시 찍기</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[s.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={() => !isCompleted && pickPhoto("after")}
+                  activeOpacity={isCompleted ? 1 : 0.7}
+                  disabled={isCompleted}
+                >
+                  <Text style={{ fontSize: 28 }}>📷</Text>
+                  <Text style={[s.photoPlaceholderText, { color: colors.muted }]}>
+                    {isCompleted ? "사진 없음" : "사진 추가"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         </View>
 
         {/* 사용 자재 */}
@@ -282,7 +482,7 @@ export default function WorkReportScreen() {
               style={[s.saveBtn, { backgroundColor: "#6B7280" }]}
               onPress={handleSave}
               activeOpacity={0.8}
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || uploadingBefore || uploadingAfter}
             >
               <Text style={s.btnText}>{saveMutation.isPending ? "저장 중..." : "임시 저장"}</Text>
             </TouchableOpacity>
@@ -290,7 +490,7 @@ export default function WorkReportScreen() {
               style={[s.saveBtn, { backgroundColor: "#22C55E" }]}
               onPress={handleComplete}
               activeOpacity={0.8}
-              disabled={completeMutation.isPending}
+              disabled={completeMutation.isPending || uploadingBefore || uploadingAfter}
             >
               <Text style={s.btnText}>{completeMutation.isPending ? "제출 중..." : "작업 완료 보고"}</Text>
             </TouchableOpacity>
@@ -324,4 +524,14 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   btnRow: { flexDirection: "row", gap: 10 },
   saveBtn: { flex: 1, borderRadius: 12, padding: 14, alignItems: "center" },
   btnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  // 사진 관련
+  photoRow: { flexDirection: "row", gap: 12 },
+  photoBox: { flex: 1, gap: 6 },
+  photoLabel: { fontSize: 13, fontWeight: "600", textAlign: "center" },
+  photoPlaceholder: { borderWidth: 2, borderStyle: "dashed", borderRadius: 12, height: 130, alignItems: "center", justifyContent: "center", gap: 6 },
+  photoPlaceholderText: { fontSize: 13 },
+  photoPreview: { width: "100%", height: 130, borderRadius: 12 },
+  photoOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  photoSuccess: { position: "absolute", top: 6, right: 6, backgroundColor: "#22C55E", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  photoRetake: { marginTop: 4, backgroundColor: "#6B7280", borderRadius: 8, padding: 6, alignItems: "center" },
 });

@@ -135,7 +135,7 @@ export const appRouter = router({
   auth: router({
     // 통합 로그인 (고객/기사/지사장/본사관리자 공통)
     login: publicProcedure
-      .input(z.object({ loginId: z.string().min(1), password: z.string().min(1) }))
+      .input(z.object({ loginId: z.string().min(1), password: z.string().min(1), source: z.enum(["web", "app"]).optional() }))
       .mutation(async ({ input }) => {
         const loginId = input.loginId.trim();
         const role = await db.getAppRoleByLoginId(loginId);
@@ -148,6 +148,14 @@ export const appRouter = router({
         const check = verifyPassword(input.password, role.passwordHash);
         if (!check.ok) {
           return { success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." };
+        }
+        // 홈페이지(web)에서 기사 계정 로그인 차단
+        if (input.source === "web" && role.appRole === "technician") {
+          return { success: false, blockedRole: "technician", error: "기사 계정은 기사용 앱에서만 이용할 수 있습니다. Play Store에서 Future Energy Tech 기사용 앱을 설치해 주세요." };
+        }
+        // 기사용 앱(app)에서 본사·지사 계정 로그인 차단
+        if (input.source === "app" && (role.appRole === "hq_admin" || role.appRole === "branch_manager")) {
+          return { success: false, blockedRole: role.appRole, error: "본사와 지사는 홈페이지 관리시스템을 이용해 주세요. https://퓨처에너지테크.kr" };
         }
         // 레거시 해시로 로그인 성공 시 bcrypt로 자동 업그레이드
         if (check.isLegacy) {
@@ -1165,6 +1173,9 @@ export const appRouter = router({
         usedMaterials: z.string().optional(),
         workMemo: z.string().optional(),
         isCompleted: z.boolean().default(false),
+        beforePhotoUrl: z.string().optional(),
+        afterPhotoUrl: z.string().optional(),
+        customerSignatureUrl: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const result = await db.upsertWorkReport({
@@ -1175,6 +1186,23 @@ export const appRouter = router({
           await db.updateRepairStatus(input.requestId, "작업완료");
         }
         return result;
+      }),
+    // 현장 사진 업로드 (base64 → S3)
+    uploadPhoto: publicProcedure
+      .input(z.object({
+        requestId: z.number(),
+        photoType: z.enum(["before", "after", "signature"]),
+        base64: z.string(),
+        mimeType: z.string().default("image/jpeg"),
+      }))
+      .mutation(async ({ input }) => {
+        const { storagePut } = await import("./storage");
+        const base64Data = input.base64.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        const ext = input.mimeType === "image/png" ? "png" : "jpg";
+        const key = `work-photos/${input.requestId}/${input.photoType}_${Date.now()}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.mimeType);
+        return { url };
       }),
   }),
 
