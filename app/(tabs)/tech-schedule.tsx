@@ -355,6 +355,34 @@ export default function TechScheduleScreen() {
           <Text style={[s.time, { color: colors.muted }]}>📅 방문 일정 미정</Text>
         )}
 
+        {/* 전화번호 */}
+        {work.phoneNumber ? (
+          <Text style={[s.detail, { color: colors.muted }]}>📞 {work.phoneNumber}</Text>
+        ) : null}
+
+        {/* 고객 희망일정 vs 확정일정 구분 표시 */}
+        {work.customerPreferredDate && (
+          <Text style={[s.detail, { color: colors.muted }]}>
+            🙋 고객 희망: {work.customerPreferredDate.replace(/-/g, '.')}{work.customerPreferredTime ? ` ${work.customerPreferredTime}` : ''}
+          </Text>
+        )}
+        {work.scheduledDate && work.customerPreferredDate && work.scheduledDate !== work.customerPreferredDate && (
+          <Text style={[s.detail, { color: '#22C55E' }]}>
+            ✅ 확정일정: {work.scheduledDate.replace(/-/g, '.')}{work.scheduledTime ? ` ${work.scheduledTime}` : ''}
+          </Text>
+        )}
+
+        {/* 견적내용 */}
+        {work.estimateItems ? (
+          <View style={{ marginTop: 4, padding: 8, backgroundColor: colors.background, borderRadius: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', marginBottom: 2 }}>📋 견적내용</Text>
+            <Text style={{ color: colors.foreground, fontSize: 12 }} numberOfLines={3}>{work.estimateItems}</Text>
+            {work.estimateTotal ? (
+              <Text style={{ color: '#FF6B35', fontSize: 13, fontWeight: '700', marginTop: 4 }}>합계: {Number(work.estimateTotal).toLocaleString()}원</Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {work.detailContent ? (
           <Text style={[s.detail, { color: colors.muted }]} numberOfLines={2}>{work.detailContent}</Text>
         ) : null}
