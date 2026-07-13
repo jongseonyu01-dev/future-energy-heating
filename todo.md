@@ -540,3 +540,22 @@
 - [x] 앱: tech-works.tsx 헤더에 "견적 작성" 버튼 추가
 - [x] 앱: work-report.tsx 헤더에 "현장견적" 버튼 추가 (고객정보 자동 전달)
 - [x] 체크포인트 저장 및 GitHub 푸시
+
+## 일정요청→접수전환·기사배정 통합 워크플로우 (34차)
+- [x] 상태값 통일: customer_schedule_requested→schedule_confirmed→reception_converted→technician_assigned→technician_confirmation_pending→technician_confirmed→en_route→arrived→work_started→work_completed
+- [x] 기사앱 DB 스키마: 새 상태값 추가 (기사확인대기/기사확인완료/출발/도착/공사중/공사완료)
+- [x] 기사앱 DB 마이그레이션: status enum 업데이트, technicianConfirmedAt/workStartedAt 컬럼 추가
+- [x] 기사앱 서버: confirmJobSchedule API 추가 (기사확인대기 → 기사확인완료)
+- [x] 기사앱 서버: markWorkStarted API 추가 (도착 → 공사중)
+- [x] 기사앱 서버: markWorkCompleted API 업데이트 (공사중 → 공사완료)
+- [x] 기사앱 서버: startTracking에 출발 상태 업데이트 추가
+- [x] 기사앱 서버: markArrived에 도착 상태 업데이트 추가
+- [x] 기사앱 db.ts: assignTechnician 함수 상태를 방문예정 → 기사확인대기로 변경
+- [x] 기사앱 tech-schedule.tsx: 일정접수확인 → 출발 → 도착 → 공사시작 → 공사완료 버튼 순서 구현
+- [x] 홈페이지 dashboard.html: 접수전환·기사배정 통합 버튼 및 모달 구현
+- [x] 홈페이지 branch.html: 접수전환·기사배정 통합 버튼 및 모달 구현
+- [x] 홈페이지 서버: 기사확인대기/완료 상태값 추가
+- [x] 홈페이지 DB: repair_requests status enum 업데이트
+- [x] 오타 수정: 품조에너지테크/품쳐에너지테크 → 퓨처에너지테크
+- [x] GitHub push (futureenergytech 레포)
+- [x] 기사앱 체크포인트 저장

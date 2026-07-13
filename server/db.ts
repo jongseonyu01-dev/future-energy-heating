@@ -201,7 +201,7 @@ export async function assignTechnician(
     .set({
       technicianId,
       technicianName,
-      status: "방문예정",
+      status: "기사확인대기",
       workflowStage: scheduledDate && scheduledTime ? "일정확정" : "기사배정",
       ...(scheduledDate ? { scheduledDate } : {}),
       ...(scheduledTime ? { scheduledTime } : {}),

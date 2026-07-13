@@ -71,9 +71,15 @@ const statusValues = [
   "신규접수",
   "기사배정대기",
   "방문예정",
+  "기사확인대기",
+  "기사확인완료",
+  "출발",
+  "도착",
+  "공사중",
   "작업진행중",
   "견적승인대기",
   "작업완료",
+  "공사완료",
   "재방문필요",
 ] as const;
 
@@ -1811,6 +1817,9 @@ export const appRouter = router({
           expiresAt,
         });
         if (!session) throw new Error("세션 생성 실패");
+        // 접수건 상태를 '출발'으로 변경
+        await db.updateRepairStatus(input.requestId, "출발");
+        try { await db.setWorkflowStage(input.requestId, "기사출발"); } catch {}
         const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${token}`;
         let smsSent = false;
@@ -1846,6 +1855,45 @@ export const appRouter = router({
         return { success: true, status: input.reason ?? "업무취소" };
       }),
 
+    // 기사 일정접수 확인 (기사가 일정을 확인함) → 상태: 기사확인완료
+    confirmJobSchedule: publicProcedure
+      .input(z.object({ requestId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db2 = await import("drizzle-orm/mysql2").then(m => m.drizzle);
+        const { repairRequests: rr } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const dbConn = await import("./db");
+        await dbConn.updateRepairStatus(input.requestId, "기사확인완료");
+        try { await dbConn.setWorkflowStage(input.requestId, "기사배정"); } catch {}
+        // technicianConfirmedAt 저장
+        const rawDb = await (await import("./db")).getDb();
+        if (rawDb) {
+          await rawDb.update(rr).set({ technicianConfirmedAt: new Date() }).where(eq(rr.id, input.requestId));
+        }
+        return { success: true };
+      }),
+
+    // 공사 시작 (기사가 공사 시작 단추) → 상태: 공사중
+    markWorkStarted: publicProcedure
+      .input(z.object({ requestId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { repairRequests: rr } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const dbConn = await import("./db");
+        await dbConn.updateRepairStatus(input.requestId, "공사중");
+        try { await dbConn.setWorkflowStage(input.requestId, "작업진행"); } catch {}
+        const rawDb = await dbConn.getDb();
+        if (rawDb) {
+          await rawDb.update(rr).set({ workStartedAt: new Date() }).where(eq(rr.id, input.requestId));
+        }
+        const req = await dbConn.getRepairRequestById(input.requestId);
+        if (req) {
+          const message = `[퓨처에너지테크] ${req.customerName} 고객님, 담당 기사가 공사를 시작하였습니다.`;
+          await notifyAndLog({ requestId: req.id, phoneNumber: req.phoneNumber, messageType: "공사시작", content: message });
+        }
+        return { success: true };
+      }),
+
     // 기사 도착 처리 (도착 버튼) → 단계 갱신 + 고객 도착 안내
     markArrived: publicProcedure
       .input(z.object({ requestId: z.number(), token: z.string().optional() }))
@@ -1853,6 +1901,7 @@ export const appRouter = router({
         if (input.token) {
           await db.stopLocationSession(input.token, "도착완료");
         }
+        await db.updateRepairStatus(input.requestId, "도착");
         try { await db.setWorkflowStage(input.requestId, "기사도착"); } catch {}
         const req = await db.getRepairRequestById(input.requestId);
         if (req) {
@@ -1869,6 +1918,7 @@ export const appRouter = router({
     markWorkCompleted: publicProcedure
       .input(z.object({ requestId: z.number(), reviewUrl: z.string().optional() }))
       .mutation(async ({ input }) => {
+        await db.updateRepairStatus(input.requestId, "공사완료");
         try { await db.setWorkflowStage(input.requestId, "작업완료"); } catch {}
         const req = await db.getRepairRequestById(input.requestId);
         if (req) {

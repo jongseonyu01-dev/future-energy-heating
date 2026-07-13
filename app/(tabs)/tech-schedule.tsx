@@ -78,6 +78,9 @@ export default function TechScheduleScreen() {
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
+  const confirmJobMutation = trpc.location.confirmJobSchedule.useMutation();
+  const markWorkStartedMutation = trpc.location.markWorkStarted.useMutation();
+  const markWorkCompletedMutation = trpc.location.markWorkCompleted.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
     { enabled: !!trackingRequestId, refetchInterval: 10000 }
@@ -86,6 +89,79 @@ export default function TechScheduleScreen() {
 
 
 
+
+  // 일정접수 확인 버튼 처리
+  const handleConfirmJob = async (work: any) => {
+    Alert.alert(
+      "일정접수 확인",
+      `${work.customerName} 고객님의 일정을 확인하시겠습니까?\n\n\ubc29\ubb38\uc77c\uc815: ${work.scheduledDate ?? "미정"} ${work.scheduledTime ?? ""}`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "확인",
+          onPress: async () => {
+            try {
+              await confirmJobMutation.mutateAsync({ requestId: work.id });
+              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              refetch();
+              Alert.alert("확인 완료", "일정접수가 확인되었습니다.\n도착 후 '출발' 버튼을 눌러주세요.");
+            } catch (e: any) {
+              Alert.alert("오류", e.message || "일정 확인 중 오류가 발생했습니다.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // 공사 시작 버튼 처리
+  const handleWorkStarted = async (work: any) => {
+    Alert.alert(
+      "공사 시작",
+      `${work.customerName} 고객님 댓에서 공사를 시작하시겠습니까?`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "공사 시작",
+          onPress: async () => {
+            try {
+              await markWorkStartedMutation.mutateAsync({ requestId: work.id });
+              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              refetch();
+              Alert.alert("공사 시작", "공사가 시작되었습니다.");
+            } catch (e: any) {
+              Alert.alert("오류", e.message || "공사 시작 중 오류가 발생했습니다.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // 공사 완료 버튼 처리
+  const handleWorkCompleted = async (work: any) => {
+    Alert.alert(
+      "공사 완료",
+      `${work.customerName} 고객님 댓에서 공사가 완료되었습니까?`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "공사 완료",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await markWorkCompletedMutation.mutateAsync({ requestId: work.id });
+              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              refetch();
+              Alert.alert("공사 완료", "공사가 완료되었습니다. 고객님께 완료 안내가 발송되었습니다.");
+            } catch (e: any) {
+              Alert.alert("오류", e.message || "공사 완료 중 오류가 발생했습니다.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // 출발 버튼 처리
   const handleDepart = async (work: any) => {
@@ -325,38 +401,112 @@ export default function TechScheduleScreen() {
           </View>
         )}
 
-        {/* 출발/도착/취소 버튼 */}
+        {/* 워크플로우 버튼: 일정접수확인 → 출발 → 도착 → 공사시작 → 공사완료 */}
         <View style={s.locationBtns}>
-          {!isThisTracking ? (
+          {/* 1단계: 기사확인대기 → 일정접수 확인 버튼 */}
+          {work.status === "기사확인대기" && (
             <TouchableOpacity
-              style={[s.departBtn, isStartingTracking && s.btnDisabled]}
-              onPress={() => handleDepart(work)}
+              style={[s.departBtn, { backgroundColor: "#8B5CF6" }]}
+              onPress={() => handleConfirmJob(work)}
               activeOpacity={0.8}
-              disabled={isStartingTracking}
             >
-              {isStartingTracking ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
-              )}
+              <Text style={s.departBtnText}>✅ 일정접수 확인</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={s.trackingActions}>
+          )}
+          {/* 2단계: 기사확인완료 → 출발 버튼 */}
+          {work.status === "기사확인완료" && (
+            !isThisTracking ? (
               <TouchableOpacity
-                style={s.arriveBtn}
-                onPress={() => handleArrive(work)}
+                style={[s.departBtn, isStartingTracking && s.btnDisabled]}
+                onPress={() => handleDepart(work)}
                 activeOpacity={0.8}
+                disabled={isStartingTracking}
               >
-                <Text style={s.arriveBtnText}>✅ 도착</Text>
+                {isStartingTracking ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
+                )}
               </TouchableOpacity>
+            ) : (
+              <View style={s.trackingActions}>
+                <TouchableOpacity style={s.arriveBtn} onPress={() => handleArrive(work)} activeOpacity={0.8}>
+                  <Text style={s.arriveBtnText}>📍 도착</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(work)} activeOpacity={0.8}>
+                  <Text style={s.cancelBtnText}>❌ 취소</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          )}
+          {/* 3단계: 출발 상태 → 도착 버튼 */}
+          {work.status === "출발" && (
+            !isThisTracking ? (
+              <View style={s.trackingActions}>
+                <TouchableOpacity
+                  style={[s.arriveBtn]}
+                  onPress={() => handleArrive(work)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.arriveBtnText}>📍 도착</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={s.trackingActions}>
+                <TouchableOpacity style={s.arriveBtn} onPress={() => handleArrive(work)} activeOpacity={0.8}>
+                  <Text style={s.arriveBtnText}>📍 도착</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(work)} activeOpacity={0.8}>
+                  <Text style={s.cancelBtnText}>❌ 취소</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          )}
+          {/* 4단계: 도착 상태 → 공사시작 버튼 */}
+          {work.status === "도착" && (
+            <TouchableOpacity
+              style={[s.departBtn, { backgroundColor: "#F59E0B" }]}
+              onPress={() => handleWorkStarted(work)}
+              activeOpacity={0.8}
+            >
+              <Text style={s.departBtnText}>🔧 공사 시작</Text>
+            </TouchableOpacity>
+          )}
+          {/* 5단계: 공사중 상태 → 공사완료 버튼 */}
+          {work.status === "공사중" && (
+            <TouchableOpacity
+              style={[s.departBtn, { backgroundColor: "#22C55E" }]}
+              onPress={() => handleWorkCompleted(work)}
+              activeOpacity={0.8}
+            >
+              <Text style={s.departBtnText}>✅ 공사 완료</Text>
+            </TouchableOpacity>
+          )}
+          {/* 기존 상태 (방문예정 등) → 기존 출발 버튼 */}
+          {(work.status === "방문예정" || work.status === "기사배정대기" || work.status === "신규접수") && (
+            !isThisTracking ? (
               <TouchableOpacity
-                style={s.cancelBtn}
-                onPress={() => handleCancel(work)}
+                style={[s.departBtn, isStartingTracking && s.btnDisabled]}
+                onPress={() => handleDepart(work)}
                 activeOpacity={0.8}
+                disabled={isStartingTracking}
               >
-                <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
+                {isStartingTracking ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
+                )}
               </TouchableOpacity>
-            </View>
+            ) : (
+              <View style={s.trackingActions}>
+                <TouchableOpacity style={s.arriveBtn} onPress={() => handleArrive(work)} activeOpacity={0.8}>
+                  <Text style={s.arriveBtnText}>📍 도착</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(work)} activeOpacity={0.8}>
+                  <Text style={s.cancelBtnText}>❌ 취소</Text>
+                </TouchableOpacity>
+              </View>
+            )
           )}
         </View>
 

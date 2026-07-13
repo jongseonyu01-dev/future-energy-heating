@@ -147,9 +147,15 @@ export const repairRequests = mysqlTable("repair_requests", {
     "지사배정",
     "기사배정대기",
     "방문예정",
+    "기사확인대기",
+    "기사확인완료",
+    "출발",
+    "도착",
+    "공사중",
     "작업진행중",
     "견적승인대기",
     "작업완료",
+    "공사완료",
     "재방문필요",
   ]).notNull().default("신규접수"),
   // 배정된 기사 정보
@@ -188,6 +194,9 @@ export const repairRequests = mysqlTable("repair_requests", {
   reviewRequestedAt: timestamp("reviewRequestedAt"),
   // 일정 변경 사유 (희망일정과 확정일정이 다를 때 기록)
   scheduleChangeReason: text("scheduleChangeReason"),
+  // 기사 확인 / 공사 시작 타임스탬프
+  technicianConfirmedAt: timestamp("technicianConfirmedAt"),
+  workStartedAt: timestamp("workStartedAt"),
   // 작업 완료 정보
   completedAt: timestamp("completedAt"),
   completionMemo: text("completionMemo"),
