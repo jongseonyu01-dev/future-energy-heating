@@ -559,3 +559,19 @@
 - [x] 오타 수정: 품조에너지테크/품쳐에너지테크 → 퓨처에너지테크
 - [x] GitHub push (futureenergytech 레포)
 - [x] 기사앱 체크포인트 저장
+
+## 기사앱 자동 업그레이드 체계 (22차)
+- [x] GET /api/mobile-app/latest API 구현 (versionName, versionCode, minSupportedVersionCode, apkUrl, sha256, fileSize, releaseNotes, publishedAt)
+- [x] GET /api/mobile-app/releases API 구현 (전체 버전 목록)
+- [x] POST /api/mobile-app/releases API 구현 (새 버전 등록, 관리자 토큰)
+- [x] POST /api/mobile-app/upload-apk API 구현 (APK S3 업로드)
+- [x] GET /download/driver/latest 고정 URL (302 리다이렉트, 캐시 없음)
+- [x] GET /app/driver-download 다운로드 안내 페이지 (QR 대상 고정 페이지)
+- [x] mobile_app_releases DB 테이블 추가
+- [x] download.html 고정 URL 사용, 버전 정보 동적 표시, QR 고정 페이지 연결
+- [x] hooks/use-app-update.ts 버전 체크 훅 구현 (앱 시작 + 포그라운드 복귀 시 체크)
+- [x] components/app-update-modal.tsx 업데이트 안내 모달 구현 (선택적/강제 업데이트)
+- [x] app/_layout.tsx에 업데이트 모달 통합
+- [x] scripts/publish-apk.sh APK 배포 자동화 스크립트
+- [x] busboy 패키지 추가 (multipart 파싱)
+- [x] api/index.ts에 ensureMobileAppReleasesTable 초기화 추가

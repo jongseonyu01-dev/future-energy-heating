@@ -20,6 +20,8 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
+import { useAppUpdate } from "@/hooks/use-app-update";
+import { AppUpdateModal } from "@/components/app-update-modal";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -27,6 +29,24 @@ const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+// 버전 체크 및 업데이트 모달을 앱 전체에서 관리하는 내부 컴포넌트
+function AppUpdateGuard({ children }: { children: React.ReactNode }) {
+  const { updateAvailable, forceUpdate, updateInfo, dismissUpdate, openDownload } = useAppUpdate();
+  const showModal = updateAvailable || forceUpdate;
+  return (
+    <>
+      {children}
+      <AppUpdateModal
+        visible={showModal}
+        forceUpdate={forceUpdate}
+        updateInfo={updateInfo}
+        onDownload={openDownload}
+        onDismiss={dismissUpdate}
+      />
+    </>
+  );
+}
 
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
@@ -83,6 +103,7 @@ export default function RootLayout() {
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
+      <AppUpdateGuard>
       <LocationTrackingProvider>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
@@ -100,6 +121,7 @@ export default function RootLayout() {
         </QueryClientProvider>
       </trpc.Provider>
       </LocationTrackingProvider>
+      </AppUpdateGuard>
       </AuthProvider>
     </GestureHandlerRootView>
   );
