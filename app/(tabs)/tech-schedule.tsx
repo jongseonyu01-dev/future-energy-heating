@@ -56,21 +56,15 @@ export default function TechScheduleScreen() {
 
 
 
-  // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
-  const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
-    { technicianId: technicianId ?? 0 },
-    { enabled: !!technicianId }
+  // 항상 listByTechnicianUserId 사용 (technicians 테이블 + app_roles 테이블 모두 조회)
+  // technicianId가 있어도 userId 기반으로 조회해야 중복 레코드 문제 해결
+  const { data: allWorks, isLoading, refetch } = trpc.repair.listByTechnicianUserId.useQuery(
+    { userId: userId ?? 0, phoneNumber: user?.phoneNumber ?? undefined },
+    { enabled: !!userId }
   );
-  const { data: worksByUserId, isLoading: loadingByUserId, refetch: refetchByUserId } = trpc.repair.listByTechnicianUserId.useQuery(
-    { userId: userId ?? 0 },
-    { enabled: !technicianId && !!userId }
-  );
-  const allWorks = technicianId ? worksById : worksByUserId;
-  const isLoading = technicianId ? loadingById : loadingByUserId;
-  const refetch = technicianId ? refetchById : refetchByUserId;
 
-  // technicianId가 없는 경우 userId로 조회된 기사 ID 사용
-  const resolvedTechnicianId = technicianId ?? (worksByUserId && worksByUserId.length > 0 ? worksByUserId[0].technicianId : null);
+  // 조회된 접수건에서 기사 ID 추출 (technicianId가 없는 경우 fallback)
+  const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
