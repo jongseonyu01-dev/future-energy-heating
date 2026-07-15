@@ -6,7 +6,7 @@ import type { ExpoConfig } from "expo/config";
 // e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
 // Bundle ID can only contain letters, numbers, and dots
 // Android requires each dot-separated segment to start with a letter
-const rawBundleId = "com.futureenergytech.heating";
+const rawBundleId = "com.futureenergy.heatingcare";
 const bundleId =
   rawBundleId
     .replace(/[-_]/g, ".") // Replace hyphens/underscores with dots
@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.0.1",
+  version: "1.0.7",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -63,6 +63,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
+    versionCode: 7,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
