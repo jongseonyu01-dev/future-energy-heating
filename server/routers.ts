@@ -1708,7 +1708,7 @@ export const appRouter = router({
         });
         if (!session) throw new Error("세션 생성 실패");
         // 고객용 전용 링크 생성
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${token}`;
         // 워크플로우 단계: 기사출발
         try { await db.setWorkflowStage(input.requestId, "기사출발"); } catch {}
@@ -1783,7 +1783,7 @@ export const appRouter = router({
           expiresAt,
         });
         if (!session) throw new Error("세션 생성 실패");
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${token}`;
         let smsSent = false;
         let smsError: string | undefined;
@@ -1862,7 +1862,7 @@ export const appRouter = router({
         if (session.status !== "이동중") {
           return { success: false, smsSent: false, smsError: "이미 종료된 세션입니다." };
         }
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
         let smsSent = false;
         let smsError: string | undefined;
@@ -1891,7 +1891,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const session = await db.getLocationSessionByRequestId(input.requestId);
         if (!session) return null;
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
         return { ...session, trackingUrl };
       }),
@@ -1957,7 +1957,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const token = crypto.randomBytes(24).toString("base64url");
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const estimateUrl = `${baseUrl}/estimate/${token}`;
         const validUntil = new Date(Date.now() + input.validHours * 60 * 60 * 1000);
 
@@ -2019,7 +2019,7 @@ export const appRouter = router({
         if (est.status === "approved" || est.status === "rejected") {
           return { success: false, message: "이미 응답된 견적서는 재전송할 수 없습니다." };
         }
-        const baseUrl = (process.env.SITE_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr").replace(/\/$/, "");
+        const baseUrl = (process.env.SITE_URL || "https://퓼처에너지테D06c.kr").replace(/\/$/, "");
         const estimateUrl = `${baseUrl}/estimate/${est.token}`;
         const newValid = new Date(Date.now() + 72 * 60 * 60 * 1000);
         await db.updateEstimateById(input.id, {

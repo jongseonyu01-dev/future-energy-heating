@@ -40,6 +40,8 @@ export default function TechScheduleScreen() {
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  // 유량 이상 상태 맵 (전화번호 → 알림 데이터)
+  const [flowAlertMap, setFlowAlertMap] = useState<Record<string, any>>({});
 
   // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
   const {
@@ -229,6 +231,29 @@ export default function TechScheduleScreen() {
 
   const s = styles(colors);
 
+  // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
+  useEffect(() => {
+    const works = allWorks ?? [];
+    if (works.length === 0) return;
+    const phones = [...new Set(works.map((w: any) => w.phoneNumber).filter(Boolean))];
+    if (phones.length === 0) return;
+    // 각 전화번호별로 유량 이상 상태 조회
+    Promise.all(
+      phones.map((phone: string) =>
+        fetch(`/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
+          .then((r) => r.json())
+          .then((data) => ({ phone, result: data?.result?.data?.json ?? null }))
+          .catch(() => ({ phone, result: null }))
+      )
+    ).then((results) => {
+      const map: Record<string, any> = {};
+      results.forEach(({ phone, result }) => {
+        if (result && result.isAlert) map[phone] = result;
+      });
+      setFlowAlertMap(map);
+    });
+  }, [allWorks]);
+
   // 오늘 방문 예정 필터
   const todayWorks = (allWorks ?? []).filter(
     (w) => w.scheduledDate === today && w.status !== "작업완료"
@@ -267,6 +292,29 @@ export default function TechScheduleScreen() {
         <Text style={[s.symptom, { color: "#FF6B35" }]}>
           {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
         </Text>
+
+        {/* 유량 이상 배지 */}
+        {flowAlertMap[work.phoneNumber] && (
+          <View style={s.flowAlertBadge}>
+            <Text style={s.flowAlertBadgeText}>
+              {flowAlertMap[work.phoneNumber].alertType === "저유량"
+                ? "⚠️ 저유량 이상 감지"
+                : flowAlertMap[work.phoneNumber].alertType === "고유량"
+                ? "🔴 고유량 이상 감지"
+                : flowAlertMap[work.phoneNumber].alertType === "통신두절"
+                ? "📵 센서 통신두절"
+                : "⚠️ 유량 이상 감지"}
+            </Text>
+            {flowAlertMap[work.phoneNumber].lastFlowRateLpm != null && (
+              <Text style={s.flowAlertDetail}>
+                현재 {parseFloat(flowAlertMap[work.phoneNumber].lastFlowRateLpm).toFixed(1)} L/min
+                {flowAlertMap[work.phoneNumber].lowerLimitLpm != null
+                  ? ` (기준 ${parseFloat(flowAlertMap[work.phoneNumber].lowerLimitLpm).toFixed(1)}~${parseFloat(flowAlertMap[work.phoneNumber].upperLimitLpm ?? 0).toFixed(1)})`
+                  : ""}
+              </Text>
+            )}
+          </View>
+        )}
 
         {work.scheduledDate && (
           <Text style={[s.time, { color: colors.foreground }]}>
@@ -437,7 +485,7 @@ export default function TechScheduleScreen() {
           </Text>
           <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
           <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
-          <Text style={s.debugRow}>API 서버: https://xn--2z1bw8k1pjz5ccumkb516e.kr</Text>
+          <Text style={s.debugRow}>API 서버: https://퓨처에너지테크.kr</Text>
         </View>
       )}
 
@@ -677,5 +725,25 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     color: '#6B7280',
     marginTop: 8,
     fontStyle: 'italic' as const,
+  },
+  // 유량 이상 배지
+  flowAlertBadge: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginTop: 2,
+  },
+  flowAlertBadgeText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#DC2626',
+  },
+  flowAlertDetail: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 2,
   },
 });
