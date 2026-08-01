@@ -7,13 +7,20 @@ const bundleId = "com.app.futureenergyheating";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
+// ⚠️ API 서버 주소 — 런타임 변환 없이 정적 상수로 고정
+// React Native 번들러는 process.env.EXPO_PUBLIC_* 를 빌드 시 인라인 치환하므로
+// 환경변수가 없으면 undefined가 되어 .replace() 호출 시 오류 발생.
+// 따라서 반드시 정적 문자열 폴백을 코드에 직접 명시한다.
+const STATIC_API_BASE_URL = "https://xn--h50b270bp0ceuddugnobx2m.kr";
+
 const env = {
-  portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL ?? "",
-  server: process.env.EXPO_PUBLIC_OAUTH_SERVER_URL ?? "",
-  appId: process.env.EXPO_PUBLIC_APP_ID ?? "",
-  ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
-  ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://xn--h50b270bp0ceuddugnobx2m.kr",
+  portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL || "",
+  server: process.env.EXPO_PUBLIC_OAUTH_SERVER_URL || "",
+  appId: process.env.EXPO_PUBLIC_APP_ID || "",
+  ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID || "",
+  ownerName: process.env.EXPO_PUBLIC_OWNER_NAME || "",
+  // process.env 가 undefined 로 치환될 경우를 대비해 || 로 정적 상수 폴백
+  apiBaseUrl: (process.env.EXPO_PUBLIC_API_BASE_URL || STATIC_API_BASE_URL),
   deepLinkScheme: schemeFromBundleId,
 };
 
@@ -30,9 +37,13 @@ export const API_BASE_URL = env.apiBaseUrl;
  * URL pattern: https://PORT-sandboxid.region.domain
  */
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
-  if (API_BASE_URL) {
-    return API_BASE_URL.replace(/\/$/, "");
+  // 정적 상수를 직접 반환 (런타임 변환 없음)
+  // API_BASE_URL이 undefined이되는 경우를 대비해 STATIC_API_BASE_URL 사용
+  const base = (API_BASE_URL && typeof API_BASE_URL === "string" && API_BASE_URL.length > 0)
+    ? API_BASE_URL
+    : STATIC_API_BASE_URL;
+  if (base) {
+    return base.replace(/\/$/, "");
   }
 
   // On web, derive from current hostname by replacing port 8081 with 3000

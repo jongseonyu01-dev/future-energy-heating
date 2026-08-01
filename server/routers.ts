@@ -546,9 +546,63 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+    // ─── 테스트 계정 초기화 (yjs1234 공통 테스트 계정 생성/리셋) ──────────────────────────────────
+    // ⚠️ 운영 전환 시 이 라우터를 제거하거나 비활성화하세요.
+    resetTestAccounts: publicProcedure
+      .input(z.object({ secret: z.string().optional() }))
+      .mutation(async ({ input: _input }) => {
+        type TestAccountRole = "technician" | "hq_admin" | "branch_manager" | "customer";
+        const TEST_ACCOUNTS: Array<{
+          loginId: string;
+          name: string;
+          role: TestAccountRole;
+          phoneNumber: string;
+        }> = [
+          { loginId: "yjs1234", name: "유종선(테스트기사)", role: "technician", phoneNumber: "01012341234" },
+          { loginId: "admin",   name: "본사관리자",         role: "hq_admin",   phoneNumber: "01099990001" },
+        ];
+        const results: Array<{ loginId: string; status: string }> = [];
+        for (const acct of TEST_ACCOUNTS) {
+          try {
+            const seedStr = `test-account-${acct.loginId}`;
+            const userId = generateSafeUserId(seedStr);
+            const passwordHash = hashPassword("yjs1234");
+            await db.upsertAppRole({
+              userId,
+              appRole: acct.role,
+              loginId: acct.loginId,
+              passwordHash,
+              phoneNumber: acct.phoneNumber,
+              name: acct.name,
+              branchId: null,
+              mustChangePassword: false,
+              isActive: true,
+            });
+            // 기사 계정이면 technicians 테이블에도 레코드 연결
+            if (acct.role === "technician") {
+              const existing = await db.getTechnicianByUserIdOrPhone(userId, acct.phoneNumber);
+              if (!existing) {
+                await db.createTechnician({
+                  name: acct.name,
+                  phoneNumber: acct.phoneNumber,
+                  specialty: "난방수리",
+                  branchId: null,
+                  userId,
+                  isActive: true,
+                } as any);
+              } else if (existing.userId === null) {
+                await db.updateTechnicianUserId(existing.id, userId);
+              }
+            }
+            results.push({ loginId: acct.loginId, status: "ok" });
+          } catch (e: any) {
+            results.push({ loginId: acct.loginId, status: `error: ${e?.message}` });
+          }
+        }
+        return { success: true, results };
+      }),
   }),
-
-  // ─── 지사 관리 ───────────────────────────────────────────────
+  // ─── 지사 관리 ─────────────────────────────────────────────────────────
   branch: router({
     listAll: publicProcedure.query(async () => db.getAllBranches()),
     listActive: publicProcedure.query(async () => db.getActiveBranches()),

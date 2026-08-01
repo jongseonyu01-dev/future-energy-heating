@@ -38,7 +38,7 @@ const STORAGE_KEY = "fe_auth_user";
 const SECURE_STORE_KEY = "fe_session_token";
 // 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
-const CURRENT_SESSION_VERSION = "v3"; // 이 값을 올리면 기존 저장된 세션이 모두 무효화됨
+const CURRENT_SESSION_VERSION = "v4"; // v4: worker1 자동로그인 캐시 무효화 (2026-08-02)
 
 /** 모든 저장소에서 인증 데이터 완전 삭제 */
 async function clearAllAuthStorage() {
@@ -56,9 +56,10 @@ async function clearAllAuthStorage() {
 /** 서버에서 토큰 유효성 검증 */
 async function verifyTokenWithServer(userId: number, token: string): Promise<boolean> {
   try {
+    // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : `${process.env.EXPO_PUBLIC_API_URL || "https://xn--h50b270bp0ceuddugnobx2m.kr"}/api/trpc`;
+      : "https://xn--h50b270bp0ceuddugnobx2m.kr/api/trpc";
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
