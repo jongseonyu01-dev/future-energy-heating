@@ -287,7 +287,7 @@ export function registerWebRoutes(app: Express) {
         expiresAt,
       });
       if (!session) return res.status(500).json({ error: "세션 생성 실패" });
-      const baseUrl = process.env.SITE_URL || "https://퓼처에너지테D06c.kr";
+      const baseUrl = process.env.SITE_URL || "https://xn--h50b270bp0ceuddugnobx2m.kr";
       const trackingUrl = `${baseUrl}/track/${token}`;
       let smsSent = false;
       let smsError: string | undefined;

@@ -58,7 +58,7 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
   try {
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : `${process.env.EXPO_PUBLIC_API_URL || "https://퓼처에너지테D06c.kr"}/api/trpc`;
+      : `${process.env.EXPO_PUBLIC_API_URL || "https://xn--h50b270bp0ceuddugnobx2m.kr"}/api/trpc`;
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -15,6 +15,7 @@ import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
 import {
   requestLocationPermissions,
 } from "@/lib/location-tracking";
+import { getApiBaseUrl } from "@/constants/oauth";
 import { useLocationTracking } from "@/lib/location-tracking-context";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -240,7 +241,7 @@ export default function TechScheduleScreen() {
     // 각 전화번호별로 유량 이상 상태 조회
     Promise.all(
       phones.map((phone: string) =>
-        fetch(`/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
+        fetch(`${getApiBaseUrl()}/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
           .then((r) => r.json())
           .then((data) => ({ phone, result: data?.result?.data?.json ?? null }))
           .catch(() => ({ phone, result: null }))
@@ -485,7 +486,7 @@ export default function TechScheduleScreen() {
           </Text>
           <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
           <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
-          <Text style={s.debugRow}>API 서버: https://퓨처에너지테크.kr</Text>
+          <Text style={s.debugRow}>API 서버: https://xn--h50b270bp0ceuddugnobx2m.kr</Text>
         </View>
       )}
 
@@ -553,7 +554,7 @@ export default function TechScheduleScreen() {
           const effectiveTechId = resolvedTechnicianId ?? technicianId;
           if (effectiveTechId) {
             try {
-              await fetch("/api/trpc/location.saveConsent", {
+              await fetch(`${getApiBaseUrl()}/api/trpc/location.saveConsent`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ json: { technicianId: effectiveTechId } }),

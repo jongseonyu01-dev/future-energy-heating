@@ -13,7 +13,7 @@ const env = {
   appId: process.env.EXPO_PUBLIC_APP_ID ?? "",
   ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
   ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://퓼처에너지테D06c.kr",
+  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://xn--h50b270bp0ceuddugnobx2m.kr",
   deepLinkScheme: schemeFromBundleId,
 };
 
