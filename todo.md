@@ -577,18 +577,18 @@
 - [x] api/index.ts에 ensureMobileAppReleasesTable 초기화 추가
 
 ## 기사앱 일정 화면 개선 (v1.1.4)
-- [ ] 서버: listByTechnicianUserId를 protectedProcedure로 변경 (세션 기반 기사 ID 조회)
-- [ ] 기사앱 홈: 기사 메뉴에 "오늘 작업 N건", "내일 일정 N건", "미작업·이월 N건" 건수 표시
-- [ ] 기사앱 홈: 각 항목 누르면 해당 필터 탭으로 이동
-- [ ] tech-schedule.tsx: 탭 UI 추가 (오늘/내일/미작업·이월/전체)
-- [ ] tech-schedule.tsx: 탭 이름 "오늘 일정" → "작업 일정"으로 변경
-- [ ] tech-schedule.tsx: 오늘 분류 - scheduledDate=오늘(KST), 취소 제외, 완료 포함
-- [ ] tech-schedule.tsx: 내일 분류 - scheduledDate=내일(KST), 취소 제외, 방문시간 순
-- [ ] tech-schedule.tsx: 미작업·이월 분류 - scheduledDate<오늘이거나 null, 완료/취소 제외
-- [ ] tech-schedule.tsx: 전체 탭 - 배정된 모든 작업 (취소 제외)
-- [ ] tech-schedule.tsx: 오류 시 빈 배열 대신 오류 메시지 + 다시 시도 버튼
-- [ ] tech-schedule.tsx: pull-to-refresh 구현
-- [ ] 탭 레이아웃: "오늘 일정" → "작업 일정"으로 변경
-- [ ] app.config.ts: version 1.1.4, versionCode 15로 업데이트
-- [ ] 검증: 10가지 조건 데이터 배정 후 분류 결과 확인
+- [x] 서버: listByTechnicianUserId를 protectedProcedure로 변경 (세션 기반 기사 ID 조회)
+- [x] 기사앱 홈: 기사 메뉴에 "오늘 작업 N건", "내일 일정 N건", "미작업·이월 N건" 건수 표시
+- [x] 기사앱 홈: 각 항목 누르면 해당 필터 탭으로 이동
+- [x] tech-schedule.tsx: 탭 UI 추가 (오늘/내일/미작업·이월/전체)
+- [x] tech-schedule.tsx: 탭 이름 "오늘 일정" → "작업 일정"으로 변경
+- [x] tech-schedule.tsx: 오늘 분류 - scheduledDate=오늘(KST), 취소 제외, 완료 포함
+- [x] tech-schedule.tsx: 내일 분류 - scheduledDate=내일(KST), 취소 제외, 방문시간 순
+- [x] tech-schedule.tsx: 미작업·이월 분류 - scheduledDate<오늘이거나 null, 완료/취소 제외
+- [x] tech-schedule.tsx: 전체 탭 - 배정된 모든 작업 (취소 제외)
+- [x] tech-schedule.tsx: 오류 시 빈 배열 대신 오류 메시지 + 다시 시도 버튼
+- [x] tech-schedule.tsx: pull-to-refresh 구현
+- [x] 탭 레이아웃: "오늘 일정" → "작업 일정"으로 변경
+- [x] app.config.ts: version 1.1.4, versionCode 15로 업데이트
+- [x] 검증: 10가지 조건 데이터 배정 후 분류 결과 확인
 - [ ] APK 빌드 및 배포
