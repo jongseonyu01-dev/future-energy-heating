@@ -14,6 +14,7 @@ import {
 import { useRouter } from "expo-router";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import * as Auth from "@/lib/_core/auth";
 import { useColors } from "@/hooks/use-colors";
 import { ScreenContainer } from "@/components/screen-container";
 
@@ -72,6 +73,10 @@ export default function LoginScreen() {
   const finishLogin = async (data: any) => {
     // 로그인 통신 성공 후 세션 저장 오류와 화면이동 오류를 분리하여 표시
     try {
+      // 서버에서 받은 token을 SecureStore에 저장 (tRPC Authorization 헤더용)
+      if (data.token && Platform.OS !== "web") {
+        try { await Auth.setSessionToken(data.token); } catch {}
+      }
       await login(
         {
           userId: data.userId!,
@@ -83,6 +88,7 @@ export default function LoginScreen() {
           branchName: data.branchName ?? null,
           phoneNumber: data.phoneNumber ?? null,
           mustChangePassword: false,
+          token: data.token ?? null,
         },
         loginId,
         rememberMe
@@ -137,7 +143,7 @@ export default function LoginScreen() {
     Keyboard.dismiss();
     clearMsg();
     if (!loginId.trim() || !password.trim()) { setError("아이디와 비밀번호를 입력해주세요."); return; }
-    loginMutation.mutate({ loginId: loginId.trim(), password });
+    loginMutation.mutate({ loginId: loginId.trim(), password, source: "app" });
   };
 
   const handleChangePw = () => {
