@@ -69,21 +69,13 @@ export default function TechScheduleScreen() {
 
 
 
-  // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
-  const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
-    { technicianId: technicianId ?? 0 },
-    { enabled: !!technicianId }
+  // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
+  const { data: allWorks, isLoading, refetch } = trpc.repair.listMySchedule.useQuery(
+    undefined,
+    { enabled: !!userId }
   );
-  const { data: worksByUserId, isLoading: loadingByUserId, refetch: refetchByUserId } = trpc.repair.listByTechnicianUserId.useQuery(
-    { userId: userId ?? 0 },
-    { enabled: !technicianId && !!userId }
-  );
-  const allWorks = technicianId ? worksById : worksByUserId;
-  const isLoading = technicianId ? loadingById : loadingByUserId;
-  const refetch = technicianId ? refetchById : refetchByUserId;
-
-  // technicianId가 없는 경우 userId로 조회된 기사 ID 사용
-  const resolvedTechnicianId = technicianId ?? (worksByUserId && worksByUserId.length > 0 ? worksByUserId[0].technicianId : null);
+  // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
+  const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
@@ -250,7 +242,7 @@ export default function TechScheduleScreen() {
     if (phones.length === 0) return;
     // 각 전화번호별로 유량 이상 상태 조회
     Promise.all(
-      phones.map((phone: string) =>
+      (phones as string[]).map((phone: string) =>
         fetch(`${getApiBaseUrl()}/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
           .then((r) => r.json())
           .then((data) => ({ phone, result: data?.result?.data?.json ?? null }))
@@ -268,19 +260,19 @@ export default function TechScheduleScreen() {
   const COMPLETED_STATUSES = ["작업완료", "공사완료"];
   // 오늘 작업: 방문예정일=오늘, 취소 제외, 완료 포함
   const todayWorks = (allWorks ?? []).filter(
-    (w) => w.scheduledDate === today
+    (w: any) => w.scheduledDate === today
   );
   // 내일 일정: 방문예정일=내일, 완료/취소 제외
   const tomorrowWorks = (allWorks ?? []).filter(
-    (w) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
+    (w: any) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
   ).sort((a: any, b: any) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
   // 미작업·이월: 방문예정일<오늘 또는 null, 완료/취소 제외
   const overdueWorks = (allWorks ?? []).filter(
-    (w) => (!w.scheduledDate || w.scheduledDate < today) && !COMPLETED_STATUSES.includes(w.status)
+    (w: any) => (!w.scheduledDate || w.scheduledDate < today) && !COMPLETED_STATUSES.includes(w.status)
   ).sort((a: any, b: any) => (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? ""));
   // 전체: 완료/취소 제외
   const allActiveWorks = (allWorks ?? []).filter(
-    (w) => !COMPLETED_STATUSES.includes(w.status)
+    (w: any) => !COMPLETED_STATUSES.includes(w.status)
   );
   // 탭 정의
   const tabs = [
@@ -541,34 +533,52 @@ export default function TechScheduleScreen() {
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.list}>
-          {/* 오늘 일정 섹션 */}
-          {todayWorks.length > 0 && (
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>📅 오늘 방문 일정</Text>
-              <Text style={[s.sectionCount, { color: colors.muted }]}>{todayWorks.length}건</Text>
+        <>
+          {/* 탭 바 */}
+          <View style={s.tabBar}>
+            {tabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[s.tabItem, activeTab === tab.key ? { borderBottomColor: tab.color, borderBottomWidth: 2.5 } : {}]}
+                onPress={() => {
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveTab(tab.key);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.tabLabel, { color: activeTab === tab.key ? tab.color : colors.muted }]}>
+                  {tab.label}
+                </Text>
+                {tab.count > 0 && (
+                  <View style={[s.tabBadge, { backgroundColor: tab.color }]}>
+                    <Text style={s.tabBadgeText}>{tab.count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+          {/* 탭 콘텐츠 */}
+          {currentWorks.length === 0 ? (
+            <View style={s.center}>
+              <Text style={s.emptyIcon}>
+                {activeTab === "today" ? "☀️" : activeTab === "tomorrow" ? "🗓" : activeTab === "overdue" ? "⏰" : "📋"}
+              </Text>
+              <Text style={[s.empty, { color: colors.muted }]}>
+                {activeTab === "today" ? "오늘 작업이 없습니다"
+                  : activeTab === "tomorrow" ? "내일 일정이 없습니다"
+                  : activeTab === "overdue" ? "미작업·이월 건이 없습니다"
+                  : "전체 작업이 없습니다"}
+              </Text>
             </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={s.list}
+              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B35" />}
+            >
+              {currentWorks.map((work: any) => renderWorkCard(work))}
+            </ScrollView>
           )}
-          {todayWorks.map((work) => renderWorkCard(work))}
-
-          {/* 예정 일정 섹션 */}
-          {upcomingWorks.length > 0 && (
-            <View style={[s.sectionHeader, todayWorks.length > 0 && { marginTop: 8 }]}>
-              <Text style={s.sectionTitle}>🗓 예정 일정</Text>
-              <Text style={[s.sectionCount, { color: colors.muted }]}>{upcomingWorks.length}건</Text>
-            </View>
-          )}
-          {upcomingWorks.map((work) => renderWorkCard(work))}
-
-          {/* 날짜 미지정 배정 오더 섹션 */}
-          {unscheduledWorks.length > 0 && (
-            <View style={[s.sectionHeader, (todayWorks.length > 0 || upcomingWorks.length > 0) && { marginTop: 8 }]}>
-              <Text style={s.sectionTitle}>⏳ 일정 미확정</Text>
-              <Text style={[s.sectionCount, { color: colors.muted }]}>{unscheduledWorks.length}건</Text>
-            </View>
-          )}
-          {unscheduledWorks.map((work) => renderWorkCard(work))}
-        </ScrollView>
+        </>
       )}
 
       {/* 위치 동의 모달 */}
@@ -590,7 +600,7 @@ export default function TechScheduleScreen() {
           }
           // 대기 중인 방문 건 출발 처리
           if (pendingDepartRequestId !== null) {
-            const allDisplayWorks = allWorks ?? [];
+            const allDisplayWorks: any[] = allWorks ?? [];
             const work = allDisplayWorks.find((w) => w.id === pendingDepartRequestId);
             if (work) await doDepart(work);
             setPendingDepartRequestId(null);

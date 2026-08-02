@@ -66,7 +66,7 @@ function TechnicianHome({ onPress }: { onPress: (route: string) => void }) {
   const userId = user?.userId;
 
   const { data: allWorks, refetch } = trpc.repair.listMySchedule.useQuery(
-    { phoneNumber: user?.phoneNumber ?? undefined },
+    undefined,
     { enabled: !!userId }
   );
 
@@ -80,13 +80,13 @@ function TechnicianHome({ onPress }: { onPress: (route: string) => void }) {
   const today = getKSTDateString(0);
   const tomorrow = getKSTDateString(1);
 
-  const active = (allWorks ?? []).filter((w) => !CANCELLED_STATUSES.includes(w.status));
+  const active = (allWorks ?? []).filter((w: any) => !CANCELLED_STATUSES.includes(w.status));
 
-  const todayCount = active.filter((w) => w.scheduledDate === today).length;
+  const todayCount = active.filter((w: any) => w.scheduledDate === today).length;
   const tomorrowCount = active.filter(
-    (w) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
+    (w: any) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
   ).length;
-  const overdueCount = active.filter((w) => {
+  const overdueCount = active.filter((w: any) => {
     if (COMPLETED_STATUSES.includes(w.status)) return false;
     if (!w.scheduledDate) return true;
     return w.scheduledDate < today;
