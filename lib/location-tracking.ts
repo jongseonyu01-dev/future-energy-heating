@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
 // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
-const API_BASE_URL = "https://xn--h50b270bp0ceuddugnobx2m.kr";
+const API_BASE_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
 
 // ─── 디버그 상태 (UI에서 구독 가능) ──────────────────────────────────────────

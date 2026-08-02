@@ -59,7 +59,7 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
     // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : "https://xn--h50b270bp0ceuddugnobx2m.kr/api/trpc";
+      : "https://www.xn--h50b270bp0ceuddugnobx2m.kr/api/trpc";
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
