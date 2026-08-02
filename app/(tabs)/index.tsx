@@ -13,11 +13,25 @@ import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 import { useAppAuth, getRoleLabel } from "@/lib/auth-context";
+import { trpc } from "@/lib/trpc";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 const MAIN_PHONE = "031-8042-7310";
 const MOBILE_PHONE = "010-5754-7310";
 const MAIN_PHONE_TEL = "tel:031-8042-7310";
 const MOBILE_PHONE_TEL = "tel:010-5754-7310";
+
+// ─── 한국 시간(KST) 날짜 유틸 ──────────────────────────────────
+function getKSTDateString(offsetDays = 0): string {
+  const now = new Date();
+  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const kstDate = new Date(kstMs + offsetDays * 24 * 60 * 60 * 1000);
+  return kstDate.toISOString().slice(0, 10);
+}
+
+const CANCELLED_STATUSES = ["업무취소"];
+const COMPLETED_STATUSES = ["작업완료", "공사완료"];
 
 // ─── 고객 메뉴 ──────────────────────────────────────────────────
 const customerMenuItems = [
@@ -27,13 +41,6 @@ const customerMenuItems = [
   { id: "result", title: "점검 결과 확인", subtitle: "작업 내용·처리 결과 조회", icon: "📋", route: "/inspection-result", color: "#16A34A", bg: "#F0FDF4" },
   { id: "leak", title: "우리 집 누수센서", subtitle: "누수·배터리·통신 상태 확인", icon: "💧", route: "/leak-sensor", color: "#0284C7", bg: "#EFF6FF" },
   { id: "heat", title: "우리 집 난방 상태", subtitle: "유량·압력·난방 상태 확인", icon: "🌡️", route: "/heat-status", color: "#FF6B35", bg: "#FFF7F3" },
-];
-
-// ─── 기사 메뉴 ──────────────────────────────────────────────────
-const technicianMenuItems = [
-  { id: "schedule", title: "오늘 방문 일정", subtitle: "오늘 배정된 작업 확인", icon: "📅", route: "/tech-schedule", color: "#FF6B35", bg: "#FFF3F0" },
-  { id: "works", title: "전체 작업 목록", subtitle: "배정된 모든 작업 조회", icon: "🔧", route: "/tech-works", color: "#0EA5E9", bg: "#F0F9FF" },
-  { id: "profile", title: "내 정보", subtitle: "프로필·연락처 확인", icon: "👤", route: "/my-profile", color: "#8B5CF6", bg: "#F5F3FF" },
 ];
 
 // ─── 지사장 메뉴 ────────────────────────────────────────────────
@@ -52,6 +59,123 @@ const hqAdminMenuItems = [
   { id: "profile", title: "내 정보·설정", subtitle: "계정 관리·SMS 설정", icon: "⚙️", route: "/my-profile", color: "#8B5CF6", bg: "#F5F3FF" },
 ];
 
+// ─── 기사 홈 화면 컴포넌트 ──────────────────────────────────────
+function TechnicianHome({ onPress }: { onPress: (route: string) => void }) {
+  const colors = useColors();
+  const { user } = useAppAuth();
+  const userId = user?.userId;
+
+  const { data: allWorks, refetch } = trpc.repair.listMySchedule.useQuery(
+    { phoneNumber: user?.phoneNumber ?? undefined },
+    { enabled: !!userId }
+  );
+
+  // 화면 재진입 시 건수 갱신
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) refetch();
+    }, [userId, refetch])
+  );
+
+  const today = getKSTDateString(0);
+  const tomorrow = getKSTDateString(1);
+
+  const active = (allWorks ?? []).filter((w) => !CANCELLED_STATUSES.includes(w.status));
+
+  const todayCount = active.filter((w) => w.scheduledDate === today).length;
+  const tomorrowCount = active.filter(
+    (w) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
+  ).length;
+  const overdueCount = active.filter((w) => {
+    if (COMPLETED_STATUSES.includes(w.status)) return false;
+    if (!w.scheduledDate) return true;
+    return w.scheduledDate < today;
+  }).length;
+  const allCount = active.length;
+
+  const techMenuItems = [
+    {
+      id: "today",
+      title: "오늘 작업",
+      subtitle: "오늘 배정된 작업",
+      icon: "☀️",
+      route: "/tech-schedule?tab=today",
+      color: "#FF6B35",
+      bg: "#FFF3F0",
+      count: todayCount,
+    },
+    {
+      id: "tomorrow",
+      title: "내일 일정",
+      subtitle: "내일 예정된 방문",
+      icon: "🌅",
+      route: "/tech-schedule?tab=tomorrow",
+      color: "#3B82F6",
+      bg: "#EFF6FF",
+      count: tomorrowCount,
+    },
+    {
+      id: "overdue",
+      title: "미작업·이월",
+      subtitle: "완료 안 된 이월 작업",
+      icon: "⚠️",
+      route: "/tech-schedule?tab=overdue",
+      color: "#EF4444",
+      bg: "#FEF2F2",
+      count: overdueCount,
+    },
+    {
+      id: "works",
+      title: "전체 작업 목록",
+      subtitle: "배정된 모든 작업 조회",
+      icon: "🔧",
+      route: "/tech-works",
+      color: "#0EA5E9",
+      bg: "#F0F9FF",
+      count: allCount,
+    },
+    {
+      id: "profile",
+      title: "내 정보",
+      subtitle: "프로필·연락처 확인",
+      icon: "👤",
+      route: "/my-profile",
+      color: "#8B5CF6",
+      bg: "#F5F3FF",
+      count: null,
+    },
+  ];
+
+  return (
+    <View style={styles.menuGrid}>
+      {techMenuItems.map((item) => (
+        <Pressable
+          key={item.id}
+          style={({ pressed }) => [
+            styles.menuCard,
+            { backgroundColor: item.bg, borderColor: item.color + "30", opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+          onPress={() => onPress(item.route)}
+        >
+          <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+            <Text style={styles.menuIcon}>{item.icon}</Text>
+            {item.count !== null && (
+              <View style={[styles.countBadge, { backgroundColor: item.color }]}>
+                <Text style={styles.countBadgeText}>{item.count}건</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.menuTitle, { color: item.color }]}>{item.title}</Text>
+          <Text style={[styles.menuSubtitle, { color: "#6B7280" }]}>{item.subtitle}</Text>
+          <View style={[styles.menuArrow, { backgroundColor: item.color }]}>
+            <Text style={styles.menuArrowText}>→</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -60,7 +184,6 @@ export default function HomeScreen() {
   const role = user?.appRole ?? "customer";
 
   const menuItems =
-    role === "technician" ? technicianMenuItems :
     role === "branch_manager" ? branchManagerMenuItems :
     role === "hq_admin" ? hqAdminMenuItems :
     customerMenuItems;
@@ -88,7 +211,6 @@ export default function HomeScreen() {
                 <Text style={styles.headerTitle}>퓨처에너지테크</Text>
                 <Text style={styles.headerSubtitle}>Future Energy Tech</Text>
               </View>
-              {/* 로그인/로그아웃 버튼 */}
               {user ? (
                 <TouchableOpacity style={styles.authBtn} onPress={async () => { await logout(); router.replace("/login"); }} activeOpacity={0.8}>
                   <Text style={styles.authBtnText}>로그아웃</Text>
@@ -99,7 +221,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            {/* 로그인 상태 표시 */}
             {user ? (
               <View style={styles.roleBadge}>
                 <Text style={styles.roleBadgeText}>
@@ -132,26 +253,30 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* 메인 메뉴 */}
-        <View style={styles.menuGrid}>
-          {menuItems.map((item) => (
-            <Pressable
-              key={item.id}
-              style={({ pressed }) => [
-                styles.menuCard,
-                { backgroundColor: item.bg, borderColor: item.color + "30", opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
-              ]}
-              onPress={() => handlePress(item.route)}
-            >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
-              <Text style={[styles.menuTitle, { color: item.color }]}>{item.title}</Text>
-              <Text style={[styles.menuSubtitle, { color: "#6B7280" }]}>{item.subtitle}</Text>
-              <View style={[styles.menuArrow, { backgroundColor: item.color }]}>
-                <Text style={styles.menuArrowText}>→</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+        {/* 기사 메뉴 (건수 포함) */}
+        {role === "technician" ? (
+          <TechnicianHome onPress={handlePress} />
+        ) : (
+          <View style={styles.menuGrid}>
+            {menuItems.map((item) => (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [
+                  styles.menuCard,
+                  { backgroundColor: item.bg, borderColor: item.color + "30", opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+                onPress={() => handlePress(item.route)}
+              >
+                <Text style={styles.menuIcon}>{item.icon}</Text>
+                <Text style={[styles.menuTitle, { color: item.color }]}>{item.title}</Text>
+                <Text style={[styles.menuSubtitle, { color: "#6B7280" }]}>{item.subtitle}</Text>
+                <View style={[styles.menuArrow, { backgroundColor: item.color }]}>
+                  <Text style={styles.menuArrowText}>→</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* 하단 안내 */}
         <View style={[styles.infoBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -188,6 +313,8 @@ const styles = StyleSheet.create({
   menuSubtitle: { fontSize: 14, lineHeight: 20 },
   menuArrow: { position: "absolute", right: 16, top: "50%", marginTop: -16, width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   menuArrowText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  countBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, minWidth: 36, alignItems: "center" },
+  countBadgeText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   infoBox: { marginHorizontal: 16, marginTop: 4, padding: 16, borderRadius: 12, borderWidth: 1, gap: 8 },
   infoTitle: { fontSize: 16, fontWeight: "700" },
   infoText: { fontSize: 14, lineHeight: 22 },

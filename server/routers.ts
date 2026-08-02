@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { router, publicProcedure } from "./_core/trpc";
+import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
 import * as db from "./db";
 import {
   sendSms,
@@ -784,6 +784,20 @@ export const appRouter = router({
         // 앱 가입 기사 최초 조회 시 userId 자동 연결
         if (tech.userId === null) {
           try { await db.updateTechnicianUserId(tech.id, input.userId); } catch {}
+        }
+        return db.getRepairRequestsByTechnician(tech.id);
+      }),
+
+    // 세션 기반 기사 일정 조회 (protectedProcedure - 서버 세션의 userId 사용, 타인 조회 불가)
+    listMySchedule: protectedProcedure
+      .input(z.object({ phoneNumber: z.string().optional() }))
+      .query(async ({ ctx, input }) => {
+        const sessionUserId = ctx.user.id;
+        const tech = await db.getTechnicianByUserIdOrPhone(sessionUserId, input.phoneNumber ?? null);
+        if (!tech) return [];
+        // 앱 가입 기사 최초 조회 시 userId 자동 연결
+        if (tech.userId === null) {
+          try { await db.updateTechnicianUserId(tech.id, sessionUserId); } catch {}
         }
         return db.getRepairRequestsByTechnician(tech.id);
       }),

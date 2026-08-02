@@ -74,11 +74,11 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ─── 오늘 일정 (기사용) ─── */}
+      {/* ─── 작업 일정 (기사용) ─── */}
       <Tabs.Screen
         name="tech-schedule"
         options={{
-          title: "오늘 일정",
+          title: "작업 일정",
           href: isTechnician ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="calendar" color={color} />,
         }}

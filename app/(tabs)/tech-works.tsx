@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, TextInput,
+  ActivityIndicator, TextInput, RefreshControl,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
@@ -23,13 +23,27 @@ export default function TechWorksScreen() {
   const { user } = useAppAuth();
   const [activeFilter, setActiveFilter] = useState("전체");
   const [search, setSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const technicianId = user?.technicianId;
+  const userId = user?.userId;
 
-  const { data: works = [], isLoading } = trpc.repair.listByTechnician.useQuery(
-    { technicianId: technicianId ?? 0 },
-    { enabled: !!technicianId }
+  // 세션 기반 보안 조회 - 서버에서 기사 ID를 확인하므로 클라이언트에서 technicianId를 전달하지 않음
+  const { data: works = [], isLoading, error, refetch } = trpc.repair.listMySchedule.useQuery(
+    { phoneNumber: user?.phoneNumber ?? undefined },
+    { enabled: !!userId }
   );
+
+  // 화면 재진입 시 자동 refetch
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) refetch();
+    }, [userId, refetch])
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  }, [refetch]);
 
   const filtered = works.filter((w) => {
     const matchFilter = activeFilter === "전체" || w.status === activeFilter;
@@ -39,7 +53,7 @@ export default function TechWorksScreen() {
 
   const s = styles(colors);
 
-  if (!technicianId) {
+  if (!userId) {
     return (
       <ScreenContainer className="p-6">
         <Text style={{ color: colors.muted, textAlign: "center", marginTop: 40, fontSize: 16 }}>기사 계정으로 로그인해주세요.</Text>
@@ -93,13 +107,32 @@ export default function TechWorksScreen() {
 
       {isLoading ? (
         <View style={s.center}><ActivityIndicator color="#FF6B35" size="large" /></View>
-      ) : filtered.length === 0 ? (
+      ) : error ? (
         <View style={s.center}>
+          <Text style={{ fontSize: 40 }}>⚠️</Text>
+          <Text style={{ color: "#EF4444", fontSize: 15, marginTop: 8 }}>작업 목록을 불러오지 못했습니다.</Text>
+          <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>{(error as any)?.message || "서버 연결을 확인해주세요."}</Text>
+          <TouchableOpacity
+            style={{ marginTop: 16, backgroundColor: "#FF6B35", borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 }}
+            onPress={() => refetch()}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filtered.length === 0 ? (
+        <ScrollView
+          contentContainerStyle={s.center}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}
+        >
           <Text style={{ fontSize: 40 }}>📋</Text>
           <Text style={{ color: colors.muted, fontSize: 15, marginTop: 8 }}>해당 작업이 없습니다.</Text>
-        </View>
+        </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={s.list}>
+        <ScrollView
+          contentContainerStyle={s.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}
+        >
           {filtered.map((work) => (
             <TouchableOpacity
               key={work.id}
