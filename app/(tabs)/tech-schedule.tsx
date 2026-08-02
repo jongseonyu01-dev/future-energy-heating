@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Linking, Platform, ActivityIndicator, Alert, RefreshControl,
 } from "react-native";
-import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -15,88 +15,18 @@ import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
 import {
   requestLocationPermissions,
 } from "@/lib/location-tracking";
+import { getApiBaseUrl } from "@/constants/oauth";
 import { useLocationTracking } from "@/lib/location-tracking-context";
-
-// ─── 한국 시간(KST) 날짜 유틸 ──────────────────────────────────
-function getKSTDateString(offsetDays = 0): string {
-  const now = new Date();
-  // KST = UTC+9
-  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
-  const kstDate = new Date(kstMs + offsetDays * 24 * 60 * 60 * 1000);
-  return kstDate.toISOString().slice(0, 10);
-}
-
-// ─── 취소 상태 목록 ────────────────────────────────────────────
-const CANCELLED_STATUSES = ["업무취소"];
-// ─── 완료 상태 목록 ────────────────────────────────────────────
-const COMPLETED_STATUSES = ["작업완료", "공사완료"];
-
-// ─── 일정 분류 함수 ────────────────────────────────────────────
-function classifyWorks(allWorks: any[]) {
-  const today = getKSTDateString(0);
-  const tomorrow = getKSTDateString(1);
-
-  // 취소 제외 (isDeleted는 서버에서 이미 필터)
-  const active = allWorks.filter(
-    (w) => !CANCELLED_STATUSES.includes(w.status)
-  );
-
-  // 오늘 작업: scheduledDate=오늘, 취소 제외, 완료 포함
-  const todayWorks = active
-    .filter((w) => w.scheduledDate === today)
-    .sort((a, b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
-
-  // 내일 일정: scheduledDate=내일, 취소 제외
-  const tomorrowWorks = active
-    .filter((w) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status))
-    .sort((a, b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
-
-  // 미작업·이월: scheduledDate < 오늘 이거나 null, 완료/취소 제외
-  const overdueWorks = active
-    .filter((w) => {
-      if (COMPLETED_STATUSES.includes(w.status)) return false;
-      if (!w.scheduledDate) return true; // 일정 미정
-      return w.scheduledDate < today;
-    })
-    .sort((a, b) => {
-      // 일정 미정은 맨 뒤
-      if (!a.scheduledDate && !b.scheduledDate) return 0;
-      if (!a.scheduledDate) return 1;
-      if (!b.scheduledDate) return -1;
-      return a.scheduledDate.localeCompare(b.scheduledDate); // 오래된 것부터
-    });
-
-  // 전체: 취소 제외 전체 (완료 포함), 최신순
-  const allActive = active.slice().sort((a, b) => {
-    const da = a.scheduledDate ?? "";
-    const db = b.scheduledDate ?? "";
-    if (da !== db) return db.localeCompare(da);
-    return (b.scheduledTime ?? "").localeCompare(a.scheduledTime ?? "");
-  });
-
-  return { todayWorks, tomorrowWorks, overdueWorks, allActive };
-}
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280",
-  "본사배정": "#6B7280",
-  "지사배정": "#6B7280",
   "기사배정대기": "#F59E0B",
   "방문예정": "#3B82F6",
-  "기사확인대기": "#8B5CF6",
-  "기사확인완료": "#6366F1",
-  "출발": "#FF6B35",
-  "도착": "#F97316",
-  "공사중": "#EF4444",
   "작업진행중": "#FF6B35",
   "견적승인대기": "#8B5CF6",
   "작업완료": "#22C55E",
-  "공사완료": "#16A34A",
   "재방문필요": "#EF4444",
-  "업무취소": "#9CA3AF",
 };
-
-type TabKey = "today" | "tomorrow" | "overdue" | "all";
 
 export default function TechScheduleScreen() {
   const colors = useColors();
@@ -105,24 +35,26 @@ export default function TechScheduleScreen() {
 
   const technicianId = user?.technicianId;
   const userId = user?.userId;
-  const today = getKSTDateString(0);
+  // KST(Asia/Seoul) 기준 날짜 계산
+  const getKSTDate = (offsetDays = 0) => {
+    const now = new Date();
+    const kstOffset = 9 * 60; // UTC+9
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+    const kstMs = utcMs + kstOffset * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000;
+    return new Date(kstMs).toISOString().slice(0, 10);
+  };
+  const today = getKSTDate(0);
+  const tomorrow = getKSTDate(1);
 
-  const params = useLocalSearchParams<{ tab?: string }>();
-  const [activeTab, setActiveTab] = useState<TabKey>((params.tab as TabKey) ?? "today");
-
-  // 홈에서 탭 파라미터로 진입 시 탭 전환
-  useEffect(() => {
-    if (params.tab && ["today", "tomorrow", "overdue", "all"].includes(params.tab)) {
-      setActiveTab(params.tab as TabKey);
-    }
-  }, [params.tab]);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">("today");
+  // 유량 이상 상태 맵 (전화번호 → 알림 데이터)
+  const [flowAlertMap, setFlowAlertMap] = useState<Record<string, any>>({});
 
-  // 전역 위치 추적 컨텍스트
+  // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
   const {
     isTracking,
     trackingToken,
@@ -135,33 +67,23 @@ export default function TechScheduleScreen() {
     checkPermissions,
   } = useLocationTracking();
 
-  // ─── 세션 기반 보안 조회 (listMySchedule) ─────────────────────
-  const { data: allWorks, isLoading, error, refetch } = trpc.repair.listMySchedule.useQuery(
-    { phoneNumber: user?.phoneNumber ?? undefined },
-    { enabled: !!userId }
+
+
+  // technicianId 있으면 직접 조회, 없으면 userId로 fallback 조회
+  const { data: worksById, isLoading: loadingById, refetch: refetchById } = trpc.repair.listByTechnician.useQuery(
+    { technicianId: technicianId ?? 0 },
+    { enabled: !!technicianId }
   );
-
-  // 화면 재진입 시 자동 refetch
-  useFocusEffect(
-    useCallback(() => {
-      if (userId) {
-        refetch();
-      }
-    }, [userId, refetch])
+  const { data: worksByUserId, isLoading: loadingByUserId, refetch: refetchByUserId } = trpc.repair.listByTechnicianUserId.useQuery(
+    { userId: userId ?? 0 },
+    { enabled: !technicianId && !!userId }
   );
+  const allWorks = technicianId ? worksById : worksByUserId;
+  const isLoading = technicianId ? loadingById : loadingByUserId;
+  const refetch = technicianId ? refetchById : refetchByUserId;
 
-  // pull-to-refresh
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refetch]);
-
-  // 조회된 접수건에서 기사 ID 추출
-  const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
+  // technicianId가 없는 경우 userId로 조회된 기사 ID 사용
+  const resolvedTechnicianId = technicianId ?? (worksByUserId && worksByUserId.length > 0 ? worksByUserId[0].technicianId : null);
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
@@ -169,101 +91,20 @@ export default function TechScheduleScreen() {
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
-  const confirmJobMutation = trpc.location.confirmJobSchedule.useMutation();
-  const markWorkStartedMutation = trpc.location.markWorkStarted.useMutation();
-  const markWorkCompletedMutation = trpc.location.markWorkCompleted.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
     { enabled: !!trackingRequestId, refetchInterval: 10000 }
   );
 
-  // ─── 일정 분류 ────────────────────────────────────────────────
-  const { todayWorks, tomorrowWorks, overdueWorks, allActive } = classifyWorks(allWorks ?? []);
 
-  const tabData: Record<TabKey, any[]> = {
-    today: todayWorks,
-    tomorrow: tomorrowWorks,
-    overdue: overdueWorks,
-    all: allActive,
-  };
-  const currentWorks = tabData[activeTab];
 
-  // ─── 일정접수 확인 ────────────────────────────────────────────
-  const handleConfirmJob = async (work: any) => {
-    Alert.alert(
-      "일정접수 확인",
-      `${work.customerName} 고객님의 일정을 확인하시겠습니까?\n\n방문일정: ${work.scheduledDate ?? "미정"} ${work.scheduledTime ?? ""}`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "확인",
-          onPress: async () => {
-            try {
-              await confirmJobMutation.mutateAsync({ requestId: work.id });
-              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              refetch();
-              Alert.alert("확인 완료", "일정접수가 확인되었습니다.\n도착 후 '출발' 버튼을 눌러주세요.");
-            } catch (e: any) {
-              Alert.alert("오류", e.message || "일정 확인 중 오류가 발생했습니다.");
-            }
-          },
-        },
-      ]
-    );
-  };
 
-  // ─── 공사 시작 ────────────────────────────────────────────────
-  const handleWorkStarted = async (work: any) => {
-    Alert.alert(
-      "공사 시작",
-      `${work.customerName} 고객님 댁에서 공사를 시작하시겠습니까?`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "공사 시작",
-          onPress: async () => {
-            try {
-              await markWorkStartedMutation.mutateAsync({ requestId: work.id });
-              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              refetch();
-              Alert.alert("공사 시작", "공사가 시작되었습니다.");
-            } catch (e: any) {
-              Alert.alert("오류", e.message || "공사 시작 중 오류가 발생했습니다.");
-            }
-          },
-        },
-      ]
-    );
-  };
 
-  // ─── 공사 완료 ────────────────────────────────────────────────
-  const handleWorkCompleted = async (work: any) => {
-    Alert.alert(
-      "공사 완료",
-      `${work.customerName} 고객님 댁에서 공사가 완료되었습니까?`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "공사 완료",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await markWorkCompletedMutation.mutateAsync({ requestId: work.id });
-              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              refetch();
-              Alert.alert("공사 완료", "공사가 완료되었습니다. 고객님께 완료 안내가 발송되었습니다.");
-            } catch (e: any) {
-              Alert.alert("오류", e.message || "공사 완료 중 오류가 발생했습니다.");
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // ─── 출발 ─────────────────────────────────────────────────────
+  // 출발 버튼 처리
   const handleDepart = async (work: any) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // 동의 여부 확인
     if (!consentQuery.data?.hasConsented) {
       setPendingDepartRequestId(work.id);
       setShowConsentModal(true);
@@ -275,6 +116,7 @@ export default function TechScheduleScreen() {
   const doDepart = async (work: any) => {
     setIsStartingTracking(true);
     try {
+      // 위치 권한 요청
       const { granted, backgroundGranted } = await requestLocationPermissions();
       await checkPermissions();
       if (!granted && Platform.OS !== "web") {
@@ -289,14 +131,16 @@ export default function TechScheduleScreen() {
       if (!backgroundGranted && Platform.OS !== "web") {
         Alert.alert(
           "백그라운드 위치 권한 권장",
-          "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면\n위치 권한을 '항상 허용'으로 설정해 주세요.\n\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용",
+          "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면\n위치 권한을 '항상 허용'으로 설정해 주세요.\n\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용\n\n(지금은 앱 켜진 상태에서만 위치가 전송됩니다)",
           [{ text: "나중에" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
         );
       }
 
+      // 목적지 좌표 - 접수건에 저장된 좌표 사용 (카카오 지오코딩 연동 시 자동 저장됨)
       const destLat = work.customerLat ? Number(work.customerLat) : undefined;
       const destLng = work.customerLng ? Number(work.customerLng) : undefined;
 
+      // 서버에 세션 시작 요청
       const result = await startTrackingMutation.mutateAsync({
         requestId: work.id,
         technicianId: (resolvedTechnicianId ?? technicianId)!,
@@ -314,13 +158,14 @@ export default function TechScheduleScreen() {
 
       if (!result.success || !result.token) throw new Error("세션 시작 실패");
 
+      // 전역 위치 추적 컨텍스트로 시작 (화면 이동 후에도 위치 전송 유지)
       const trackResult = await startTracking({
         token: result.token,
         requestId: work.id,
         trackingUrl: result.trackingUrl,
       });
       if (!trackResult.ok) {
-        console.warn("[TechSchedule] 전역 추적 시작 실패:", trackResult.error);
+        console.warn('[TechSchedule] 전역 추적 시작 실패:', trackResult.error);
       }
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -339,7 +184,7 @@ export default function TechScheduleScreen() {
     }
   };
 
-  // ─── 도착 ─────────────────────────────────────────────────────
+  // 도착 버튼 처리
   const handleArrive = async (work: any) => {
     if (!trackingToken || trackingRequestId !== work.id) {
       Alert.alert("알림", "이 방문 건의 위치 공유가 시작되지 않았습니다.");
@@ -363,7 +208,7 @@ export default function TechScheduleScreen() {
     );
   };
 
-  // ─── 업무 취소 ────────────────────────────────────────────────
+  // 업무 취소 버튼 처리
   const handleCancel = async (work: any) => {
     Alert.alert(
       "업무 취소",
@@ -397,167 +242,200 @@ export default function TechScheduleScreen() {
 
   const s = styles(colors);
 
-  // ─── 작업 카드 렌더링 ─────────────────────────────────────────
+  // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
+  useEffect(() => {
+    const works = allWorks ?? [];
+    if (works.length === 0) return;
+    const phones = [...new Set(works.map((w: any) => w.phoneNumber).filter(Boolean))];
+    if (phones.length === 0) return;
+    // 각 전화번호별로 유량 이상 상태 조회
+    Promise.all(
+      phones.map((phone: string) =>
+        fetch(`${getApiBaseUrl()}/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
+          .then((r) => r.json())
+          .then((data) => ({ phone, result: data?.result?.data?.json ?? null }))
+          .catch(() => ({ phone, result: null }))
+      )
+    ).then((results) => {
+      const map: Record<string, any> = {};
+      results.forEach(({ phone, result }) => {
+        if (result && result.isAlert) map[phone] = result;
+      });
+      setFlowAlertMap(map);
+    });
+  }, [allWorks]);
+
+  const COMPLETED_STATUSES = ["작업완료", "공사완료"];
+  // 오늘 작업: 방문예정일=오늘, 취소 제외, 완료 포함
+  const todayWorks = (allWorks ?? []).filter(
+    (w) => w.scheduledDate === today
+  );
+  // 내일 일정: 방문예정일=내일, 완료/취소 제외
+  const tomorrowWorks = (allWorks ?? []).filter(
+    (w) => w.scheduledDate === tomorrow && !COMPLETED_STATUSES.includes(w.status)
+  ).sort((a: any, b: any) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
+  // 미작업·이월: 방문예정일<오늘 또는 null, 완료/취소 제외
+  const overdueWorks = (allWorks ?? []).filter(
+    (w) => (!w.scheduledDate || w.scheduledDate < today) && !COMPLETED_STATUSES.includes(w.status)
+  ).sort((a: any, b: any) => (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? ""));
+  // 전체: 완료/취소 제외
+  const allActiveWorks = (allWorks ?? []).filter(
+    (w) => !COMPLETED_STATUSES.includes(w.status)
+  );
+  // 탭 정의
+  const tabs = [
+    { key: "today" as const, label: "오늘", count: todayWorks.length, color: "#FF6B35" },
+    { key: "tomorrow" as const, label: "내일", count: tomorrowWorks.length, color: "#3B82F6" },
+    { key: "overdue" as const, label: "미작업·이월", count: overdueWorks.length, color: "#EF4444" },
+    { key: "all" as const, label: "전체", count: allActiveWorks.length, color: "#6B7280" },
+  ];
+  const currentWorks = activeTab === "today" ? todayWorks
+    : activeTab === "tomorrow" ? tomorrowWorks
+    : activeTab === "overdue" ? overdueWorks
+    : allActiveWorks;
+
+  // 오더 카드 렌더링 함수
   const renderWorkCard = (work: any) => {
     const isThisTracking = trackingRequestId === work.id && !!trackingToken;
-    const isOverdue = activeTab === "overdue";
-    const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
-
     return (
-      <View
-        key={work.id}
-        style={[
-          s.card,
-          { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border },
-          isThisTracking && s.cardTracking,
-        ]}
-      >
-        {/* 카드 헤더 */}
+      <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
         <View style={s.cardHeader}>
-          <View style={[s.statusBadge, { backgroundColor: statusColor + "20" }]}>
-            <Text style={[s.statusText, { color: statusColor }]}>{work.status}</Text>
+          <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
+            <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
           </View>
           <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
         </View>
 
-        {/* 위치 공유 중 표시 */}
         {isThisTracking && (
           <View style={s.trackingIndicator}>
             <Text style={s.trackingIndicatorText}>📍 위치 공유 중</Text>
           </View>
         )}
 
-        {/* 미작업·이월 경고 */}
-        {isOverdue && work.scheduledDate && work.scheduledDate < today && (
-          <View style={s.overdueTag}>
-            <Text style={s.overdueTagText}>⚠️ 이월 ({work.scheduledDate.replace(/-/g, ".")})</Text>
-          </View>
-        )}
-        {isOverdue && !work.scheduledDate && (
-          <View style={[s.overdueTag, { backgroundColor: "#FEF3C7" }]}>
-            <Text style={[s.overdueTagText, { color: "#92400E" }]}>📌 일정 미정</Text>
+        <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName} 고객님</Text>
+        <Text style={[s.address, { color: colors.muted }]}>
+          {formatFullAddress(work)}
+        </Text>
+        <Text style={[s.symptom, { color: "#FF6B35" }]}>
+          {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
+        </Text>
+
+        {/* 유량 이상 배지 */}
+        {flowAlertMap[work.phoneNumber] && (
+          <View style={s.flowAlertBadge}>
+            <Text style={s.flowAlertBadgeText}>
+              {flowAlertMap[work.phoneNumber].alertType === "저유량"
+                ? "⚠️ 저유량 이상 감지"
+                : flowAlertMap[work.phoneNumber].alertType === "고유량"
+                ? "🔴 고유량 이상 감지"
+                : flowAlertMap[work.phoneNumber].alertType === "통신두절"
+                ? "📵 센서 통신두절"
+                : "⚠️ 유량 이상 감지"}
+            </Text>
+            {flowAlertMap[work.phoneNumber].lastFlowRateLpm != null && (
+              <Text style={s.flowAlertDetail}>
+                현재 {parseFloat(flowAlertMap[work.phoneNumber].lastFlowRateLpm).toFixed(1)} L/min
+                {flowAlertMap[work.phoneNumber].lowerLimitLpm != null
+                  ? ` (기준 ${parseFloat(flowAlertMap[work.phoneNumber].lowerLimitLpm).toFixed(1)}~${parseFloat(flowAlertMap[work.phoneNumber].upperLimitLpm ?? 0).toFixed(1)})`
+                  : ""}
+              </Text>
+            )}
           </View>
         )}
 
-        {/* 방문 예정일·시간 */}
-        {work.scheduledDate ? (
+        {work.scheduledDate && (
           <Text style={[s.time, { color: colors.foreground }]}>
             📅 {work.scheduledDate.replace(/-/g, ".")}
             {work.scheduledTime ? ` ${work.scheduledTime}` : ""}
           </Text>
-        ) : (
+        )}
+
+        {!work.scheduledDate && (
           <Text style={[s.time, { color: colors.muted }]}>📅 방문 일정 미정</Text>
         )}
 
-        {/* 아파트명 */}
-        {work.apartmentName && (
-          <Text style={[s.aptName, { color: colors.foreground }]}>🏢 {work.apartmentName}</Text>
-        )}
-
-        {/* 동·호수 */}
-        <Text style={[s.address, { color: colors.muted }]}>
-          {formatFullAddress(work)}
-        </Text>
-
-        {/* 고객명 */}
-        <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName} 고객님</Text>
-
-        {/* 전화번호 */}
-        {work.phoneNumber ? (
-          <TouchableOpacity onPress={() => handleCall(work.phoneNumber)} activeOpacity={0.7}>
-            <Text style={[s.detail, { color: "#3B82F6" }]}>📞 {work.phoneNumber}</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {/* 작업 내용 */}
-        <Text style={[s.symptom, { color: "#FF6B35" }]}>
-          {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
-        </Text>
         {work.detailContent ? (
-          <Text style={[s.detail, { color: colors.muted }]}>📝 {work.detailContent}</Text>
+          <Text style={[s.detail, { color: colors.muted }]} numberOfLines={2}>{work.detailContent}</Text>
         ) : null}
 
-        {/* 고객 희망일정 vs 확정일정 */}
-        {work.customerPreferredDate && (
-          <Text style={[s.detail, { color: colors.muted }]}>
-            🙋 고객 희망: {work.customerPreferredDate.replace(/-/g, ".")}{work.customerPreferredTime ? ` ${work.customerPreferredTime}` : ""}
-          </Text>
-        )}
-        {work.scheduledDate && work.customerPreferredDate && work.scheduledDate !== work.customerPreferredDate && (
-          <Text style={[s.detail, { color: "#22C55E" }]}>
-            ✅ 확정일정: {work.scheduledDate.replace(/-/g, ".")}{work.scheduledTime ? ` ${work.scheduledTime}` : ""}
-          </Text>
-        )}
-
-        {/* 견적내용 */}
-        {work.estimateItems ? (
-          <View style={{ marginTop: 4, padding: 8, backgroundColor: colors.background, borderRadius: 8 }}>
-            <Text style={{ color: colors.muted, fontSize: 11, fontWeight: "600", marginBottom: 2 }}>📋 견적내용</Text>
-            <Text style={{ color: colors.foreground, fontSize: 12 }} numberOfLines={3}>{work.estimateItems}</Text>
+        {/* 위치 전송 상태 카드 (기사 전용 — 고객용 화면 아님) */}
+        {isThisTracking && (
+          <View style={s.locationStatusCard}>
+            <Text style={s.locationStatusTitle}>📡 위치 전송 상태</Text>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>전송 상태</Text>
+              <Text style={[s.locationStatusValue, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#F59E0B' }]}>
+                {debugState?.serverOk === true ? '✅ 서버 전송 성공' : debugState?.serverOk === false ? '❌ 전송 실패' : '⏳ 전송 대기 중'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 전송</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.lastSuccessAt
+                  ? `${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 (${new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR')})`
+                  : '아직 전송 없음'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>전송 횟수</Text>
+              <Text style={s.locationStatusValue}>{debugState?.sendCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>현재 좌표</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.lat != null ? `${debugState.lat.toFixed(5)}, ${debugState.lng?.toFixed(5)}` : '위치 수신 중...'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>속도</Text>
+              <Text style={s.locationStatusValue}>
+                {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>위치 권한</Text>
+              <Text style={s.locationStatusValue}>{permStatus.bg}</Text>
+            </View>
+            <Text style={s.locationStatusNote}>💡 고객은 문자로 받은 링크에서 위치를 확인합니다</Text>
           </View>
-        ) : null}
+        )}
 
-        {/* 작업 상태별 액션 버튼 */}
+        {/* 출발/도착/취소 버튼 */}
         <View style={s.locationBtns}>
-          {/* 기사확인대기 → 일정접수 확인 */}
-          {work.status === "기사확인대기" && (
+          {!isThisTracking ? (
             <TouchableOpacity
-              style={[s.departBtn, { backgroundColor: "#8B5CF6" }]}
-              onPress={() => handleConfirmJob(work)}
+              style={[s.departBtn, isStartingTracking && s.btnDisabled]}
+              onPress={() => handleDepart(work)}
               activeOpacity={0.8}
+              disabled={isStartingTracking}
             >
-              <Text style={s.departBtnText}>✅ 일정접수 확인</Text>
+              {isStartingTracking ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
+              )}
             </TouchableOpacity>
-          )}
-          {/* 도착 → 공사 시작 */}
-          {work.status === "도착" && (
-            <TouchableOpacity
-              style={[s.departBtn, { backgroundColor: "#F97316" }]}
-              onPress={() => handleWorkStarted(work)}
-              activeOpacity={0.8}
-            >
-              <Text style={s.departBtnText}>🔧 공사 시작</Text>
-            </TouchableOpacity>
-          )}
-          {/* 공사중 → 공사 완료 */}
-          {work.status === "공사중" && (
-            <TouchableOpacity
-              style={[s.departBtn, { backgroundColor: "#22C55E" }]}
-              onPress={() => handleWorkCompleted(work)}
-              activeOpacity={0.8}
-            >
-              <Text style={s.departBtnText}>✅ 공사 완료</Text>
-            </TouchableOpacity>
-          )}
-          {/* 방문예정·기사확인완료·기사배정대기·출발 등 → 출발/도착/취소 */}
-          {(work.status === "방문예정" || work.status === "기사확인완료" || work.status === "기사배정대기" || work.status === "신규접수" || work.status === "출발") && (
-            !isThisTracking ? (
+          ) : (
+            <View style={s.trackingActions}>
               <TouchableOpacity
-                style={[s.departBtn, isStartingTracking && s.btnDisabled]}
-                onPress={() => handleDepart(work)}
+                style={s.arriveBtn}
+                onPress={() => handleArrive(work)}
                 activeOpacity={0.8}
-                disabled={isStartingTracking}
               >
-                {isStartingTracking ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
-                )}
+                <Text style={s.arriveBtnText}>✅ 도착</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={s.trackingActions}>
-                <TouchableOpacity style={s.arriveBtn} onPress={() => handleArrive(work)} activeOpacity={0.8}>
-                  <Text style={s.arriveBtnText}>📍 도착</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(work)} activeOpacity={0.8}>
-                  <Text style={s.cancelBtnText}>❌ 취소</Text>
-                </TouchableOpacity>
-              </View>
-            )
+              <TouchableOpacity
+                style={s.cancelBtn}
+                onPress={() => handleCancel(work)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
-        {/* 하단 액션 버튼 */}
+        {/* 기존 액션 버튼 */}
         <View style={s.actions}>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: "#3B82F6" }]}
@@ -571,36 +449,27 @@ export default function TechScheduleScreen() {
             onPress={() => handleNav(formatNavAddress(work))}
             activeOpacity={0.8}
           >
-            <Text style={s.actionBtnText}>🗺 길찾기</Text>
+            <Text style={s.actionBtnText}>🗺 내비게이션</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: "#FF6B35" }]}
             onPress={() => router.push(`/work-report?id=${work.id}` as any)}
             activeOpacity={0.8}
           >
-            <Text style={s.actionBtnText}>📋 작업 상세</Text>
+            <Text style={s.actionBtnText}>📋 점검표</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   };
 
-  // ─── 로그인 안 된 경우 ────────────────────────────────────────
-  if (!userId) {
+  if (!technicianId && !userId) {
     return (
       <ScreenContainer className="p-6">
-        <Text style={[styles(colors).empty, { color: colors.muted }]}>기사 계정으로 로그인해주세요.</Text>
+        <Text style={[s.empty, { color: colors.muted }]}>기사 계정으로 로그인해주세요.</Text>
       </ScreenContainer>
     );
   }
-
-  // ─── 탭 정의 ─────────────────────────────────────────────────
-  const tabs: { key: TabKey; label: string; count: number; color: string }[] = [
-    { key: "today", label: "오늘", count: todayWorks.length, color: "#FF6B35" },
-    { key: "tomorrow", label: "내일", count: tomorrowWorks.length, color: "#3B82F6" },
-    { key: "overdue", label: "미작업·이월", count: overdueWorks.length, color: "#EF4444" },
-    { key: "all", label: "전체", count: allActive.length, color: "#6B7280" },
-  ];
 
   return (
     <ScreenContainer>
@@ -613,16 +482,14 @@ export default function TechScheduleScreen() {
         >
           <Text style={s.trackingBannerIcon}>📍</Text>
           <View style={s.trackingBannerText}>
-            <Text style={s.trackingBannerTitle}>
-              위치 공유 중 {debugState?.serverOk === true ? "✅" : debugState?.serverOk === false ? "⚠️" : ""}
-            </Text>
+            <Text style={s.trackingBannerTitle}>위치 공유 중 {debugState?.serverOk === true ? '✅' : debugState?.serverOk === false ? '⚠️' : ''}</Text>
             <Text style={s.trackingBannerSub}>
               {debugState?.lastSuccessAt
                 ? `마지막 전송: ${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 · ${debugState.sendCount}회`
-                : "전송 대기 중..."}
+                : '전송 대기 중...'}
             </Text>
           </View>
-          <Text style={{ color: "#fff", fontSize: 11 }}>{showDebug ? "▲" : "▼"}</Text>
+          <Text style={{ color: '#fff', fontSize: 11 }}>{showDebug ? '▲' : '▼'}</Text>
         </TouchableOpacity>
       )}
 
@@ -630,88 +497,77 @@ export default function TechScheduleScreen() {
       {trackingToken && showDebug && (
         <View style={s.debugPanel}>
           <Text style={s.debugTitle}>📡 GPS 디버그</Text>
-          <Text style={s.debugRow}>위도: {debugState?.lat?.toFixed(6) ?? "-"}</Text>
-          <Text style={s.debugRow}>경도: {debugState?.lng?.toFixed(6) ?? "-"}</Text>
-          <Text style={s.debugRow}>정확도: {debugState?.accuracy != null ? `${Math.round(debugState.accuracy)}m` : "-"}</Text>
-          <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : "-"}</Text>
+          <Text style={s.debugRow}>위도: {debugState?.lat?.toFixed(6) ?? '-'}</Text>
+          <Text style={s.debugRow}>경도: {debugState?.lng?.toFixed(6) ?? '-'}</Text>
+          <Text style={s.debugRow}>정확도: {debugState?.accuracy != null ? `${Math.round(debugState.accuracy)}m` : '-'}</Text>
+          <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}</Text>
+          <Text style={s.debugRow}>방향: {debugState?.heading != null ? `${Math.round(debugState.heading)}°` : '-'}</Text>
           <Text style={s.debugRow}>전송 횟수: {debugState?.sendCount ?? 0}회</Text>
-          <Text style={[s.debugRow, { color: debugState?.serverOk === true ? "#22C55E" : debugState?.serverOk === false ? "#EF4444" : "#9BA1A6" }]}>
-            서버 응답: {debugState?.serverOk === true ? "✅ 성공" : debugState?.serverOk === false ? `❌ ${debugState?.serverError}` : "대기"}
+          <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
+          <Text style={[s.debugRow, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#9BA1A6' }]}>
+            서버 응답: {debugState?.serverOk === true ? '✅ 성공' : debugState?.serverOk === false ? `❌ ${debugState?.serverError}` : '대기'}
+          </Text>
+          <Text style={s.debugRow}>
+            마지막 성공: {debugState?.lastSuccessAt ? new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR') : '-'}
           </Text>
           <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
           <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
+          <Text style={s.debugRow}>API 서버: https://www.xn--h50b270bp0ceuddugnobx2m.kr</Text>
         </View>
       )}
 
-      {/* 헤더 */}
       <View style={s.header}>
         <Text style={s.headerTitle}>작업 일정</Text>
         <Text style={s.headerDate}>{today.replace(/-/g, ".")}</Text>
       </View>
 
-      {/* 탭 바 */}
-      <View style={s.tabBar}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[s.tabItem, activeTab === tab.key && { borderBottomColor: tab.color, borderBottomWidth: 2.5 }]}
-            onPress={() => {
-              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab(tab.key);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.tabLabel, { color: activeTab === tab.key ? tab.color : colors.muted }]}>
-              {tab.label}
-            </Text>
-            {tab.count > 0 && (
-              <View style={[s.tabBadge, { backgroundColor: tab.color }]}>
-                <Text style={s.tabBadgeText}>{tab.count}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 콘텐츠 */}
       {isLoading ? (
         <View style={s.center}>
           <ActivityIndicator color="#FF6B35" size="large" />
-          <Text style={[s.empty, { color: colors.muted, marginTop: 12 }]}>일정을 불러오는 중...</Text>
         </View>
-      ) : error ? (
-        // 오류 표시 - 빈 배열로 숨기지 않음
+      ) : (allWorks ?? []).length === 0 ? (
         <View style={s.center}>
-          <Text style={s.emptyIcon}>⚠️</Text>
-          <Text style={[s.empty, { color: "#EF4444" }]}>일정을 불러오지 못했습니다.</Text>
-          <Text style={[s.errorDetail, { color: colors.muted }]}>
-            {(error as any)?.message || "서버 연결을 확인해주세요."}
-          </Text>
-          <TouchableOpacity style={s.retryBtn} onPress={() => refetch()} activeOpacity={0.8}>
-            <Text style={s.retryBtnText}>다시 시도</Text>
-          </TouchableOpacity>
+          <Text style={s.emptyIcon}>📅</Text>
+          <Text style={[s.empty, { color: colors.muted }]}>배정된 방문 일정이 없습니다.</Text>
+          {/* 디버그 정보 - 문제 진단용 */}
+          <View style={{ marginTop: 20, padding: 12, backgroundColor: '#1e2022', borderRadius: 8, width: '90%' }}>
+            <Text style={{ color: '#9BA1A6', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>기사 정보 진단</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>회원 userId: {userId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>technicianId: {technicianId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>resolvedTechId: {resolvedTechnicianId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>branchId: {user?.branchId ?? 'null'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>조회 기준: {technicianId ? 'technicianId' : userId ? 'userId(fallback)' : '없음'}</Text>
+            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>오더 수: {(allWorks ?? []).length}건</Text>
+          </View>
         </View>
-      ) : currentWorks.length === 0 ? (
-        <ScrollView
-          contentContainerStyle={s.emptyContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}
-        >
-          <Text style={s.emptyIcon}>
-            {activeTab === "today" ? "☀️" : activeTab === "tomorrow" ? "🌅" : activeTab === "overdue" ? "✅" : "📋"}
-          </Text>
-          <Text style={[s.empty, { color: colors.muted }]}>
-            {activeTab === "today" ? "오늘 배정된 작업이 없습니다." :
-             activeTab === "tomorrow" ? "내일 예정된 일정이 없습니다." :
-             activeTab === "overdue" ? "미작업·이월 건이 없습니다." :
-             "배정된 작업이 없습니다."}
-          </Text>
-        </ScrollView>
       ) : (
-        <ScrollView
-          contentContainerStyle={s.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}
-        >
-          {currentWorks.map((work) => renderWorkCard(work))}
+        <ScrollView contentContainerStyle={s.list}>
+          {/* 오늘 일정 섹션 */}
+          {todayWorks.length > 0 && (
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>📅 오늘 방문 일정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{todayWorks.length}건</Text>
+            </View>
+          )}
+          {todayWorks.map((work) => renderWorkCard(work))}
+
+          {/* 예정 일정 섹션 */}
+          {upcomingWorks.length > 0 && (
+            <View style={[s.sectionHeader, todayWorks.length > 0 && { marginTop: 8 }]}>
+              <Text style={s.sectionTitle}>🗓 예정 일정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{upcomingWorks.length}건</Text>
+            </View>
+          )}
+          {upcomingWorks.map((work) => renderWorkCard(work))}
+
+          {/* 날짜 미지정 배정 오더 섹션 */}
+          {unscheduledWorks.length > 0 && (
+            <View style={[s.sectionHeader, (todayWorks.length > 0 || upcomingWorks.length > 0) && { marginTop: 8 }]}>
+              <Text style={s.sectionTitle}>⏳ 일정 미확정</Text>
+              <Text style={[s.sectionCount, { color: colors.muted }]}>{unscheduledWorks.length}건</Text>
+            </View>
+          )}
+          {unscheduledWorks.map((work) => renderWorkCard(work))}
         </ScrollView>
       )}
 
@@ -720,10 +576,11 @@ export default function TechScheduleScreen() {
         visible={showConsentModal}
         onConsent={async () => {
           setShowConsentModal(false);
+          // 동의 저장
           const effectiveTechId = resolvedTechnicianId ?? technicianId;
           if (effectiveTechId) {
             try {
-              await fetch("/api/trpc/location.saveConsent", {
+              await fetch(`${getApiBaseUrl()}/api/trpc/location.saveConsent`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ json: { technicianId: effectiveTechId } }),
@@ -731,8 +588,10 @@ export default function TechScheduleScreen() {
               consentQuery.refetch();
             } catch {}
           }
+          // 대기 중인 방문 건 출발 처리
           if (pendingDepartRequestId !== null) {
-            const work = currentWorks.find((w) => w.id === pendingDepartRequestId);
+            const allDisplayWorks = allWorks ?? [];
+            const work = allDisplayWorks.find((w) => w.id === pendingDepartRequestId);
             if (work) await doDepart(work);
             setPendingDepartRequestId(null);
           }
@@ -747,38 +606,26 @@ export default function TechScheduleScreen() {
 }
 
 const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { backgroundColor: "#FF6B35", padding: 20, paddingBottom: 12 },
+  header: { backgroundColor: "#FF6B35", padding: 20, paddingBottom: 16 },
   headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
   headerDate: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 2 },
-  // 탭 바
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tabItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    gap: 4,
-    borderBottomWidth: 2.5,
-    borderBottomColor: "transparent",
-  },
-  tabLabel: { fontSize: 12, fontWeight: "700" },
-  tabBadge: { borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 18, alignItems: "center" },
-  tabBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
-  // 콘텐츠
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  emptyContainer: { flexGrow: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 24 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   emptyIcon: { fontSize: 48 },
   empty: { fontSize: 16, textAlign: "center" },
-  errorDetail: { fontSize: 13, textAlign: "center", marginTop: 4 },
-  retryBtn: { marginTop: 12, backgroundColor: "#FF6B35", borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 },
-  retryBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   list: { padding: 16, gap: 12 },
+  // 섹션 헤더
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    marginBottom: 4,
+  },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#374151" },
+  sectionCount: { fontSize: 13, fontWeight: "600" },
   // 카드
   card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 6 },
   cardTracking: { borderWidth: 2 },
@@ -786,19 +633,10 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   statusText: { fontSize: 12, fontWeight: "700" },
   requestNum: { fontSize: 12 },
-  overdueTag: {
-    backgroundColor: "#FEE2E2",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignSelf: "flex-start",
-  },
-  overdueTagText: { color: "#991B1B", fontSize: 11, fontWeight: "700" },
-  time: { fontSize: 14, fontWeight: "600" },
-  aptName: { fontSize: 15, fontWeight: "700" },
   customerName: { fontSize: 18, fontWeight: "700" },
   address: { fontSize: 14 },
   symptom: { fontSize: 14, fontWeight: "600" },
+  time: { fontSize: 14, fontWeight: "600" },
   detail: { fontSize: 13, lineHeight: 18 },
   actions: { flexDirection: "row", gap: 8, marginTop: 8 },
   actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
@@ -816,6 +654,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   trackingBannerText: { flex: 1 },
   trackingBannerTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
   trackingBannerSub: { color: "rgba(255,255,255,0.85)", fontSize: 12 },
+  trackingDot: {
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: "#fff",
+    shadowColor: "#fff",
+    shadowOpacity: 1,
+    shadowRadius: 4,
+  },
   // 카드 내 위치 공유 표시
   trackingIndicator: {
     backgroundColor: "#FFF3E0",
@@ -825,6 +670,14 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     alignSelf: "flex-start",
   },
   trackingIndicatorText: { color: "#FF6B35", fontSize: 12, fontWeight: "700" },
+  trackingLinkBox: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  trackingLinkText: { color: "#3B82F6", fontSize: 13, fontWeight: "600" },
   // 출발/도착/취소 버튼
   locationBtns: { marginTop: 10 },
   departBtn: {
@@ -854,11 +707,97 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   cancelBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   // GPS 디버그 패널
   debugPanel: {
-    backgroundColor: "#1a1a2e",
+    backgroundColor: '#1a1a2e',
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 4,
   },
-  debugTitle: { color: "#FF6B35", fontSize: 13, fontWeight: "800", marginBottom: 4 },
-  debugRow: { color: "#9BA1A6", fontSize: 12 },
+  debugTitle: { color: '#FF6B35', fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  debugRow: { color: '#9BA1A6', fontSize: 12, fontFamily: 'monospace' },
+  locationStatusCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  locationStatusTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#166534',
+    marginBottom: 8,
+  },
+  locationStatusRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#D1FAE5',
+  },
+  locationStatusLabel: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500' as const,
+  },
+  locationStatusValue: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '600' as const,
+    flex: 1,
+    textAlign: 'right' as const,
+  },
+  locationStatusNote: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 8,
+    fontStyle: 'italic' as const,
+  },
+  // 탭 바
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    gap: 4,
+    borderBottomWidth: 2.5,
+    borderBottomColor: "transparent",
+  },
+  tabLabel: { fontSize: 13, fontWeight: "600" },
+  tabBadge: {
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  tabBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  // 유량 이상 배지
+  flowAlertBadge: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginTop: 2,
+  },
+  flowAlertBadgeText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#DC2626',
+  },
+  flowAlertDetail: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 2,
+  },
 });

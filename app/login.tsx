@@ -14,6 +14,7 @@ import {
 import { useRouter } from "expo-router";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
+import * as Auth from "@/lib/_core/auth";
 import { useColors } from "@/hooks/use-colors";
 import { ScreenContainer } from "@/components/screen-container";
 
@@ -70,22 +71,37 @@ export default function LoginScreen() {
   const go = (v: View2) => { setView(v); clearMsg(); };
 
   const finishLogin = async (data: any) => {
-    await login(
-      {
-        userId: data.userId!,
-        appRole: data.appRole!,
+    // 로그인 통신 성공 후 세션 저장 오류와 화면이동 오류를 분리하여 표시
+    try {
+      // 서버에서 받은 token을 SecureStore에 저장 (tRPC Authorization 헤더용)
+      if (data.token && Platform.OS !== "web") {
+        try { await Auth.setSessionToken(data.token); } catch {}
+      }
+      await login(
+        {
+          userId: data.userId!,
+          appRole: data.appRole!,
+          loginId,
+          name: data.name ?? null,
+          technicianId: data.technicianId ?? null,
+          branchId: data.branchId ?? null,
+          branchName: data.branchName ?? null,
+          phoneNumber: data.phoneNumber ?? null,
+          mustChangePassword: false,
+          token: data.token ?? null,
+        },
         loginId,
-        name: data.name ?? null,
-        technicianId: data.technicianId ?? null,
-        branchId: data.branchId ?? null,
-        branchName: data.branchName ?? null,
-        phoneNumber: data.phoneNumber ?? null,
-        mustChangePassword: false,
-      },
-      loginId,
-      rememberMe
-    );
-    router.replace("/(tabs)");
+        rememberMe
+      );
+    } catch (saveErr: any) {
+      setError(`세션 저장 실패: ${saveErr?.message || String(saveErr)}`);
+      return;
+    }
+    try {
+      router.replace("/(tabs)");
+    } catch (navErr: any) {
+      setError(`화면 이동 실패: ${navErr?.message || String(navErr)}`);
+    }
   };
 
   const loginMutation = trpc.auth.login.useMutation({
@@ -109,7 +125,7 @@ export default function LoginScreen() {
       const msg = err?.message || "";
       const shape = (err as any)?.data?.httpStatus;
       const detail = shape ? `(HTTP ${shape})` : "";
-      setError(`서버 연결 실패 ${detail}\n서버: https://xn--2z1bw8k1pjz5ccumkb516e.kr\n오류: ${msg || "네트워크 오류"}`);
+      setError(`서버 연결 실패 ${detail}\n서버: https://www.xn--h50b270bp0ceuddugnobx2m.kr\n오류: ${msg || "네트워크 오류"}`);
     },
   });
 

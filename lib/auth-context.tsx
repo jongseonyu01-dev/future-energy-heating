@@ -36,9 +36,11 @@ const AuthContext = createContext<AuthContextValue>({
 
 const STORAGE_KEY = "fe_auth_user";
 const SECURE_STORE_KEY = "fe_session_token";
+// tRPC Authorization 헤더용 토큰 키 (lib/_core/auth.ts의 SESSION_TOKEN_KEY와 동일)
+const APP_SESSION_TOKEN_KEY = "app_session_token";
 // 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
-const CURRENT_SESSION_VERSION = "v3"; // 이 값을 올리면 기존 저장된 세션이 모두 무효화됨
+const CURRENT_SESSION_VERSION = "v5"; // v5: superjson transformer 추가, token 저장 통일 (2026-08-02)
 
 /** 모든 저장소에서 인증 데이터 완전 삭제 */
 async function clearAllAuthStorage() {
@@ -48,6 +50,7 @@ async function clearAllAuthStorage() {
   try { await AsyncStorage.removeItem("manus-runtime-user-info"); } catch {}
   if (Platform.OS !== "web") {
     try { await SecureStore.deleteItemAsync(SECURE_STORE_KEY); } catch {}
+    try { await SecureStore.deleteItemAsync(APP_SESSION_TOKEN_KEY); } catch {}
     try { await SecureStore.deleteItemAsync("manus-session-token"); } catch {}
     try { await SecureStore.deleteItemAsync("fe_token"); } catch {}
   }
@@ -56,9 +59,10 @@ async function clearAllAuthStorage() {
 /** 서버에서 토큰 유효성 검증 */
 async function verifyTokenWithServer(userId: number, token: string): Promise<boolean> {
   try {
+    // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : `${process.env.EXPO_PUBLIC_API_URL || "https://xn--2z1bw8k1pjz5ccumkb516e.kr"}/api/trpc`;
+      : "https://www.xn--h50b270bp0ceuddugnobx2m.kr/api/trpc";
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -139,6 +143,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (authUser: AuthUser, loginId: string, rememberMe: boolean = false) => {
     const userWithLoginId = { ...authUser, loginId };
     setUser(userWithLoginId);
+    // tRPC Authorization 헤더용 token을 SecureStore에 저장 (trpc.ts의 Auth.getSessionToken()이 읽음)
+    if (authUser.token && Platform.OS !== "web") {
+      try { await SecureStore.setItemAsync(APP_SESSION_TOKEN_KEY, authUser.token); } catch {}
+    }
     if (rememberMe) {
       // 자동 로그인 선택 시에만 저장
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));

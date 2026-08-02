@@ -63,6 +63,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
+    versionCode: 14,
     allowBackup: false,
     versionCode: 15,
     adaptiveIcon: {
