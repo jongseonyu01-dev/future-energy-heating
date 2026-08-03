@@ -40,7 +40,7 @@ const SECURE_STORE_KEY = "fe_session_token";
 const APP_SESSION_TOKEN_KEY = "app_session_token";
 // 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
-const CURRENT_SESSION_VERSION = "v5"; // v5: superjson transformer 추가, token 저장 통일 (2026-08-02)
+const CURRENT_SESSION_VERSION = "v6"; // v6: headers.entries() 제거, API 주소 단일화, 과거 서버주소 키 정리 (2026-08-03)
 
 /** 모든 저장소에서 인증 데이터 완전 삭제 */
 async function clearAllAuthStorage() {
@@ -48,11 +48,20 @@ async function clearAllAuthStorage() {
   try { await AsyncStorage.removeItem("fe_remember_me"); } catch {}
   try { await AsyncStorage.removeItem("authUser"); } catch {}
   try { await AsyncStorage.removeItem("manus-runtime-user-info"); } catch {}
+  // 과거 서버주소 저장 키 마이그레이션 (futureenergytech.co.kr 등 잘못된 주소 제거)
+  const legacyUrlKeys = ["serverUrl", "apiUrl", "apiBaseUrl", "baseUrl", "customServer", "endpoint"];
+  for (const key of legacyUrlKeys) {
+    try { await AsyncStorage.removeItem(key); } catch {}
+  }
   if (Platform.OS !== "web") {
     try { await SecureStore.deleteItemAsync(SECURE_STORE_KEY); } catch {}
     try { await SecureStore.deleteItemAsync(APP_SESSION_TOKEN_KEY); } catch {}
     try { await SecureStore.deleteItemAsync("manus-session-token"); } catch {}
     try { await SecureStore.deleteItemAsync("fe_token"); } catch {}
+    // SecureStore 과거 서버주소 키도 삭제
+    for (const key of legacyUrlKeys) {
+      try { await SecureStore.deleteItemAsync(key); } catch {}
+    }
   }
 }
 

@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppState, AppStateStatus, Platform, Linking } from "react-native";
 import Constants from "expo-constants";
+import { API_BASE_URL } from "@/constants/oauth";
 
 // 현재 앱 versionCode (app.config.ts의 android.versionCode)
 const CURRENT_VERSION_CODE: number =
@@ -37,11 +38,10 @@ export interface UseAppUpdateResult {
   checkNow: () => void;
 }
 
-// 서버 API 기본 URL
+// 서버 API 기본 URL — 단일 상수 사용 (futureenergytech.co.kr 혼용 금지)
 function getApiBase(): string {
   if (Platform.OS === "web") return "";
-  // 운영 도메인
-  return "https://www.futureenergytech.co.kr";
+  return API_BASE_URL;
 }
 
 export function useAppUpdate(): UseAppUpdateResult {

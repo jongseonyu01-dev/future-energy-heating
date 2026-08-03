@@ -123,9 +123,21 @@ export default function LoginScreen() {
     },
     onError: (err) => {
       const msg = err?.message || "";
-      const shape = (err as any)?.data?.httpStatus;
-      const detail = shape ? `(HTTP ${shape})` : "";
-      setError(`서버 연결 실패 ${detail}\n서버: https://www.xn--h50b270bp0ceuddugnobx2m.kr\n오류: ${msg || "네트워크 오류"}`);
+      const httpStatus = (err as any)?.data?.httpStatus as number | undefined;
+      // 오류 유형 세분화
+      if (msg.includes("undefined is not a function") || msg.includes("is not a function")) {
+        setError("앱 내부 오류\n\uac1c로운 APK를 설치하거나 앱을 재시작해주세요.");
+      } else if (msg.includes("Network request failed") || msg.includes("fetch") || msg.includes("ECONNREFUSED")) {
+        setError("인터넷 또는 DNS 오류\n\uc11c버에 연결할 수 없습니다. Wi-Fi 또는 모바일 데이터를 확인해주세요.");
+      } else if (httpStatus === 401) {
+        setError("아이디 또는 비밀번호가 일치하지 않습니다.");
+      } else if (httpStatus === 403) {
+        setError("승인되지 않은 계정입니다. 본사에 문의해주세요.");
+      } else if (httpStatus === 404) {
+        setError("서버 연결 오류\n\uc11c버 주소를 확인하거나 담당자에 문의해주세요.");
+      } else {
+        setError(`서버 연결 실패\n${msg || "네트워크 오류"}`);
+      }
     },
   });
 

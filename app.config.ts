@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.4",
+  version: "1.1.5",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,6 +50,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
+    buildNumber: "6",
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -63,9 +64,8 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    versionCode: 14,
+    versionCode: 16,
     allowBackup: false,
-    versionCode: 15,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
       foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -100,7 +100,7 @@ const config: ExpoConfig = {
     [
       "expo-location",
       {
-        "locationAlwaysAndWhenInUsePermission": "퍼치에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
+        "locationAlwaysAndWhenInUsePermission": "퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
         "isIosBackgroundLocationEnabled": true,
         "isAndroidBackgroundLocationEnabled": true
       }

@@ -735,6 +735,80 @@ export const appRouter = router({
         }
         return { success: true, results };
       }),
+    // ─── 내 계정정보 변경 (세션 기반, 기사앱 전용) ────────────────────────────────────────────────
+    updateMyProfile: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(1).optional(),
+        newPassword: z.string().min(6).max(64).optional(),
+        phoneNumber: z.string().max(20).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = ctx.user.id;
+        const role = await db.getAppRole(userId);
+        if (!role) return { success: false, error: "계정을 찾을 수 없습니다." };
+        // 비밀번호 변경 요청 시 현재 비밀번호 검증
+        if (input.newPassword) {
+          if (!input.currentPassword) return { success: false, error: "현재 비밀번호를 입력해주세요." };
+          const check = verifyPassword(input.currentPassword, role.passwordHash);
+          if (!check.ok) return { success: false, error: "현재 비밀번호가 올바르지 않습니다." };
+          await db.updateAppRoleFields(userId, {
+            passwordHash: hashPassword(input.newPassword),
+            mustChangePassword: false,
+          });
+        }
+        // 전화번호 변경 요청 시
+        if (input.phoneNumber !== undefined) {
+          const normalized = input.phoneNumber.replace(/[^0-9]/g, "");
+          await db.updateAppRoleFields(userId, { phoneNumber: normalized || null });
+          // technicians 테이블도 동기화
+          const tech = await db.getTechnicianByUserId(userId);
+          if (tech) await db.updateTechnician(tech.id, { phoneNumber: normalized || undefined });
+        }
+        return { success: true };
+      }),
+    // ─── 테스트 기사 계정 정보 조회 (본사 관리자 전용, 1회성 확인용) ─────────────────────────────────
+    getTechnicianTestInfo: publicProcedure
+      .input(z.object({ loginId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        const callerRole = await resolveCallerRole(ctx);
+        if (!callerRole) throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+        if (callerRole.appRole !== "hq_admin") throw new TRPCError({ code: "FORBIDDEN", message: "본사 관리자만 접근 가능합니다." });
+        const role = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (!role) return { success: false, error: "계정을 찾을 수 없습니다." };
+        if (role.appRole !== "technician") return { success: false, error: "기사 계정이 아닙니다." };
+        // technicianId 조회
+        const techIdSet = new Set<number>();
+        const techByUserId = await db.getTechnicianByUserId(role.userId);
+        if (techByUserId) techIdSet.add(techByUserId.id);
+        if (role.phoneNumber) {
+          const allTechs = await db.getTechniciansByPhone(role.phoneNumber);
+          for (const t of allTechs) techIdSet.add(t.id);
+          const appRolesByPhone = await db.getAppRolesByPhoneNormalized(role.phoneNumber);
+          for (const r of appRolesByPhone) techIdSet.add(r.id);
+        }
+        techIdSet.add(role.id);
+        // 배정된 접수 건 수 조회
+        let assignedCount = 0;
+        let selectedTechnicianId: number | null = null;
+        for (const tid of techIdSet) {
+          const works = await db.getRepairRequestsByTechnician(tid);
+          if (works.length > 0) { selectedTechnicianId = tid; assignedCount = works.length; break; }
+        }
+        if (!selectedTechnicianId && techIdSet.size > 0) selectedTechnicianId = Array.from(techIdSet)[0];
+        // 비밀번호는 반환하지 않음 - 관리자가 직접 임시 비밀번호를 재발급하도록 안내
+        return {
+          success: true,
+          loginId: role.loginId,
+          name: role.name,
+          userId: role.userId,
+          technicianId: selectedTechnicianId,
+          phoneNumber: role.phoneNumber,
+          isActive: role.isActive,
+          mustChangePassword: role.mustChangePassword,
+          assignedCount,
+          appRole: role.appRole,
+        };
+      }),
   }),
   // ─── 지사 관리 ───────────────────────────────────────────────
   branch: router({
