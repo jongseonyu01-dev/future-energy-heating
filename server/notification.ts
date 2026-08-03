@@ -459,3 +459,42 @@ export function buildEstimateApprovedCustomerMessage(
 ): string {
   return `[퓨처에너지테크]\n${customerName}님, 견적이 승인되어 작업 접수(${requestNumber})가 완료되었습니다.\n배정된 기사가 예정된 일정에 방문할 예정입니다.\n문의: 031-8042-7310`;
 }
+
+/** 고객이 방문 일정을 요청했을 때 본사/지사 담당자에게 보내는 알림 */
+export function buildScheduleRequestAdminMessage(params: {
+  customerName: string | null;
+  phoneNumber: string | null;
+  estimateNumber: string;
+  address?: string | null;
+  preferredDate?: string | null;
+  preferredTime?: string | null;
+  requestMemo?: string | null;
+}): string {
+  const { customerName, phoneNumber, estimateNumber, address, preferredDate, preferredTime, requestMemo } = params;
+  const parts = [`[퓨처에너지테크]\n${customerName ?? "고객"}님이 방문 일정을 요청했습니다.`];
+  parts.push(`견적번호: ${estimateNumber}`);
+  if (address) parts.push(`주소: ${address}`);
+  if (preferredDate) parts.push(`희망일: ${preferredDate}${preferredTime ? ` ${preferredTime}` : ""}`);
+  if (requestMemo) parts.push(`요청사항: ${requestMemo}`);
+  if (phoneNumber) parts.push(`연락처: ${phoneNumber}`);
+  parts.push("관리자 화면에서 확인해 주세요.");
+  return parts.join("\n");
+}
+
+/** 고객이 문의를 접수했을 때 본사/지사 담당자에게 보내는 알림 */
+export function buildInquiryAdminMessage(params: {
+  customerName: string | null;
+  phoneNumber: string | null;
+  estimateNumber: string;
+  address?: string | null;
+  inquiryContent: string;
+}): string {
+  const { customerName, phoneNumber, estimateNumber, address, inquiryContent } = params;
+  const parts = [`[퓨처에너지테크]\n${customerName ?? "고객"}님이 문의를 접수했습니다.`];
+  parts.push(`견적번호: ${estimateNumber}`);
+  if (address) parts.push(`주소: ${address}`);
+  parts.push(`문의내용: ${inquiryContent}`);
+  if (phoneNumber) parts.push(`연락처: ${phoneNumber}`);
+  parts.push("관리자 화면에서 확인해 주세요.");
+  return parts.join("\n");
+}

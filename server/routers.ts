@@ -1,9 +1,8 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { customerLedgerRouter } from "./customer-ledger-router.js";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure } from "./_core/trpc.js";
+import { router, publicProcedure, protectedProcedure } from "./_core/trpc.js";
 import * as db from "./db.js";
 import {
   sendSms,
@@ -689,26 +688,27 @@ export const appRouter = router({
           try {
             const seedStr = `test-account-${acct.loginId}`;
             const userId = generateSafeUserId(seedStr);
-            const passwordHash = hashPassword("yjs1234");
-            // 기존 loginId 계정이 있으면 비밀번호+역할 업데이트, 없으면 신규 생성
+            // 비밀번호는 소스코드에 저장하지 않음 — 계정 구조만 생성/확인
+            // 실제 비밀번호는 관리자 화면에서 generateTestTechnicianPassword API로 재발급
             const existing = await db.getAppRoleByLoginId(acct.loginId);
             if (existing) {
               await db.updateAppRoleFields(existing.userId, {
-                passwordHash,
-                appRole: acct.role,
-                mustChangePassword: false,
+                appRole: acct.role as any,
+                mustChangePassword: true,
                 isActive: true,
               });
             } else {
+              // 신규 생성 시 임시 비밀번호는 난수로 생성 (평문 반환 안 함)
+              const tempPw = crypto.randomBytes(16).toString("hex");
               await db.upsertAppRole({
                 userId,
-                appRole: acct.role,
+                appRole: acct.role as any,
                 loginId: acct.loginId,
-                passwordHash,
+                passwordHash: hashPassword(tempPw),
                 phoneNumber: acct.phoneNumber,
                 name: acct.name,
                 branchId: null,
-                mustChangePassword: false,
+                mustChangePassword: true,
                 isActive: true,
               });
             }
@@ -729,11 +729,42 @@ export const appRouter = router({
               }
             }
             results.push({ loginId: acct.loginId, status: "ok" });
-          } catch (e) {
+          } catch (e: any) {
             results.push({ loginId: acct.loginId, status: `error: ${e?.message}` });
           }
         }
         return { success: true, results };
+      }),
+
+    // ─── 테스트 기사 계정 임시 비밀번호 재발급 (본사 관리자 전용, 1회성 반환) ──────────────────────
+    // 평문 비밀번호는 이 응답에서만 1회 반환되며, DB에는 bcrypt 해시만 저장됨
+    // 관리자 화면을 닫거나 새로고침하면 다시 확인 불가 — 분실 시 재발급 필요
+    generateTestTechnicianPassword: publicProcedure
+      .input(z.object({ loginId: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const callerRole = await resolveCallerRole(ctx);
+        if (!callerRole) throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+        if (callerRole.appRole !== "hq_admin") throw new TRPCError({ code: "FORBIDDEN", message: "본사 관리자만 접근 가능합니다." });
+        const role = await db.getAppRoleByLoginId(input.loginId.trim());
+        if (!role) return { success: false, error: "계정을 찾을 수 없습니다." };
+        if (role.appRole !== "technician") return { success: false, error: "기사 계정이 아닙니다." };
+        // 서버에서 안전한 난수로 임시 비밀번호 생성 (12자: 영문+숫자 혼합)
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+        const randomBytes = crypto.randomBytes(12);
+        const tempPassword = Array.from(randomBytes)
+          .map(b => chars[b % chars.length])
+          .join("");
+        // DB에는 bcrypt 해시만 저장 (평문 저장 금지)
+        await db.updateAppRoleFields(role.userId, {
+          passwordHash: hashPassword(tempPassword),
+          mustChangePassword: true,
+        });
+        // 평문 비밀번호는 이 응답에서만 1회 반환 — 로그/DB에 저장 안 됨
+        return {
+          success: true,
+          loginId: role.loginId,
+          tempPassword, // 클라이언트에서 1회 표시 후 소멸
+        };
       }),
     // ─── 내 계정정보 변경 (세션 기반, 기사앱 전용) ────────────────────────────────────────────────
     updateMyProfile: protectedProcedure
@@ -3386,7 +3417,6 @@ export const appRouter = router({
       }),
   }),
   }), // workMgmt end
-  customerLedger: customerLedgerRouter,
 });
 export type AppRouter = typeof appRouter;
 // redeploy Wed Jul  1 08:27:19 UTC 2026

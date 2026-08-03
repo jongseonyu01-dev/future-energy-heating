@@ -592,3 +592,15 @@
 - [x] app.config.ts: version 1.1.4, versionCode 15로 업데이트
 - [x] 검증: 10가지 조건 데이터 배정 후 분류 결과 확인
 - [ ] APK 빌드 및 배포
+
+## Android 실기기 검수용 테스트 기사계정 작업 복구 (현재)
+- [ ] DB에서 테스트 기사계정(yjs1234) 존재 여부 확인
+- [ ] DB에서 테스트 고객접수 배정 현황 확인 (정확히 1건인지)
+- [ ] customer-ledger-router.js 누락 원인 파악 및 수정
+- [ ] pnpm run build 로컬 성공 확인
+- [ ] 임시 비밀번호 서버 난수 생성 API 구현 (평문 반환 없음)
+- [ ] 관리자 화면 1회성 표시 구현 (새로고침 시 재조회 불가)
+- [ ] yjs1234 계정과 technicianId=510001 연결 확인
+- [ ] 테스트 고객접수 정확히 1건 배정 확인
+- [ ] Expo 빌드 전 검증 (expo config, expo-doctor, eas project:info)
+- [ ] APK 빌드 실행 (EAS)
