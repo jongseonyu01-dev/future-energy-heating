@@ -1031,10 +1031,34 @@ export const appRouter = router({
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => db.findRepairRequest(input.query)),
 
-    // 단건 조회
+    // 단건 조회 — 인증 필수, 기사는 자신에게 배정된 접수만 조회 가능
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => db.getRepairRequestById(input.id)),
+      .query(async ({ ctx, input }) => {
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const req = await db.getRepairRequestById(input.id);
+        if (!req) return null;
+        const role = (ctx.user as any).appRole;
+        // 본사/지사 관리자는 모든 접수 조회 가능
+        if (["hq_admin", "admin", "headquarters", "branch_manager", "staff"].includes(role)) return req;
+        // 기사는 자신에게 배정된 접수만 조회 가능
+        if (role === "technician") {
+          const techIdSet = new Set<number>();
+          const techByUserId = await db.getTechnicianByUserId(ctx.user.id);
+          if (techByUserId) techIdSet.add(techByUserId.id);
+          const appRoleByUserId = await db.getAppRole(ctx.user.id);
+          if (appRoleByUserId?.appRole === "technician") techIdSet.add(appRoleByUserId.id);
+          if (req.technicianId && techIdSet.has(req.technicianId)) return req;
+          throw new TRPCError({ code: "FORBIDDEN", message: "다른 기사의 작업을 조회할 수 없습니다." });
+        }
+        // 고객은 자신의 접수만 조회 가능 (phoneNumber 기준)
+        if (role === "customer") {
+          const appRole = await db.getAppRole(ctx.user.id);
+          if (appRole?.phoneNumber && req.phoneNumber === appRole.phoneNumber) return req;
+          throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+        }
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }),
 
     // 전체 목록 (본사 관리자용)
     listAll: publicProcedure.query(async ({ ctx }) => {
@@ -1050,14 +1074,41 @@ export const appRouter = router({
       .input(z.object({ branchId: z.number() }))
       .query(async ({ input }) => db.getRepairRequestsByBranch(input.branchId)),
 
-        // 기사별 배정 목록 (기사용 - technicianId 기준)
+        // 기사별 배정 목록 (기사용 - technicianId 기준) — 인증 필수, 서버 세션 기준으로 소유 검증
     listByTechnician: publicProcedure
       .input(z.object({ technicianId: z.number() }))
-      .query(async ({ input }) => db.getRepairRequestsByTechnician(input.technicianId)),
-    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용, phoneNumber fallback 포함)
+      .query(async ({ ctx, input }) => {
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const role = (ctx.user as any).appRole;
+        // 본사/지사 관리자는 모든 기사 조회 가능
+        if (["hq_admin", "admin", "headquarters", "branch_manager", "staff"].includes(role)) {
+          return db.getRepairRequestsByTechnician(input.technicianId);
+        }
+        // 기사는 자신의 technicianId만 조회 가능 (서버 세션 기준)
+        if (role === "technician") {
+          const techByUserId = await db.getTechnicianByUserId(ctx.user.id);
+          const appRoleByUserId = await db.getAppRole(ctx.user.id);
+          const allowedIds = new Set<number>();
+          if (techByUserId) allowedIds.add(techByUserId.id);
+          if (appRoleByUserId?.appRole === "technician") allowedIds.add(appRoleByUserId.id);
+          if (!allowedIds.has(input.technicianId)) throw new TRPCError({ code: "FORBIDDEN", message: "다른 기사의 작업을 조회할 수 없습니다." });
+          return db.getRepairRequestsByTechnician(input.technicianId);
+        }
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }),
+    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용, phoneNumber fallback 포함) — 인증 필수, 서버 세션 기준
     listByTechnicianUserId: publicProcedure
       .input(z.object({ userId: z.number(), phoneNumber: z.string().optional() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const role = (ctx.user as any).appRole;
+        // 기사는 자신의 userId만 조회 가능 (서버 세션 기준, 변조 불가)
+        if (role === "technician" && ctx.user.id !== input.userId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "다른 기사의 작업을 조회할 수 없습니다." });
+        }
+        if (!["hq_admin", "admin", "headquarters", "branch_manager", "staff", "technician"].includes(role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+        }
         // 모든 관련 technicianId 수집 (technicians 테이블 + app_roles 테이블 모두 포함)
         const techIdSet = new Set<number>();
         // 1) technicians 테이블: userId로 직접 조회
@@ -1381,9 +1432,16 @@ export const appRouter = router({
       .input(z.object({ branchId: z.number() }))
       .query(async ({ input }) => db.getTechniciansByBranch(input.branchId)),
 
-    // 본사 소속 기사 목록 (branchId IS NULL)
+    // 본사 소속 기사 목록 (branchId IS NULL) — 인증 필수, 본사/지사 관리자만 접근 가능
     listByHQ: publicProcedure
-      .query(async () => db.getHQTechnicians()),
+      .query(async ({ ctx }) => {
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const role = (ctx.user as any).appRole;
+        if (!["hq_admin", "admin", "headquarters", "branch_manager", "staff"].includes(role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+        }
+        return db.getHQTechnicians();
+      }),
 
     create: publicProcedure
       .input(z.object({
