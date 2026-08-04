@@ -206,32 +206,11 @@ export const appRouter = router({
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          // technicians 테이블 + app_roles 테이블 모두에서 technicianId 수집
-          const techIdSet = new Set<number>();
-          // technicians 테이블: userId로 조회
+          // technicians.userId = role.userId 로 조회한 technicians.id만 사용 (명시적 연결)
           const techByUserId = await db.getTechnicianByUserId(role.userId);
-          if (techByUserId) techIdSet.add(techByUserId.id);
-          if (role.phoneNumber) {
-            // technicians 테이블: phoneNumber로 조회
-            const allTechs = await db.getTechniciansByPhone(role.phoneNumber);
-            for (const t of allTechs) techIdSet.add(t.id);
-            // app_roles 테이블: phoneNumber로 조회 (repair_requests.technicianId가 app_roles.id를 참조하는 경우)
-            const appRolesByPhone = await db.getAppRolesByPhoneNormalized(role.phoneNumber);
-            for (const r of appRolesByPhone) techIdSet.add(r.id);
-          }
-          // app_roles 테이블: userId로 직접 조회
-          techIdSet.add(role.id); // app_roles.id 자체도 포함
-          if (techIdSet.size > 0) {
-            // 접수건이 있는 technicianId 우선 선택
-            let selectedId = Array.from(techIdSet)[0];
-            for (const tid of techIdSet) {
-              const works = await db.getRepairRequestsByTechnician(tid);
-              if (works.length > 0) { selectedId = tid; break; }
-            }
-            technicianId = selectedId;
-            // branchId 없는 경우 연결
-            const selTech = techByUserId?.id === selectedId ? techByUserId : null;
-            if (selTech?.branchId) branchId = selTech.branchId;
+          if (techByUserId && techByUserId.isActive) {
+            technicianId = techByUserId.id;
+            if (techByUserId.branchId) branchId = techByUserId.branchId;
           }
         } else if (role.appRole === "branch_manager") {
           const allBranches = await db.getAllBranches();
@@ -277,25 +256,11 @@ export const appRouter = router({
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          // technicians 테이블 + app_roles 테이블 모두에서 technicianId 수집
-          const techIdSet2 = new Set<number>();
+          // technicians.userId = role.userId 로 조회한 technicians.id만 사용 (명시적 연결)
           const techByUserId3 = await db.getTechnicianByUserId(role.userId);
-          if (techByUserId3) techIdSet2.add(techByUserId3.id);
-          if (role.phoneNumber) {
-            const allTechs3 = await db.getTechniciansByPhone(role.phoneNumber);
-            for (const t of allTechs3) techIdSet2.add(t.id);
-            const appRolesByPhone2 = await db.getAppRolesByPhoneNormalized(role.phoneNumber);
-            for (const r of appRolesByPhone2) techIdSet2.add(r.id);
-          }
-          techIdSet2.add(role.id); // app_roles.id 자체도 포함
-          if (techIdSet2.size > 0) {
-            // 접수건이 있는 technicianId 우선 선택
-            let selectedId2 = Array.from(techIdSet2)[0];
-            for (const tid of techIdSet2) {
-              const works = await db.getRepairRequestsByTechnician(tid);
-              if (works.length > 0) { selectedId2 = tid; break; }
-            }
-            technicianId = selectedId2;
+          if (techByUserId3 && techByUserId3.isActive) {
+            technicianId = techByUserId3.id;
+            if (techByUserId3.branchId && !branchId) branchId = techByUserId3.branchId;
           }
         } else if (role.appRole === "branch_manager") {
           const allBranches = await db.getAllBranches();
@@ -1085,20 +1050,10 @@ export const appRouter = router({
     listMySchedule: protectedProcedure
       .query(async ({ ctx }) => {
         const userId = ctx.user.id;
-        // 모든 관련 technicianId 수집
-        const techIdSet = new Set<number>();
+        // technicians.userId = userId 로 조회한 technicians.id만 사용 (세션 기반)
         const techByUserId = await db.getTechnicianByUserId(userId);
-        if (techByUserId) techIdSet.add(techByUserId.id);
-        if (ctx.user.phoneNumber) {
-          const allTechs = await db.getTechniciansByPhone(ctx.user.phoneNumber);
-          for (const t of allTechs) techIdSet.add(t.id);
-          const appRolesByPhone = await db.getAppRolesByPhoneNormalized(ctx.user.phoneNumber);
-          for (const r of appRolesByPhone) techIdSet.add(r.id);
-        }
-        const appRoleByUserId = await db.getAppRole(userId);
-        if (appRoleByUserId?.appRole === "technician") techIdSet.add(appRoleByUserId.id);
-        if (techIdSet.size === 0) return [];
-        return db.getRepairRequestsByTechnicianIds(Array.from(techIdSet));
+        if (!techByUserId || !techByUserId.isActive) return [];
+        return db.getRepairRequestsByTechnicianIds([techByUserId.id]);
       }),
     // 상태 변경
     updateStatus: publicProcedure

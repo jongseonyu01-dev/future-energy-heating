@@ -24,10 +24,14 @@ const MOBILE_PHONE_TEL = "tel:010-5754-7310";
 
 // ─── 한국 시간(KST) 날짜 유틸 ──────────────────────────────────
 function getKSTDateString(offsetDays = 0): string {
+  // UTC+9 고정 (getTimezoneOffset() 사용 금지 - 기기 타임존에 따라 이중 적용 버그 발생)
   const now = new Date();
-  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
-  const kstDate = new Date(kstMs + offsetDays * 24 * 60 * 60 * 1000);
-  return kstDate.toISOString().slice(0, 10);
+  const kstMs = now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000;
+  const d = new Date(kstMs);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 const CANCELLED_STATUSES = ["업무취소"];

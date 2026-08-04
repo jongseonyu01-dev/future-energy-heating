@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Linking, Platform, ActivityIndicator, Alert, RefreshControl,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -35,22 +35,28 @@ export default function TechScheduleScreen() {
 
   const technicianId = user?.technicianId;
   const userId = user?.userId;
-  // KST(Asia/Seoul) 기준 날짜 계산
+  // KST(Asia/Seoul) 기준 날짜 계산 - UTC+9 고정 (getTimezoneOffset 사용 금지)
   const getKSTDate = (offsetDays = 0) => {
     const now = new Date();
-    const kstOffset = 9 * 60; // UTC+9
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-    const kstMs = utcMs + kstOffset * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000;
-    return new Date(kstMs).toISOString().slice(0, 10);
+    const kstMs = now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000;
+    const d = new Date(kstMs);
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dy = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${mo}-${dy}`;
   };
   const today = getKSTDate(0);
   const tomorrow = getKSTDate(1);
 
+  // URL 파라미터로 초기 탭 설정 (홈 화면 버튼 연동)
+  const params = useLocalSearchParams<{ tab?: string }>();
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">(
+    (params.tab as any) || "today"
+  );
   // 유량 이상 상태 맵 (전화번호 → 알림 데이터)
   const [flowAlertMap, setFlowAlertMap] = useState<Record<string, any>>({});
 
@@ -76,6 +82,17 @@ export default function TechScheduleScreen() {
   );
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
+
+  // 화면 진입 시 자동 재조회 (기사배정 후 즉시 반영)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      // URL 파라미터로 탭 전환 (홈 화면 버튼 연동)
+      if (params.tab && ["today", "tomorrow", "overdue", "all"].includes(params.tab)) {
+        setActiveTab(params.tab as "today" | "tomorrow" | "overdue" | "all");
+      }
+    }, [params.tab])
+  );
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
