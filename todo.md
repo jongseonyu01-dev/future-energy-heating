@@ -593,14 +593,11 @@
 - [x] 검증: 10가지 조건 데이터 배정 후 분류 결과 확인
 - [ ] APK 빌드 및 배포
 
-## Android 실기기 검수용 테스트 기사계정 작업 복구 (현재)
-- [x] DB에서 테스트 기사계정(yjs1234) 존재 여부 확인
-- [x] DB에서 테스트 고객접수 배정 현황 확인 (2건 배정됨)
-- [x] customer-ledger-router.js 누락 원인 파악 및 수정 (import 제거)
-- [x] esbuild 서버 빌드 성공 확인 (290.6kb)
-- [x] 임시 비밀번호 서버 난수 생성 API 구현 (generateTestTechnicianPassword)
-- [x] 관리자 화면 1회성 표시 구현 (새로고침 시 재조회 불가)
-- [x] yjs1234 계정과 technicianId=510001 연결 확인
-- [x] 테스트 고객접수 2건 배정 확인 (정확히 1건으로 조정 필요)
-- [x] Expo 빌드 전 검증 완료 (expo config: PASS, eas project:info: PASS)
-- [x] APK 빌드 불필요 (서버/웹 코드만 변경, 기존 빌드 be069e1c 사용)
+## v1.1.4 재빌드 작업 (현재)
+- [ ] EAS 빌드 상태 점검 및 현재 소스 검사
+- [ ] API 주소 www 포함 고정 확인, AbortSignal.timeout 제거, health probe 제거
+- [ ] 버전 v1.1.4/versionCode 15로 교정
+- [ ] technicianId 540003 연결 및 TEST-2026-0002 접수 배정 확인
+- [ ] Metro 번들링 검증 (www 없는 주소 0건 확인)
+- [ ] GitHub main 반영
+- [ ] EAS APK 빌드 (production-apk)

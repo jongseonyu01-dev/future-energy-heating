@@ -560,114 +560,6 @@ export const priceItems = mysqlTable("price_items", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-// ─── 유량 알림 이벤트 테이블 ──────────────────────────────────────
-export const flowRateAlertEvents = mysqlTable("flow_rate_alert_events", {
-  id: int("id").autoincrement().primaryKey(),
-  sensorId: varchar("sensorId", { length: 100 }).notNull(),
-  branchId: int("branchId"),
-  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
-  buildingNumber: varchar("buildingNumber", { length: 20 }).notNull(),
-  roomNumber: varchar("roomNumber", { length: 20 }).notNull(),
-  meterType: varchar("meterType", { length: 20 }).notNull(),
-  registeredPyeong: varchar("registeredPyeong", { length: 20 }).notNull(),
-  alertType: varchar("alertType", { length: 20 }).notNull(),
-  avgFlowRateLpm: varchar("avgFlowRateLpm", { length: 20 }),
-  lowerLimitLpm: varchar("lowerLimitLpm", { length: 20 }),
-  upperLimitLpm: varchar("upperLimitLpm", { length: 20 }),
-  alertStartedAt: timestamp("alertStartedAt").notNull(),
-  smsSentAt: timestamp("smsSentAt"),
-  smsContent: text("smsContent"),
-  smsRecipient: varchar("smsRecipient", { length: 30 }),
-  normalReturnedAt: timestamp("normalReturnedAt"),
-  resolvedAt: timestamp("resolvedAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-// ─── 업무지시서 테이블 ──────────────────────────────────────────────
-export const jobOrders = mysqlTable("job_orders", {
-  id: int("id").autoincrement().primaryKey(),
-  jobNo: varchar("jobNo", { length: 30 }).notNull(),
-  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
-  customerName: varchar("customerName", { length: 100 }),
-  customerPhone: varchar("customerPhone", { length: 20 }),
-  address: text("address"),
-  workType: varchar("workType", { length: 50 }),
-  urgency: varchar("urgency", { length: 20 }).default("일반"),
-  channel: varchar("channel", { length: 30 }).default("전화"),
-  branchName: varchar("branchName", { length: 100 }),
-  techName: varchar("techName", { length: 100 }),
-  visitDate: varchar("visitDate", { length: 10 }),
-  estimateAmount: int("estimateAmount").default(0),
-  completeDate: varchar("completeDate", { length: 10 }),
-  billAmount: int("billAmount").default(0),
-  payDate: varchar("payDate", { length: 10 }),
-  payAmount: int("payAmount").default(0),
-  status: varchar("status", { length: 20 }).default("접수"),
-  memo: text("memo"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
-// ─── AS 관리 테이블 ────────────────────────────────────────────────
-export const asRecords = mysqlTable("as_records", {
-  id: int("id").autoincrement().primaryKey(),
-  asNo: varchar("asNo", { length: 30 }).notNull(),
-  origJobNo: varchar("origJobNo", { length: 30 }),
-  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
-  customerName: varchar("customerName", { length: 100 }),
-  customerPhone: varchar("customerPhone", { length: 20 }),
-  symptom: text("symptom"),
-  techName: varchar("techName", { length: 100 }),
-  doneDate: varchar("doneDate", { length: 10 }),
-  status: varchar("status", { length: 20 }).default("접수"),
-  memo: text("memo"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
-// ─── 일일보고 테이블 ────────────────────────────────────────────────
-export const dailyReports = mysqlTable("daily_reports", {
-  id: int("id").autoincrement().primaryKey(),
-  reportDate: varchar("reportDate", { length: 10 }).notNull(),
-  newRequests: int("newRequests").default(0),
-  estIssued: int("estIssued").default(0),
-  estApproved: int("estApproved").default(0),
-  workPlanned: int("workPlanned").default(0),
-  workDone: int("workDone").default(0),
-  newAs: int("newAs").default(0),
-  delayed: int("delayed").default(0),
-  billed: int("billed").default(0),
-  collected: int("collected").default(0),
-  unpaid: int("unpaid").default(0),
-  orderNeeded: text("orderNeeded"),
-  exceptions: text("exceptions"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
-// ─── 코드설정 테이블 ────────────────────────────────────────────────
-export const codeSettings = mysqlTable("code_settings", {
-  id: int("id").autoincrement().primaryKey(),
-  codeType: varchar("codeType", { length: 50 }).notNull(),
-  codeValue: varchar("codeValue", { length: 100 }).notNull(),
-  sortOrder: int("sortOrder").default(0),
-  isActive: boolean("isActive").notNull().default(true),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-// ─── 지사 모집 신청 테이블 ──────────────────────────────────────────
-export const branchApplications = mysqlTable("branch_applications", {
-  id: int("id").autoincrement().primaryKey(),
-  applicantName: varchar("applicantName", { length: 100 }).notNull(),
-  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
-  consultStatus: varchar("consultStatus", { length: 20 }).default("대기"),
-  adminMemo: text("adminMemo"),
-  privacyAgreed: boolean("privacyAgreed").notNull().default(false),
-  applyChannel: varchar("applyChannel", { length: 30 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
 // ─── 타입 내보내기 ───────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -713,6 +605,117 @@ export type EstimateMessageLog = typeof estimateMessageLogs.$inferSelect;
 export type InsertEstimateMessageLog = typeof estimateMessageLogs.$inferInsert;
 export type PriceItem = typeof priceItems.$inferSelect;
 export type InsertPriceItem = typeof priceItems.$inferInsert;
+
+// ─── 유량 이상 알림 이벤트 ────────────────────────────────────────────────────
+export const flowRateAlertEvents = mysqlTable("flow_rate_alert_events", {
+  id: int("id").primaryKey().autoincrement(),
+  sensorId: varchar("sensorId", { length: 64 }),
+  branchId: int("branchId"),
+  apartmentName: varchar("apartmentName", { length: 100 }),
+  buildingNumber: varchar("buildingNumber", { length: 20 }),
+  roomNumber: varchar("roomNumber", { length: 20 }),
+  meterType: mysqlEnum("meterType", ["적산열량계", "유량계"]),
+  registeredPyeong: decimal("registeredPyeong", { precision: 5, scale: 1 }),
+  alertType: mysqlEnum("alertType", ["저유량", "고유량", "통신끊김"]),
+  avgFlowRateLpm: decimal("avgFlowRateLpm", { precision: 6, scale: 2 }),
+  lowerLimitLpm: decimal("lowerLimitLpm", { precision: 6, scale: 2 }),
+  upperLimitLpm: decimal("upperLimitLpm", { precision: 6, scale: 2 }),
+  alertStartedAt: timestamp("alertStartedAt"),
+  smsSentAt: timestamp("smsSentAt"),
+  smsContent: text("smsContent"),
+  smsRecipient: varchar("smsRecipient", { length: 20 }),
+  normalReturnedAt: timestamp("normalReturnedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 업무 지시 (Job Orders) ───────────────────────────────────────────────────
+export const jobOrders = mysqlTable("job_orders", {
+  id: int("id").primaryKey().autoincrement(),
+  jobNo: varchar("jobNo", { length: 30 }),
+  receivedAt: timestamp("receivedAt"),
+  customerName: varchar("customerName", { length: 100 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  address: text("address"),
+  workType: varchar("workType", { length: 50 }),
+  urgency: varchar("urgency", { length: 20 }),
+  channel: varchar("channel", { length: 30 }),
+  branchName: varchar("branchName", { length: 100 }),
+  techName: varchar("techName", { length: 100 }),
+  visitDate: varchar("visitDate", { length: 10 }),
+  estimateAmount: int("estimateAmount"),
+  completeDate: varchar("completeDate", { length: 10 }),
+  billAmount: int("billAmount"),
+  payDate: varchar("payDate", { length: 10 }),
+  payAmount: int("payAmount"),
+  status: varchar("status", { length: 20 }),
+  memo: text("memo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── AS 이력 ──────────────────────────────────────────────────────────────────
+export const asRecords = mysqlTable("as_records", {
+  id: int("id").primaryKey().autoincrement(),
+  asNo: varchar("asNo", { length: 30 }),
+  origJobNo: varchar("origJobNo", { length: 30 }),
+  receivedAt: timestamp("receivedAt"),
+  customerName: varchar("customerName", { length: 100 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  symptom: text("symptom"),
+  techName: varchar("techName", { length: 100 }),
+  doneDate: varchar("doneDate", { length: 10 }),
+  status: varchar("status", { length: 20 }),
+  memo: text("memo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 일일 보고 ────────────────────────────────────────────────────────────────
+export const dailyReports = mysqlTable("daily_reports", {
+  id: int("id").primaryKey().autoincrement(),
+  reportDate: varchar("reportDate", { length: 10 }),
+  newRequests: int("newRequests"),
+  estIssued: int("estIssued"),
+  estApproved: int("estApproved"),
+  workPlanned: int("workPlanned"),
+  workDone: int("workDone"),
+  newAs: int("newAs"),
+  delayed: int("delayed"),
+  billed: int("billed"),
+  collected: int("collected"),
+  unpaid: int("unpaid"),
+  orderNeeded: text("orderNeeded"),
+  exceptions: text("exceptions"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 코드 설정 ────────────────────────────────────────────────────────────────
+export const codeSettings = mysqlTable("code_settings", {
+  id: int("id").primaryKey().autoincrement(),
+  codeType: varchar("codeType", { length: 50 }).notNull(),
+  codeValue: varchar("codeValue", { length: 100 }).notNull(),
+  sortOrder: int("sortOrder").default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 지사 신청 ────────────────────────────────────────────────────────────────
+export const branchApplications = mysqlTable("branch_applications", {
+  id: int("id").primaryKey().autoincrement(),
+  applicantName: varchar("applicantName", { length: 50 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  consultStatus: mysqlEnum("consultStatus", ["신규접수", "연락완료", "상담진행", "보류", "계약완료"]).default("신규접수"),
+  adminMemo: text("adminMemo"),
+  privacyAgreed: boolean("privacyAgreed").default(false),
+  applyChannel: varchar("applyChannel", { length: 50 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 추가 타입 내보내기 ────────────────────────────────────────────────────────
 export type FlowRateAlertEvent = typeof flowRateAlertEvents.$inferSelect;
 export type InsertFlowRateAlertEvent = typeof flowRateAlertEvents.$inferInsert;
 export type JobOrder = typeof jobOrders.$inferSelect;
