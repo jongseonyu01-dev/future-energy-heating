@@ -153,16 +153,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userWithLoginId = { ...authUser, loginId };
     setUser(userWithLoginId);
     // tRPC Authorization 헤더용 token을 SecureStore에 저장 (trpc.ts의 Auth.getSessionToken()이 읽음)
+    // 자동로그인 여부와 무관하게 앱 사용 중에는 항상 SecureStore에 토큰 유지
     if (authUser.token && Platform.OS !== "web") {
       try { await SecureStore.setItemAsync(APP_SESSION_TOKEN_KEY, authUser.token); } catch {}
     }
     if (rememberMe) {
-      // 자동 로그인 선택 시에만 저장
+      // 자동 로그인 선택 시: AsyncStorage에 세션 저장 (앱 재시작 시도 로그인 유지)
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));
       await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
     } else {
-      // 자동 로그인 미선택 시 저장된 세션 삭제 (앱 재시작 시 로그인 필요)
-      await clearAllAuthStorage();
+      // 자동 로그인 미선택 시: AsyncStorage 세션만 삭제 (앱 재시작 시 로그인 필요)
+      // 주의: SecureStore의 APP_SESSION_TOKEN_KEY는 삭제하지 않음 → 앱 사용 중 tRPC 인증 토큰 유지
+      try { await AsyncStorage.removeItem(STORAGE_KEY); } catch {}
+      try { await AsyncStorage.removeItem("fe_remember_me"); } catch {}
       await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
     }
   }, []);

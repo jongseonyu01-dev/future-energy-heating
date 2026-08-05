@@ -76,9 +76,9 @@ export default function TechScheduleScreen() {
 
 
   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
-  const { data: allWorks, isLoading, refetch } = trpc.repair.listMySchedule.useQuery(
+  const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery(
     undefined,
-    { enabled: !!userId }
+    { enabled: !!userId, retry: 1 }
   );
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
@@ -534,20 +534,27 @@ export default function TechScheduleScreen() {
         <View style={s.center}>
           <ActivityIndicator color="#FF6B35" size="large" />
         </View>
+      ) : isError ? (
+        <View style={s.center}>
+          <Text style={s.emptyIcon}>⚠️</Text>
+          <Text style={[s.empty, { color: '#EF4444', fontWeight: 'bold' }]}>일정 조회 실패</Text>
+          <Text style={[s.empty, { color: colors.muted, fontSize: 13, marginTop: 4 }]}>
+            {(scheduleError as any)?.data?.code === 'UNAUTHORIZED'
+              ? '인증이 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.'
+              : (scheduleError as any)?.message || '서버 연결에 실패했습니다.'}
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 16, backgroundColor: '#FF6B35', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}
+            onPress={() => refetch()}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
       ) : (allWorks ?? []).length === 0 ? (
         <View style={s.center}>
           <Text style={s.emptyIcon}>📅</Text>
           <Text style={[s.empty, { color: colors.muted }]}>배정된 방문 일정이 없습니다.</Text>
-          {/* 디버그 정보 - 문제 진단용 */}
-          <View style={{ marginTop: 20, padding: 12, backgroundColor: '#1e2022', borderRadius: 8, width: '90%' }}>
-            <Text style={{ color: '#9BA1A6', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>기사 정보 진단</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>회원 userId: {userId ?? 'null'}</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>technicianId: {technicianId ?? 'null'}</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>resolvedTechId: {resolvedTechnicianId ?? 'null'}</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>branchId: {user?.branchId ?? 'null'}</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>조회 기준: {technicianId ? 'technicianId' : userId ? 'userId(fallback)' : '없음'}</Text>
-            <Text style={{ color: '#9BA1A6', fontSize: 10 }}>오더 수: {(allWorks ?? []).length}건</Text>
-          </View>
         </View>
       ) : (
         <>

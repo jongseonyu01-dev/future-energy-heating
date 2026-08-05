@@ -332,44 +332,66 @@ export async function updateInspectionResult(
 }
 
 // ─── 기사 관리 ─────────────────────────────────────────────────
-// 활성 기사 목록 (app_roles 테이블에서 technician 역할 조회)
+// 활성 기사 목록 (technicians 테이블 기준, app_roles에서 loginId 보조 조회)
 export async function getActiveTechnicians(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
-
-  return db
+  const rows = await db
     .select({
-      id: appRoles.id,
-      name: appRoles.name,
-      loginId: appRoles.loginId,
-      phoneNumber: appRoles.phoneNumber,
-      branchId: appRoles.branchId,
-      isActive: appRoles.isActive,
-      createdAt: appRoles.createdAt,
+      id: technicians.id,
+      name: technicians.name,
+      phoneNumber: technicians.phoneNumber,
+      specialty: technicians.specialty,
+      branchId: technicians.branchId,
+      userId: technicians.userId,
+      isActive: technicians.isActive,
+      createdAt: technicians.createdAt,
     })
-    .from(appRoles)
-    .where(and(eq(appRoles.appRole, "technician"), eq(appRoles.isActive, true)))
-    .orderBy(appRoles.name);
+    .from(technicians)
+    .where(and(eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
+    .orderBy(technicians.name);
+  // loginId 보조 조회
+  const result: any[] = [];
+  for (const t of rows) {
+    let loginId: string | null = null;
+    if (t.userId) {
+      const role = await getAppRole(t.userId);
+      loginId = role?.loginId ?? null;
+    }
+    result.push({ ...t, loginId });
+  }
+  return result;
 }
 
-// 전체 기사 목록 (관리자용 - 비활성 포함, app_roles 테이블에서 조회)
+// 전체 기사 목록 (관리자용 - 비활성 포함, technicians 테이블 기준)
 export async function getAllTechnicians(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
-
-  return db
+  const rows = await db
     .select({
-      id: appRoles.id,
-      name: appRoles.name,
-      loginId: appRoles.loginId,
-      phoneNumber: appRoles.phoneNumber,
-      branchId: appRoles.branchId,
-      isActive: appRoles.isActive,
-      createdAt: appRoles.createdAt,
+      id: technicians.id,
+      name: technicians.name,
+      phoneNumber: technicians.phoneNumber,
+      specialty: technicians.specialty,
+      branchId: technicians.branchId,
+      userId: technicians.userId,
+      isActive: technicians.isActive,
+      createdAt: technicians.createdAt,
     })
-    .from(appRoles)
-    .where(eq(appRoles.appRole, "technician"))
-    .orderBy(appRoles.name);
+    .from(technicians)
+    .where(eq(technicians.isDeleted, false))
+    .orderBy(technicians.name);
+  // loginId 보조 조회
+  const result: any[] = [];
+  for (const t of rows) {
+    let loginId: string | null = null;
+    if (t.userId) {
+      const role = await getAppRole(t.userId);
+      loginId = role?.loginId ?? null;
+    }
+    result.push({ ...t, loginId });
+  }
+  return result;
 }
 
 // 기사 등록
@@ -881,23 +903,35 @@ export async function reassignBranch(requestId: number, branchId: number | null)
   await db.update(repairRequests).set({ branchId }).where(eq(repairRequests.id, requestId));
 }
 
-// ─── 기사 지사별 조회 (app_roles 테이블에서 조회) ──────────────────────────────────────────
+// ─── 기사 지사별 조회 (technicians 테이블 기준) ──────────────────────────────────────────
 export async function getTechniciansByBranch(branchId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select({
-      id: appRoles.id,
-      name: appRoles.name,
-      loginId: appRoles.loginId,
-      phoneNumber: appRoles.phoneNumber,
-      branchId: appRoles.branchId,
-      isActive: appRoles.isActive,
-      createdAt: appRoles.createdAt,
+      id: technicians.id,
+      name: technicians.name,
+      phoneNumber: technicians.phoneNumber,
+      specialty: technicians.specialty,
+      branchId: technicians.branchId,
+      userId: technicians.userId,
+      isActive: technicians.isActive,
+      createdAt: technicians.createdAt,
     })
-    .from(appRoles)
-    .where(and(eq(appRoles.appRole, "technician"), eq(appRoles.branchId, branchId), eq(appRoles.isActive, true)))
-    .orderBy(appRoles.name);
+    .from(technicians)
+    .where(and(eq(technicians.branchId, branchId), eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
+    .orderBy(technicians.name);
+  // loginId 보조 조회
+  const result: any[] = [];
+  for (const t of rows) {
+    let loginId: string | null = null;
+    if (t.userId) {
+      const role = await getAppRole(t.userId);
+      loginId = role?.loginId ?? null;
+    }
+    result.push({ ...t, loginId });
+  }
+  return result;
 }
 
 // userId로 기사 조회

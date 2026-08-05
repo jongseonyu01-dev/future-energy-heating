@@ -223,11 +223,12 @@ export const appRouter = router({
           const b = await db.getBranchById(branchId);
           branchName = b?.name ?? null;
         }
-        // 자동로그인용 토큰 (userId + 비밀번호해시 일부로 서명)
-        const token = crypto
+        // 세션 토큰: userId:서명값 형식 (resolveCallerRole 및 context.ts HMAC 검증과 동일 형식)
+        const sig = crypto
           .createHmac("sha256", (role.passwordHash || "seed"))
           .update(String(role.userId))
           .digest("hex");
+        const token = `${role.userId}:${sig}`;
         return {
           success: true,
           userId: role.userId,
@@ -248,11 +249,13 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const role = await db.getAppRole(input.userId);
         if (!role || !role.isActive) return { success: false };
-        const expected = crypto
+        const sig = crypto
           .createHmac("sha256", (role.passwordHash || "seed"))
           .update(String(role.userId))
           .digest("hex");
-        if (expected !== input.token) return { success: false };
+        // userId:서명값 형식과 서명값만 형식 모두 지원 (하위 호환)
+        const tokenSig = input.token.includes(":") ? input.token.split(":")[1] : input.token;
+        if (sig !== tokenSig) return { success: false };
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {

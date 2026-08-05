@@ -601,3 +601,18 @@
 - [ ] Metro 번들링 검증 (www 없는 주소 0건 확인)
 - [ ] GitHub main 반영
 - [ ] EAS APK 빌드 (production-apk)
+
+## 토큰 형식 통일 + 기사목록 수정 (v1.1.9)
+- [x] DB: 300003으로 잘못 배정된 접수 1500001(FE-20260805-2507)을 540003으로 이전
+- [x] server/_core/context.ts: Bearer userId:서명값 형식 HMAC 토큰 인증 추가 (앱 전용)
+- [x] server/routers.ts: auth.login 토큰 반환 형식을 userId:서명값으로 변경
+- [x] server/routers.ts: auth.verifyToken이 userId:서명값 및 서명값만 형식 모두 지원
+- [x] server/db.ts: getActiveTechnicians → technicians 테이블 기준 (technicians.id 반환)
+- [x] server/db.ts: getAllTechnicians → technicians 테이블 기준
+- [x] server/db.ts: getTechniciansByBranch → technicians 테이블 기준
+- [x] lib/auth-context.tsx: rememberMe=false 시 SecureStore 토큰 유지 (clearAllAuthStorage 버그 수정)
+- [x] app/(tabs)/tech-schedule.tsx: isError 추가, 오류 메시지 + 재시도 버튼 표시
+- [ ] 서버 Publish 배포
+- [ ] 운영 서버 검증: 로그인 technicianId=540003, listMySchedule HTTP 200, 접수 1건 확인
+- [ ] app.config.ts: version 1.1.9, versionCode 20으로 업데이트
+- [ ] APK 빌드 및 홈페이지 교체
