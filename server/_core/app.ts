@@ -51,6 +51,23 @@ export function createApp(): Express {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  // 임시 DB 연결 확인 엔드포인트 (배포 검증 후 제거)
+  app.get("/api/db-check", async (_req, res) => {
+    try {
+      const { getDb } = await import("../db.js");
+      const db = await getDb();
+      if (!db) {
+        res.json({ ok: false, reason: "db_null", dbUrl: process.env.DATABASE_URL ? "set" : "missing" });
+        return;
+      }
+      const result = await db.execute("SELECT COUNT(*) as cnt FROM app_roles WHERE userId = 1770546140");
+      const cnt = (result as any)[0]?.[0]?.cnt ?? -1;
+      res.json({ ok: true, rowCount: cnt, dbUrl: "set" });
+    } catch (e: any) {
+      res.json({ ok: false, error: e.message?.substring(0, 100), dbUrl: process.env.DATABASE_URL ? "set" : "missing" });
+    }
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
