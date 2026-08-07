@@ -1394,6 +1394,8 @@ export const appRouter = router({
         usedMaterials: z.string().optional(),
         workMemo: z.string().optional(),
         isCompleted: z.boolean().default(false),
+        beforePhotoUrl: z.string().optional(),
+        afterPhotoUrl: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const result = await db.upsertWorkReport({
@@ -1404,6 +1406,35 @@ export const appRouter = router({
           await db.updateRepairStatus(input.requestId, "작업완료");
         }
         return result;
+      }),
+
+    // 작업 보고서 사진 업로드 (기사 본인 접수만 허용)
+    uploadPhoto: publicProcedure
+      .input(z.object({
+        requestId: z.number(),
+        photoType: z.enum(["before", "after"]),
+        base64: z.string(),
+        mimeType: z.string().default("image/jpeg"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const caller = await resolveCallerRole(ctx);
+        if (!caller) throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+        const tech = await db.getTechnicianByUserId(caller.userId);
+        if (!tech) throw new TRPCError({ code: "FORBIDDEN", message: "기사 계정이 아닙니다." });
+        const req = await db.getRepairRequestById(input.requestId);
+        if (!req) throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+        if (req.technicianId !== tech.id) throw new TRPCError({ code: "FORBIDDEN", message: "본인 접수만 사진을 업로드할 수 있습니다." });
+        const rawBase64 = input.base64.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(rawBase64, "base64");
+        const ext = input.mimeType.split("/")[1] || "jpg";
+        const key = `work-reports/${input.requestId}/${input.photoType}-${Date.now()}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.mimeType);
+        const existing = await db.getWorkReportByRequestId(input.requestId);
+        if (existing) {
+          const field = input.photoType === "before" ? { beforePhotoUrl: url } : { afterPhotoUrl: url };
+          await db.upsertWorkReport({ ...existing, ...field });
+        }
+        return { url };
       }),
   }),
 

@@ -21,6 +21,7 @@ import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { WorkReportErrorBoundary } from "@/components/work-report-error-boundary";
 
 const CHECK_ITEMS = [
   "온도조절기 작동 확인",
@@ -33,7 +34,7 @@ const CHECK_ITEMS = [
   "전기 배선 안전 확인",
 ];
 
-export default function WorkReportScreen() {
+function WorkReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const requestId = parseInt(id ?? "0");
   const router = useRouter();
@@ -542,3 +543,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   photoSuccess: { position: "absolute", top: 6, right: 6, backgroundColor: "#22C55E", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   photoRetake: { marginTop: 4, backgroundColor: "#6B7280", borderRadius: 8, padding: 6, alignItems: "center" },
 });
+
+// ErrorBoundary로 래핑하여 예외 발생 시 앱 전체 종료 방지 (Android/iOS 공통)
+export default function WorkReportScreenWithBoundary() {
+  const router = useRouter();
+  return (
+    <WorkReportErrorBoundary onBack={() => router.back()}>
+      <WorkReportScreen />
+    </WorkReportErrorBoundary>
+  );
+}

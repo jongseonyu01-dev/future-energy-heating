@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.8",
+  version: "1.1.9",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,7 +50,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "8",
+    buildNumber: "9",
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    versionCode: 19,
+    versionCode: 20,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
