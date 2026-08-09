@@ -29,7 +29,7 @@ export default function TechWorksScreen() {
 
   // 세션 기반 보안 조회 - 서버에서 기사 ID를 확인하므로 클라이언트에서 technicianId를 전달하지 않음
   const { data: works = [], isLoading, error, refetch } = trpc.repair.listMySchedule.useQuery(
-    { phoneNumber: user?.phoneNumber ?? undefined },
+    undefined,
     { enabled: !!userId }
   );
 
@@ -173,9 +173,9 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   headerSub: { fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 2 },
   searchBox: { margin: 12, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12 },
   searchInput: { fontSize: 14, paddingVertical: 10 },
-  filterRow: { maxHeight: 44 },
-  filterContent: { paddingHorizontal: 12, gap: 8, alignItems: "center" },
-  filterTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: "transparent", borderWidth: 1, borderColor: "#E5E7EB" },
+  filterRow: { height: 52 },
+  filterContent: { paddingHorizontal: 12, gap: 8, alignItems: "flex-start" },
+  filterTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "transparent", borderWidth: 1, borderColor: "#E5E7EB" },
   filterTabActive: { backgroundColor: "#FF6B35", borderColor: "#FF6B35" },
   filterTabText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
   filterTabTextActive: { color: "#fff" },

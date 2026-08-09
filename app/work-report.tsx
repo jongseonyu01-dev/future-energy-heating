@@ -41,6 +41,8 @@ function WorkReportScreen() {
   const colors = useColors();
   const { user } = useAppAuth();
   const technicianId = user?.technicianId;
+  // styles를 최상위에서 호출 (React Compiler 호환성 및 크래시 방지)
+  const s = styles(colors);
 
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [usedMaterials, setUsedMaterials] = useState("");
@@ -185,7 +187,7 @@ function WorkReportScreen() {
 
   const saveMutation = trpc.workReport.save.useMutation({
     onSuccess: () => {
-      utils.repair.listByTechnician.invalidate();
+      utils.repair.listMySchedule.invalidate();
       setSaved(true);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("저장 완료", "작업 보고서가 저장되었습니다.");
@@ -195,7 +197,7 @@ function WorkReportScreen() {
 
   const completeMutation = trpc.workReport.save.useMutation({
     onSuccess: () => {
-      utils.repair.listByTechnician.invalidate();
+      utils.repair.listMySchedule.invalidate();
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("완료", "작업 완료 보고가 제출되었습니다.", [
         { text: "확인", onPress: () => router.back() }
@@ -205,7 +207,7 @@ function WorkReportScreen() {
   });
 
   const revisitMutation = trpc.repair.setRevisit.useMutation({
-    onSuccess: () => utils.repair.listByTechnician.invalidate(),
+    onSuccess: () => utils.repair.listMySchedule.invalidate(),
   });
 
   const toggleCheck = (item: string) => {
@@ -259,8 +261,6 @@ function WorkReportScreen() {
       ]
     );
   };
-
-  const s = styles(colors);
 
   if (requestLoading) {
     return (
