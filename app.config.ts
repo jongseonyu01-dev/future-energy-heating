@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.11",
+  version: "1.1.12",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,7 +50,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "11",
+    buildNumber: "12",
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    versionCode: 22,
+    versionCode: 23,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
@@ -133,8 +133,10 @@ const config: ExpoConfig = {
     [
       "expo-image-picker",
       {
-        photosPermission:
-          "$(PRODUCT_NAME)에서 고장 사진을 첨부하기 위해 사진 접근 권한이 필요합니다.",
+          photosPermission:
+            "$(PRODUCT_NAME)에서 고장 사진을 첨부하기 위해 사진 접근 권한이 필요합니다.",
+          cameraPermission:
+            "$(PRODUCT_NAME)에서 고장 사진 촬영을 위해 카메라 접근 권한이 필요합니다.",
       },
     ],
     [

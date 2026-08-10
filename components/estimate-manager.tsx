@@ -10,9 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -99,6 +96,13 @@ export function EstimateManager({
 
   const pickPdf = async () => {
     try {
+      let DocumentPicker: typeof import("expo-document-picker");
+      try {
+        DocumentPicker = await import("expo-document-picker");
+      } catch {
+        Alert.alert("오류", "문서 선택 기능을 불러올 수 없습니다.");
+        return;
+      }
       const res = await DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "image/jpeg", "image/png"],
         copyToCacheDirectory: true,
@@ -114,6 +118,13 @@ export function EstimateManager({
 
   const pickImage = async () => {
     try {
+      let ImagePicker: typeof import("expo-image-picker");
+      try {
+        ImagePicker = await import("expo-image-picker");
+      } catch {
+        Alert.alert("오류", "사진 선택 기능을 불러올 수 없습니다.");
+        return;
+      }
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert("권한 필요", "사진 접근 권한을 허용해주세요.");
@@ -141,7 +152,15 @@ export function EstimateManager({
 
     try {
       setUploading(true);
-      const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+      let base64: string;
+      try {
+        const FileSystem = await import("expo-file-system/legacy");
+        base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+      } catch {
+        setUploading(false);
+        Alert.alert("파일 오류", "파일을 읽을 수 없습니다. 다시 시도해주세요.");
+        return;
+      }
       const uploaded = await uploadMutation.mutateAsync({
         fileName: file.name,
         fileType: file.mimeType,
