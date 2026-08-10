@@ -19,8 +19,6 @@ import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { WorkReportErrorBoundary } from "@/components/work-report-error-boundary";
 
 const CHECK_ITEMS = [
@@ -93,10 +91,24 @@ function WorkReportScreen() {
   const uploadPhotoMutation = trpc.workReport.uploadPhoto.useMutation();
 
   const pickPhoto = async (type: "before" | "after") => {
+    // dynamic import: 모듈 로딩 실패 시 화면 전체가 종료되지 않도록 방어
+    let ImagePicker: typeof import("expo-image-picker") | null = null;
+    try {
+      ImagePicker = await import("expo-image-picker");
+    } catch {
+      Alert.alert("사진 기능 오류", "이 기기에서 사진 기능을 사용할 수 없습니다.");
+      return;
+    }
+
     if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");
+          return;
+        }
+      } catch {
+        Alert.alert("권한 오류", "카메라 권한을 확인할 수 없습니다.");
         return;
       }
     }
@@ -108,26 +120,36 @@ function WorkReportScreen() {
         {
           text: "카메라 촬영",
           onPress: async () => {
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: "images",
-              quality: 0.7,
-              allowsEditing: false,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await handlePhotoSelected(result.assets[0].uri, type);
+            if (!ImagePicker) return;
+            try {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: "images",
+                quality: 0.7,
+                allowsEditing: false,
+              });
+              if (!result.canceled && result.assets[0]) {
+                await handlePhotoSelected(result.assets[0].uri, type);
+              }
+            } catch {
+              Alert.alert("오류", "카메라를 열 수 없습니다.");
             }
           },
         },
         {
           text: "갤러리에서 선택",
           onPress: async () => {
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: "images",
-              quality: 0.7,
-              allowsEditing: false,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await handlePhotoSelected(result.assets[0].uri, type);
+            if (!ImagePicker) return;
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: "images",
+                quality: 0.7,
+                allowsEditing: false,
+              });
+              if (!result.canceled && result.assets[0]) {
+                await handlePhotoSelected(result.assets[0].uri, type);
+              }
+            } catch {
+              Alert.alert("오류", "갤러리를 열 수 없습니다.");
             }
           },
         },
@@ -158,8 +180,17 @@ function WorkReportScreen() {
           reader.readAsDataURL(blob);
         });
       } else {
-        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        base64 = `data:image/jpeg;base64,${b64}`;
+        // dynamic import: 모듈 로딩 실패 시 업로드 건너뜀
+        try {
+          const FileSystem = await import("expo-file-system/legacy");
+          const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          base64 = `data:image/jpeg;base64,${b64}`;
+        } catch {
+          Alert.alert("파일 오류", "사진 파일을 읽을 수 없습니다.");
+          if (type === "before") setBeforePhotoUri(null);
+          else setAfterPhotoUri(null);
+          return;
+        }
       }
 
       const result = await uploadPhotoMutation.mutateAsync({
