@@ -107,19 +107,6 @@ function WorkReportScreen() {
       return;
     }
 
-    if (Platform.OS !== "web") {
-      try {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");
-          return;
-        }
-      } catch {
-        Alert.alert("권한 오류", "카메라 권한을 확인할 수 없습니다.");
-        return;
-      }
-    }
-
     Alert.alert(
       "사진 선택",
       "사진을 어떻게 추가하시겠습니까?",
@@ -129,6 +116,13 @@ function WorkReportScreen() {
           onPress: async () => {
             if (!ImagePicker) return;
             try {
+              if (Platform.OS !== "web") {
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                if (status !== "granted") {
+                  Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");
+                  return;
+                }
+              }
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: "images",
                 quality: 0.7,
@@ -147,6 +141,13 @@ function WorkReportScreen() {
           onPress: async () => {
             if (!ImagePicker) return;
             try {
+              if (Platform.OS !== "web") {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== "granted") {
+                  Alert.alert("권한 필요", "사진 접근 권한이 필요합니다.");
+                  return;
+                }
+              }
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: "images",
                 quality: 0.7,

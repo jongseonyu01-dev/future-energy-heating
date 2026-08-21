@@ -1,8 +1,9 @@
 /**
- * 앱 버전 체크 훅
+ * Android APK 버전 체크 훅
  * - 앱 실행 또는 포그라운드 복귀 시 /api/mobile-app/latest를 조회
  * - 새 버전이 있으면 updateAvailable=true
  * - 현재 versionCode < minSupportedVersionCode이면 forceUpdate=true
+ * - iOS 업데이트는 TestFlight/App Store가 담당하므로 이 훅에서는 비활성화
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppState, AppStateStatus, Platform, Linking } from "react-native";
@@ -51,8 +52,8 @@ export function useAppUpdate(): UseAppUpdateResult {
   const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10분마다 재체크
 
   const checkVersion = useCallback(async () => {
-    // 웹에서는 버전 체크 불필요
-    if (Platform.OS === "web") return;
+    // 이 API와 다운로드 URL은 Android APK 전용이다.
+    if (Platform.OS !== "android") return;
 
     const now = Date.now();
     if (now - lastCheckRef.current < CHECK_INTERVAL_MS) return;
@@ -81,7 +82,7 @@ export function useAppUpdate(): UseAppUpdateResult {
 
   // 앱 포그라운드 복귀 시 체크
   useEffect(() => {
-    if (Platform.OS === "web") return;
+    if (Platform.OS !== "android") return;
     const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
       if (state === "active") {
         checkVersion();
@@ -91,11 +92,13 @@ export function useAppUpdate(): UseAppUpdateResult {
   }, [checkVersion]);
 
   const updateAvailable =
+    Platform.OS === "android" &&
     !dismissed &&
     updateInfo !== null &&
     updateInfo.versionCode > CURRENT_VERSION_CODE;
 
   const forceUpdate =
+    Platform.OS === "android" &&
     updateInfo !== null &&
     CURRENT_VERSION_CODE < updateInfo.minSupportedVersionCode;
 
@@ -104,6 +107,7 @@ export function useAppUpdate(): UseAppUpdateResult {
   }, [forceUpdate]);
 
   const openDownload = useCallback(() => {
+    if (Platform.OS !== "android") return;
     const url = updateInfo?.apkUrl ?? `${getApiBase()}/download/driver/latest`;
     Linking.openURL(url).catch(() => {
       Linking.openURL(`${getApiBase()}/app/driver-download`);
