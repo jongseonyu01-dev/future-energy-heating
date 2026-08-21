@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { SESSION_TOKEN_KEY } from "@/constants/oauth";
 
 export type AppRole = "customer" | "technician" | "branch_manager" | "hq_admin";
 
@@ -36,8 +37,6 @@ const AuthContext = createContext<AuthContextValue>({
 
 const STORAGE_KEY = "fe_auth_user";
 const SECURE_STORE_KEY = "fe_session_token";
-// tRPC Authorization 헤더용 토큰 키 (lib/_core/auth.ts의 SESSION_TOKEN_KEY와 동일)
-const APP_SESSION_TOKEN_KEY = "app_session_token";
 // 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
 const CURRENT_SESSION_VERSION = "v6"; // v6: headers.entries() 제거, API 주소 단일화, 과거 서버주소 키 정리 (2026-08-03)
@@ -55,7 +54,7 @@ async function clearAllAuthStorage() {
   }
   if (Platform.OS !== "web") {
     try { await SecureStore.deleteItemAsync(SECURE_STORE_KEY); } catch {}
-    try { await SecureStore.deleteItemAsync(APP_SESSION_TOKEN_KEY); } catch {}
+    try { await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY); } catch {}
     try { await SecureStore.deleteItemAsync("manus-session-token"); } catch {}
     try { await SecureStore.deleteItemAsync("fe_token"); } catch {}
     // SecureStore 과거 서버주소 키도 삭제
@@ -135,6 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsLoading(false);
             return;
           }
+          // AsyncStorage 세션은 남아 있지만 SecureStore가 비어 있는 복원 상황에서도
+          // tRPC Authorization 헤더가 빠지지 않도록 서버 검증을 통과한 토큰을 복구한다.
+          if (Platform.OS !== "web") {
+            await SecureStore.setItemAsync(SESSION_TOKEN_KEY, saved.token);
+          }
         }
 
         // 5. 세션 복원 성공
@@ -155,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // tRPC Authorization 헤더용 token을 SecureStore에 저장 (trpc.ts의 Auth.getSessionToken()이 읽음)
     // 자동로그인 여부와 무관하게 앱 사용 중에는 항상 SecureStore에 토큰 유지
     if (authUser.token && Platform.OS !== "web") {
-      try { await SecureStore.setItemAsync(APP_SESSION_TOKEN_KEY, authUser.token); } catch {}
+      try { await SecureStore.setItemAsync(SESSION_TOKEN_KEY, authUser.token); } catch {}
     }
     if (rememberMe) {
       // 자동 로그인 선택 시: AsyncStorage에 세션 저장 (앱 재시작 시도 로그인 유지)
@@ -163,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
     } else {
       // 자동 로그인 미선택 시: AsyncStorage 세션만 삭제 (앱 재시작 시 로그인 필요)
-      // 주의: SecureStore의 APP_SESSION_TOKEN_KEY는 삭제하지 않음 → 앱 사용 중 tRPC 인증 토큰 유지
+      // 주의: SecureStore의 SESSION_TOKEN_KEY는 삭제하지 않음 → 앱 사용 중 tRPC 인증 토큰 유지
       try { await AsyncStorage.removeItem(STORAGE_KEY); } catch {}
       try { await AsyncStorage.removeItem("fe_remember_me"); } catch {}
       await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);

@@ -53,7 +53,7 @@ export default function ReservationScreen() {
     },
   });
 
-  const rejectMutation = trpc.repair.updateStatus.useMutation({
+  const rejectMutation = (trpc.repair as any).rejectEstimate.useMutation({
     onSuccess: () => {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -97,7 +97,7 @@ export default function ReservationScreen() {
           style: "destructive",
           onPress: () => {
             setActionItemId(id);
-            rejectMutation.mutate({ id, status: "신규접수", adminMemo: "고객 견적 거절 → 재접수", notify: false });
+            rejectMutation.mutate({ id, reason: "고객 견적 거절 → 재접수" });
           },
         },
       ]

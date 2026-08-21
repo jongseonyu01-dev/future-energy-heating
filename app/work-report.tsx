@@ -20,6 +20,14 @@ import { trpc } from "@/lib/trpc";
 import { formatFullAddress } from "@/constants/address-data";
 import * as Haptics from "expo-haptics";
 import { WorkReportErrorBoundary } from "@/components/work-report-error-boundary";
+import {
+  FALLBACK_WORK_REPORT_PHOTO_WIDTH,
+  MAX_WORK_REPORT_PHOTO_BYTES,
+  MAX_WORK_REPORT_PHOTO_WIDTH,
+  estimateBase64Bytes,
+  photoUploadAlert,
+  resizeActionForDimensions,
+} from "@/lib/work-report-photo";
 
 const CHECK_ITEMS = [
   "온도조절기 작동 확인",
@@ -47,7 +55,6 @@ function WorkReportScreen() {
   const [workMemo, setWorkMemo] = useState("");
   const [needsRevisit, setNeedsRevisit] = useState(false);
   const [revisitReason, setRevisitReason] = useState("");
-  const [saved, setSaved] = useState(false);
 
   // 사진 상태
   const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
@@ -128,7 +135,7 @@ function WorkReportScreen() {
                 allowsEditing: false,
               });
               if (!result.canceled && result.assets[0]) {
-                await handlePhotoSelected(result.assets[0].uri, type);
+                await handlePhotoSelected(result.assets[0], type);
               }
             } catch {
               Alert.alert("오류", "카메라를 열 수 없습니다.");
@@ -146,7 +153,7 @@ function WorkReportScreen() {
                 allowsEditing: false,
               });
               if (!result.canceled && result.assets[0]) {
-                await handlePhotoSelected(result.assets[0].uri, type);
+                await handlePhotoSelected(result.assets[0], type);
               }
             } catch {
               Alert.alert("오류", "갤러리를 열 수 없습니다.");
@@ -158,7 +165,16 @@ function WorkReportScreen() {
     );
   };
 
-  const handlePhotoSelected = async (uri: string, type: "before" | "after") => {
+  const handlePhotoSelected = async (
+    asset: { uri: string; width?: number | null; height?: number | null },
+    type: "before" | "after",
+  ) => {
+    const { uri } = asset;
+    const previousUri = type === "before" ? beforePhotoUri : afterPhotoUri;
+    const restorePreviousPreview = () => {
+      if (type === "before") setBeforePhotoUri(previousUri);
+      else setAfterPhotoUri(previousUri);
+    };
     if (type === "before") {
       setBeforePhotoUri(uri);
       setUploadingBefore(true);
@@ -168,30 +184,42 @@ function WorkReportScreen() {
     }
 
     try {
-      // URI → base64
-      let base64: string;
-      if (Platform.OS === "web") {
-        // 웹: fetch로 base64 변환
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        // dynamic import: 모듈 로딩 실패 시 업로드 건너뜀
-        try {
-          const FileSystem = await import("expo-file-system/legacy");
-          const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-          base64 = `data:image/jpeg;base64,${b64}`;
-        } catch {
-          Alert.alert("파일 오류", "사진 파일을 읽을 수 없습니다.");
-          if (type === "before") setBeforePhotoUri(null);
-          else setAfterPhotoUri(null);
-          return;
-        }
+      // 카메라 원본을 그대로 base64로 만들면 앱 메모리와 Vercel 요청 한도를 넘을 수 있다.
+      // 업로드 전에 JPEG/최대 폭/용량을 고정하고, 큰 사진은 한 번 더 축소한다.
+      const ImageManipulator = await import("expo-image-manipulator");
+      const firstResize = resizeActionForDimensions(
+        asset.width,
+        asset.height,
+        MAX_WORK_REPORT_PHOTO_WIDTH,
+      );
+      const firstActions = firstResize ? [firstResize] : [];
+      let normalized = await ImageManipulator.manipulateAsync(
+        uri,
+        firstActions,
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!normalized.base64) throw new Error("PHOTO_BASE64_EMPTY");
+
+      if (estimateBase64Bytes(normalized.base64) > MAX_WORK_REPORT_PHOTO_BYTES) {
+        const fallbackResize = resizeActionForDimensions(
+          normalized.width,
+          normalized.height,
+          FALLBACK_WORK_REPORT_PHOTO_WIDTH,
+        ) ?? { resize: { width: Math.min(normalized.width, FALLBACK_WORK_REPORT_PHOTO_WIDTH) } };
+        normalized = await ImageManipulator.manipulateAsync(
+          normalized.uri,
+          [fallbackResize],
+          { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
       }
+      if (!normalized.base64 || estimateBase64Bytes(normalized.base64) > MAX_WORK_REPORT_PHOTO_BYTES) {
+        Alert.alert("사진 용량 초과", "사진을 2MB 이하로 줄일 수 없습니다. 다른 사진을 선택해 주세요.");
+        restorePreviousPreview();
+        return;
+      }
+      const base64 = `data:image/jpeg;base64,${normalized.base64}`;
+      if (type === "before") setBeforePhotoUri(normalized.uri);
+      else setAfterPhotoUri(normalized.uri);
 
       const result = await uploadPhotoMutation.mutateAsync({
         requestId,
@@ -207,9 +235,9 @@ function WorkReportScreen() {
       }
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
-      Alert.alert("업로드 실패", "사진 업로드 중 오류가 발생했습니다.");
-      if (type === "before") setBeforePhotoUri(null);
-      else setAfterPhotoUri(null);
+      const alert = photoUploadAlert(err);
+      Alert.alert(alert.title, alert.message);
+      restorePreviousPreview();
     } finally {
       if (type === "before") setUploadingBefore(false);
       else setUploadingAfter(false);
@@ -219,7 +247,6 @@ function WorkReportScreen() {
   const saveMutation = trpc.workReport.save.useMutation({
     onSuccess: () => {
       utils.repair.listMySchedule.invalidate();
-      setSaved(true);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("저장 완료", "작업 보고서가 저장되었습니다.");
     },
@@ -259,8 +286,6 @@ function WorkReportScreen() {
       usedMaterials: usedMaterials || undefined,
       workMemo: workMemo || undefined,
       isCompleted: false,
-      beforePhotoUrl,
-      afterPhotoUrl,
     });
   };
 
@@ -284,8 +309,6 @@ function WorkReportScreen() {
               usedMaterials: usedMaterials || undefined,
               workMemo: workMemo || undefined,
               isCompleted: !needsRevisit,
-              beforePhotoUrl,
-              afterPhotoUrl,
             });
           }
         }
@@ -393,7 +416,7 @@ function WorkReportScreen() {
               ) : (
                 <TouchableOpacity
                   style={[s.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                  onPress={() => !isCompleted && pickPhoto("before")}
+                  onPress={() => !isCompleted && !uploadingBefore && pickPhoto("before")}
                   activeOpacity={isCompleted ? 1 : 0.7}
                   disabled={isCompleted}
                 >
@@ -431,7 +454,7 @@ function WorkReportScreen() {
               ) : (
                 <TouchableOpacity
                   style={[s.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                  onPress={() => !isCompleted && pickPhoto("after")}
+                  onPress={() => !isCompleted && !uploadingAfter && pickPhoto("after")}
                   activeOpacity={isCompleted ? 1 : 0.7}
                   disabled={isCompleted}
                 >

@@ -10,12 +10,21 @@
 
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getSessionToken } from "@/lib/_core/auth";
 
 const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
 // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
 const API_BASE_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
+
+async function authorizedJsonHeaders(): Promise<Record<string, string>> {
+  const sessionToken = await getSessionToken();
+  return {
+    "Content-Type": "application/json",
+    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+  };
+}
 
 // ─── 디버그 상태 (UI에서 구독 가능) ──────────────────────────────────────────
 export interface LocationDebugState {
@@ -115,7 +124,7 @@ if (Platform.OS !== "web") {
         try {
           const resp = await fetch(`${API_BASE_URL}/api/location/update`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: await authorizedJsonHeaders(),
             body: JSON.stringify({
               token,
               lat: latitude, lng: longitude,
@@ -262,7 +271,7 @@ export async function sendLocationToServer(
   try {
     const resp = await fetch(`${API_BASE_URL}/api/location/update`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authorizedJsonHeaders(),
       body: JSON.stringify({ token, lat, lng, speed: speed ?? null, heading: heading ?? null, accuracy: accuracy ?? null }),
     });
     const now = Date.now();
@@ -278,7 +287,7 @@ export async function notifySessionStop(token: string, reason: "도착완료" | 
   try {
     await fetch(`${API_BASE_URL}/api/location/stop`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await authorizedJsonHeaders(),
       body: JSON.stringify({ token, reason }),
     });
   } catch (e) {
