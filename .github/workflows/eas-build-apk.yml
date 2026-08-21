@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: 'EAS 빌드 프로파일'
+        description: "EAS 빌드 프로파일"
         required: true
-        default: 'production-apk'
+        default: "production-apk"
         type: choice
         options:
           - production-apk
@@ -15,48 +15,55 @@ on:
     branches:
       - main
     paths:
-      - 'app/**'
-      - 'components/**'
-      - 'app.config.ts'
-      - 'eas.json'
+      - "app/**"
+      - "components/**"
+      - "app.config.ts"
+      - "eas.json"
+      - ".github/workflows/eas-build-apk.yml"
 jobs:
   build:
     name: EAS Android APK Build
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: 소스 체크아웃
         uses: actions/checkout@v4
       - name: Node.js 22 설정
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-         
+          node-version: "22"
+
       - name: pnpm 설치
         uses: pnpm/action-setup@v4
         with:
-          version: '9.12.0'
+          version: "9.12.0"
       - name: 의존성 설치
         run: pnpm install --frozen-lockfile
       - name: EAS CLI 설치
         run: npm install -g eas-cli@latest
-      - name: EAS APK 빌드
+      - name: EAS 로컬 APK 빌드
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          mkdir -p artifacts
           eas build \
             --platform android \
             --profile ${{ github.event.inputs.profile || 'production-apk' }} \
+            --local \
             --non-interactive \
-            --no-wait
-        # --no-wait: 빌드를 EAS 서버에 제출하고 즉시 종료 (빌드는 EAS 클라우드에서 계속 진행)
-        # 빌드 완료 후 https://expo.dev/accounts/futureenergytech/projects/future-energy-heating/builds 에서 APK 다운로드
-      - name: 빌드 제출 완료 안내
+            --freeze-credentials \
+            --output ./artifacts/future-energy-heating-v1.1.13.apk
+      - name: APK 산출물 보관
+        uses: actions/upload-artifact@v4
+        with:
+          name: future-energy-heating-v1.1.13-android
+          path: artifacts/future-energy-heating-v1.1.13.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: 빌드 완료 안내
         run: |
           echo "=========================================="
-          echo "✅ EAS APK 빌드가 EAS 클라우드에 제출됐습니다."
+          echo "✅ Android APK 로컬 빌드가 완료됐습니다."
           echo ""
-          echo "📱 APK 다운로드 위치:"
-          echo "https://expo.dev/accounts/futureenergytech/projects/future-energy-heating/builds"
-          echo ""
-          echo "⏱️  빌드 완료까지 약 10~20분 소요됩니다."
+          echo "📱 이 GitHub Actions 실행의 Artifacts에서 APK를 다운로드하세요."
           echo "=========================================="
