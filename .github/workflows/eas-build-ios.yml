@@ -1,0 +1,74 @@
+name: EAS iOS TestFlight (v1.1.13)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "assets/**"
+      - "components/**"
+      - "constants/**"
+      - "hooks/**"
+      - "lib/**"
+      - "app.config.ts"
+      - "eas.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/eas-build-ios.yml"
+
+jobs:
+  build-submit:
+    name: Build iOS and submit to TestFlight
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.12.0"
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: EAS CLI 설치
+        run: npm install -g eas-cli@latest
+
+      - name: 기존 Apple 서명으로 iOS 빌드
+        id: build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --platform ios \
+            --profile testflight \
+            --non-interactive \
+            --freeze-credentials \
+            --wait \
+            --json > eas-ios-build.json
+
+          BUILD_ID=$(jq -r 'if type == "array" then .[0].id else .id end' eas-ios-build.json)
+          test -n "$BUILD_ID"
+          test "$BUILD_ID" != "null"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: 완성된 빌드를 TestFlight에 제출
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas submit \
+            --platform ios \
+            --profile testflight \
+            --id "${{ steps.build.outputs.build_id }}" \
+            --non-interactive \
+            --wait \
+            --what-to-test "작업보고서 전·후 사진 업로드 안정화 및 iPhone 호환"
