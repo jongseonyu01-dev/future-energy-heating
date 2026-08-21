@@ -17,6 +17,7 @@ import {
 } from "@/lib/location-tracking";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { useLocationTracking } from "@/lib/location-tracking-context";
+import * as Auth from "@/lib/_core/auth";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280",
@@ -100,6 +101,7 @@ export default function TechScheduleScreen() {
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
+  const saveConsentMutation = trpc.location.saveConsent.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
     { enabled: !!trackingRequestId, refetchInterval: 10000 }
@@ -259,12 +261,15 @@ export default function TechScheduleScreen() {
     if (phones.length === 0) return;
     // 각 전화번호별로 유량 이상 상태 조회
     Promise.all(
-      (phones as string[]).map((phone: string) =>
-        fetch(`${getApiBaseUrl()}/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`)
+      (phones as string[]).map(async (phone: string) => {
+        const token = await Auth.getSessionToken();
+        return fetch(`${getApiBaseUrl()}/api/trpc/flowRate.getAlertByPhone?input=${encodeURIComponent(JSON.stringify({ json: { phone } }))}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
           .then((r) => r.json())
           .then((data) => ({ phone, result: data?.result?.data?.json ?? null }))
-          .catch(() => ({ phone, result: null }))
-      )
+          .catch(() => ({ phone, result: null }));
+      })
     ).then((results) => {
       const map: Record<string, any> = {};
       results.forEach(({ phone, result }) => {
@@ -614,11 +619,7 @@ export default function TechScheduleScreen() {
           const effectiveTechId = resolvedTechnicianId ?? technicianId;
           if (effectiveTechId) {
             try {
-              await fetch(`${getApiBaseUrl()}/api/trpc/location.saveConsent`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ json: { technicianId: effectiveTechId } }),
-              });
+              await saveConsentMutation.mutateAsync({ technicianId: effectiveTechId });
               consentQuery.refetch();
             } catch {}
           }
