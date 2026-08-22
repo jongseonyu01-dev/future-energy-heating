@@ -17,8 +17,14 @@ on:
     paths:
       - "app/**"
       - "components/**"
+      - "assets/**"
+      - "constants/**"
+      - "hooks/**"
+      - "lib/**"
       - "app.config.ts"
       - "eas.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
       - ".github/workflows/eas-build-apk.yml"
 
 concurrency:
