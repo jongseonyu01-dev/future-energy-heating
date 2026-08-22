@@ -185,7 +185,7 @@ jobs:
               gh release upload "$TAG" dist/future-energy-heating.apk --clobber
               gh release edit "$TAG" --title "$TITLE" --notes-file dist/android-release.json --draft=false --latest
             else
-              gh release edit "$TAG" --latest
+              echo "기존 공개 릴리스 검증 완료: $TAG"
             fi
           else
             gh release create "$TAG" \
