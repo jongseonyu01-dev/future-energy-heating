@@ -39,7 +39,16 @@ const STORAGE_KEY = "fe_auth_user";
 const SECURE_STORE_KEY = "fe_session_token";
 // 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
-const CURRENT_SESSION_VERSION = "v6"; // v6: headers.entries() 제거, API 주소 단일화, 과거 서버주소 키 정리 (2026-08-03)
+const CURRENT_SESSION_VERSION = "v7"; // v7: 전화번호 계정 전환 및 서버 검증 기반 세션 복원
+
+type VerifiedSession = Pick<
+  AuthUser,
+  "userId" | "appRole" | "name" | "technicianId" | "branchId" | "branchName" | "phoneNumber" | "mustChangePassword"
+>;
+
+function isAppRole(value: unknown): value is AppRole {
+  return value === "customer" || value === "technician" || value === "branch_manager" || value === "hq_admin";
+}
 
 /** 모든 저장소에서 인증 데이터 완전 삭제 */
 async function clearAllAuthStorage() {
@@ -64,8 +73,8 @@ async function clearAllAuthStorage() {
   }
 }
 
-/** 서버에서 토큰 유효성 검증 */
-async function verifyTokenWithServer(userId: number, token: string): Promise<boolean> {
+/** 서버에서 토큰과 최신 역할·기사 연결 상태를 검증한다. */
+async function verifyTokenWithServer(userId: number, token: string): Promise<VerifiedSession | null> {
   try {
     // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
     const API_BASE = Platform.OS === "web"
@@ -76,12 +85,30 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ json: { userId, token } }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     const data = await res.json();
-    return data?.result?.data?.json?.success === true;
+    const verified = data?.result?.data?.json;
+    if (verified?.success !== true || verified.userId !== userId || !isAppRole(verified.appRole)) return null;
+
+    const technicianId = typeof verified.technicianId === "number" && Number.isSafeInteger(verified.technicianId)
+      ? verified.technicianId
+      : null;
+    // 기사 세션은 서버가 현재 활성 기사 연결을 돌려준 경우에만 복원한다.
+    if (verified.appRole === "technician" && (!technicianId || technicianId <= 0)) return null;
+
+    return {
+      userId: verified.userId,
+      appRole: verified.appRole,
+      name: typeof verified.name === "string" ? verified.name : null,
+      technicianId,
+      branchId: typeof verified.branchId === "number" && Number.isSafeInteger(verified.branchId) ? verified.branchId : null,
+      branchName: typeof verified.branchName === "string" ? verified.branchName : null,
+      phoneNumber: typeof verified.phoneNumber === "string" ? verified.phoneNumber : null,
+      mustChangePassword: verified.mustChangePassword === true,
+    };
   } catch {
-    // 네트워크 오류 시 오프라인으로 간주하고 기존 세션 유지 (서버 다운 시 로그아웃 방지)
-    return true;
+    // 삭제·정지 계정이 오프라인 상태에서 복원되지 않도록 통신 실패도 fail-closed 처리한다.
+    return null;
   }
 }
 
@@ -105,6 +132,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 2. 저장된 세션 읽기
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (!raw) {
+          // 자동 로그인 세션이 없는데 과거 Bearer 토큰만 남아 guest 요청에 붙지 않도록 제거한다.
+          if (Platform.OS !== "web") {
+            try { await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY); } catch {}
+            try { await SecureStore.deleteItemAsync(SECURE_STORE_KEY); } catch {}
+          }
           setIsLoading(false);
           return;
         }
@@ -125,24 +157,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // 4. 서버 토큰 검증 (token이 있는 경우)
-        if (saved.token) {
-          const valid = await verifyTokenWithServer(saved.userId, saved.token);
-          if (!valid) {
-            // 서버에서 유효하지 않다고 판단 → 강제 로그아웃
-            await clearAllAuthStorage();
-            setIsLoading(false);
-            return;
-          }
-          // AsyncStorage 세션은 남아 있지만 SecureStore가 비어 있는 복원 상황에서도
-          // tRPC Authorization 헤더가 빠지지 않도록 서버 검증을 통과한 토큰을 복구한다.
-          if (Platform.OS !== "web") {
-            await SecureStore.setItemAsync(SESSION_TOKEN_KEY, saved.token);
-          }
+        // 4. 자동 로그인은 서버 토큰 검증을 통과한 경우에만 허용한다.
+        if (!saved.token) {
+          await clearAllAuthStorage();
+          setIsLoading(false);
+          return;
+        }
+        const verified = await verifyTokenWithServer(saved.userId, saved.token);
+        if (!verified) {
+          await clearAllAuthStorage();
+          setIsLoading(false);
+          return;
         }
 
-        // 5. 세션 복원 성공
-        setUser(saved);
+        const restoredUser: AuthUser = {
+          ...saved,
+          ...verified,
+          loginId: saved.loginId,
+          token: saved.token,
+        };
+        // 서버가 보정한 최신 technicianId/소속 정보를 다음 재실행에도 사용한다.
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(restoredUser));
+        // AsyncStorage 세션은 남아 있지만 SecureStore가 비어 있는 복원 상황에서도
+        // tRPC Authorization 헤더가 빠지지 않도록 서버 검증을 통과한 토큰을 복구한다.
+        if (Platform.OS !== "web") {
+          await SecureStore.setItemAsync(SESSION_TOKEN_KEY, saved.token);
+        }
+
+        // 5. 서버 최신 정보로 세션 복원 성공
+        setUser(restoredUser);
       } catch {
         await clearAllAuthStorage();
       } finally {
