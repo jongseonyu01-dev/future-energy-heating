@@ -20,12 +20,9 @@ import { ScreenContainer } from "@/components/screen-container";
 
 type View2 = "login" | "changePw" | "signup" | "findId" | "resetPw";
 
+const TEST_TECHNICIAN_LOGIN_ID = "yjs1";
 const normalizePhone = (value: string) => value.replace(/[^0-9]/g, "");
-const normalizeLoginAccount = (value: string) => {
-  const trimmed = value.trim();
-  const phone = /^[0-9\s()+-]+$/.test(trimmed) ? normalizePhone(trimmed) : "";
-  return /^010\d{8}$/.test(phone) ? phone : trimmed;
-};
+const isValidMobileLoginId = (value: string) => /^010\d{8}$/.test(value);
 const normalizeTechnicianName = (value: string) => value.normalize("NFC").trim();
 const isValidTechnicianName = (value: string) => /^[가-힣]{2,10}$/u.test(normalizeTechnicianName(value));
 
@@ -38,6 +35,7 @@ export default function LoginScreen() {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [isTestLogin, setIsTestLogin] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -66,6 +64,7 @@ export default function LoginScreen() {
   const [rpCode, setRpCode] = useState("");
   const [rpPw, setRpPw] = useState("");
 
+  const isNative = Platform.OS !== "web";
   const s = styles(colors);
 
   // 포커스된 입력칸이 키보드 위로 보이도록 자동 스크롤
@@ -178,11 +177,39 @@ export default function LoginScreen() {
   const handleLogin = () => {
     Keyboard.dismiss();
     clearMsg();
-    if (!loginId.trim() || !password.trim()) {
+    const loginAccount = Platform.OS === "web"
+      ? loginId.trim()
+      : isTestLogin
+        ? TEST_TECHNICIAN_LOGIN_ID
+        : normalizePhone(loginId);
+    if (!loginAccount || !password.trim()) {
       setError(Platform.OS === "web" ? "아이디와 비밀번호를 입력해주세요." : "휴대전화 번호와 비밀번호를 입력해주세요.");
       return;
     }
-    loginMutation.mutate({ loginId: normalizeLoginAccount(loginId), password, source: "app" });
+    if (isNative && isTestLogin && loginId.trim() !== TEST_TECHNICIAN_LOGIN_ID) {
+      setError("테스트 계정 아이디를 확인해주세요.");
+      return;
+    }
+    if (isNative && !isTestLogin && !isValidMobileLoginId(loginAccount)) {
+      setError("010으로 시작하는 휴대전화 번호 11자리를 입력해주세요.");
+      return;
+    }
+    loginMutation.mutate({ loginId: loginAccount, password, source: "app" });
+  };
+
+  const handleLoginAccountChange = (value: string) => {
+    if (!isNative) {
+      setLoginId(value);
+      return;
+    }
+    if (!isTestLogin) setLoginId(normalizePhone(value).slice(0, 11));
+  };
+
+  const toggleTestLogin = () => {
+    const next = !isTestLogin;
+    setIsTestLogin(next);
+    setLoginId(next ? TEST_TECHNICIAN_LOGIN_ID : "");
+    clearMsg();
   };
 
   const handleChangePw = () => {
@@ -277,6 +304,7 @@ export default function LoginScreen() {
       {
         onSuccess: (r: any) => {
           if (r?.success) {
+            setIsTestLogin(false);
             setLoginId(String(r.loginId || phoneLoginId));
             setInfo("기사 가입 신청이 완료되었습니다. 본사 승인 후 휴대전화 번호로 로그인할 수 있습니다.");
             setTimeout(() => go("login"), 2200);
@@ -311,20 +339,31 @@ export default function LoginScreen() {
   // 비밀번호 재설정
   const rpSendCode = () => {
     clearMsg();
-    if (!rpPhone.trim()) { setError("휴대전화 번호를 입력해주세요."); return; }
+    const resetPhone = isNative ? normalizePhone(rpPhone) : rpPhone.trim();
+    if (!resetPhone) { setError("휴대전화 번호를 입력해주세요."); return; }
+    if (isNative && !isValidMobileLoginId(resetPhone)) {
+      setError("010으로 시작하는 휴대전화 번호 11자리를 입력해주세요.");
+      return;
+    }
     sendCodeMutation.mutate(
-      { phoneNumber: rpPhone.trim(), purpose: "reset" },
+      { phoneNumber: resetPhone, purpose: "reset" },
       { onSuccess: (r: any) => { if (r?.success) setInfo("인증번호를 발송했습니다." + (r.devCode ? ` (테스트코드: ${r.devCode})` : "")); else setError("인증번호 발송에 실패했습니다."); }, onError: () => setError("인증번호 발송 중 오류가 발생했습니다.") }
     );
   };
   const handleResetPw = () => {
     Keyboard.dismiss();
     clearMsg();
-    if (!rpLoginId.trim() || !rpPhone.trim() || !rpCode.trim() || !rpPw) { setError("모든 항목을 입력해주세요."); return; }
+    const resetPhone = isNative ? normalizePhone(rpPhone) : rpPhone.trim();
+    const resetLoginId = isNative ? resetPhone : rpLoginId.trim();
+    if (!resetLoginId || !resetPhone || !rpCode.trim() || !rpPw) { setError("모든 항목을 입력해주세요."); return; }
+    if (isNative && !isValidMobileLoginId(resetPhone)) {
+      setError("010으로 시작하는 휴대전화 번호 11자리를 입력해주세요.");
+      return;
+    }
     if (rpPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     resetPwMutation.mutate(
-      { loginId: rpLoginId.trim(), phoneNumber: rpPhone.trim(), code: rpCode.trim(), newPassword: rpPw },
-      { onSuccess: (r: any) => { if (r?.success) { setInfo("비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요."); setLoginId(rpLoginId.trim()); setTimeout(() => go("login"), 1000); } else setError(r?.error ?? "비밀번호 재설정에 실패했습니다."); }, onError: () => setError("비밀번호 재설정 중 오류가 발생했습니다.") }
+      ({ loginId: resetLoginId, phoneNumber: resetPhone, code: rpCode.trim(), newPassword: rpPw, source: isNative ? "app" : "web" } as any),
+      { onSuccess: (r: any) => { if (r?.success) { setInfo("비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요."); setIsTestLogin(false); setLoginId(resetLoginId); setTimeout(() => go("login"), 1000); } else setError(r?.error ?? "비밀번호 재설정에 실패했습니다."); }, onError: () => setError("비밀번호 재설정 중 오류가 발생했습니다.") }
     );
   };
 
@@ -370,8 +409,41 @@ export default function LoginScreen() {
           {view === "login" && (
             <>
               <View style={s.form}>
-                <Text style={s.label}>{Platform.OS === "web" ? "아이디" : "휴대전화 번호"}</Text>
-                <TextInput style={s.input} value={loginId} onChangeText={setLoginId} onFocus={handleFocus} placeholder={Platform.OS === "web" ? "아이디를 입력하세요" : "010-0000-0000 (테스트 계정은 아이디)"} placeholderTextColor={colors.muted} returnKeyType="next" {...idInputProps} />
+                <Text style={s.label}>{Platform.OS === "web" ? "아이디" : isTestLogin ? "테스트 계정" : "휴대전화 번호"}</Text>
+                <TextInput
+                  style={[s.input, isNative && isTestLogin && s.readOnlyInput]}
+                  value={loginId}
+                  onChangeText={handleLoginAccountChange}
+                  onFocus={handleFocus}
+                  placeholder={Platform.OS === "web" ? "아이디를 입력하세요" : isTestLogin ? TEST_TECHNICIAN_LOGIN_ID : "01012345678"}
+                  placeholderTextColor={colors.muted}
+                  editable={!isNative || !isTestLogin}
+                  keyboardType={isNative && !isTestLogin ? "phone-pad" : "default"}
+                  inputMode={isNative && !isTestLogin ? "tel" : "text"}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete={isNative && !isTestLogin ? "tel" : "off"}
+                  textContentType={isNative && !isTestLogin ? "telephoneNumber" : "none"}
+                  importantForAutofill={isNative && !isTestLogin ? "yes" : "no"}
+                  returnKeyType="next"
+                />
+                {isNative && (
+                  <TouchableOpacity
+                    style={s.testLoginRow}
+                    onPress={toggleTestLogin}
+                    activeOpacity={0.7}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isTestLogin }}
+                    accessibilityLabel="테스트 계정으로 로그인"
+                  >
+                    <View style={[s.checkbox, isTestLogin && s.checkboxOn]}>{isTestLogin ? <Text style={s.checkMark}>✓</Text> : null}</View>
+                    <View style={s.testLoginCopy}>
+                      <Text style={s.rememberText}>테스트 계정으로 로그인</Text>
+                      <Text style={s.testLoginHint}>선택할 때만 yjs1 계정을 사용합니다</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <Text style={s.label}>비밀번호</Text>
                 <View style={s.pwWrap}>
                   <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={password} onChangeText={setPassword} onFocus={handleFocus} placeholder="비밀번호를 입력하세요" placeholderTextColor={colors.muted} secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleLogin} {...idInputProps} />
@@ -577,15 +649,32 @@ export default function LoginScreen() {
           {view === "resetPw" && (
             <View style={s.form}>
               <Text style={s.formTitle}>비밀번호 재설정</Text>
-              <Text style={s.label}>아이디</Text>
-              <TextInput style={s.input} value={rpLoginId} onChangeText={setRpLoginId} onFocus={handleFocus} placeholder="아이디" placeholderTextColor={colors.muted} {...idInputProps} />
+              {Platform.OS === "web" ? (
+                <>
+                  <Text style={s.label}>아이디</Text>
+                  <TextInput style={s.input} value={rpLoginId} onChangeText={setRpLoginId} onFocus={handleFocus} placeholder="아이디" placeholderTextColor={colors.muted} {...idInputProps} />
+                </>
+              ) : (
+                <Text style={s.noticeBox}>휴대폰 인증을 완료한 번호가 로그인 계정으로 사용됩니다.</Text>
+              )}
               <Text style={s.label}>휴대전화 번호</Text>
               <View style={s.rowField}>
-                <TextInput style={[s.input, { flex: 1 }]} value={rpPhone} onChangeText={setRpPhone} onFocus={handleFocus} placeholder="010-0000-0000" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+                <TextInput
+                  style={[s.input, { flex: 1 }]}
+                  value={rpPhone}
+                  onChangeText={(value) => setRpPhone(isNative ? normalizePhone(value).slice(0, 11) : value)}
+                  onFocus={handleFocus}
+                  placeholder="01012345678"
+                  placeholderTextColor={colors.muted}
+                  keyboardType="phone-pad"
+                  inputMode="tel"
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
+                />
                 <TouchableOpacity style={s.smallBtn} onPress={rpSendCode}><Text style={s.smallBtnText}>인증요청</Text></TouchableOpacity>
               </View>
               <Text style={s.label}>인증번호</Text>
-              <TextInput style={s.input} value={rpCode} onChangeText={setRpCode} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={6} />
+              <TextInput style={s.input} value={rpCode} onChangeText={(value) => setRpCode(value.replace(/[^0-9]/g, ""))} onFocus={handleFocus} placeholder="인증번호 6자리" placeholderTextColor={colors.muted} keyboardType="number-pad" inputMode="numeric" textContentType="oneTimeCode" autoComplete={Platform.OS === "android" ? "sms-otp" : "one-time-code"} maxLength={6} />
               <Text style={s.label}>새 비밀번호</Text>
               <TextInput style={s.input} value={rpPw} onChangeText={setRpPw} onFocus={handleFocus} placeholder="새 비밀번호 (6자 이상)" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
@@ -617,6 +706,7 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     formTitle: { fontSize: 18, fontWeight: "700", color: colors.foreground, marginBottom: 12, textAlign: "center" },
     label: { fontSize: 14, fontWeight: "600", color: colors.foreground, marginBottom: 6, marginTop: 12 },
     input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
+    readOnlyInput: { color: colors.muted, backgroundColor: colors.surface },
     pwWrap: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingRight: 8 },
     pwToggle: { padding: 8 },
     rowField: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -627,6 +717,9 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     checkboxOn: { backgroundColor: "#FF6B35", borderColor: "#FF6B35" },
     checkMark: { color: "#fff", fontSize: 14, fontWeight: "900" },
     rememberText: { fontSize: 14, color: colors.foreground, fontWeight: "500" },
+    testLoginRow: { flexDirection: "row", alignItems: "center", marginTop: 12, gap: 8, minHeight: 44 },
+    testLoginCopy: { flex: 1 },
+    testLoginHint: { fontSize: 12, color: colors.muted, marginTop: 2 },
     errorText: { color: colors.error, fontSize: 13, marginTop: 10, textAlign: "center" },
     infoText: { color: "#1D4ED8", fontSize: 13, marginTop: 10, textAlign: "center" },
     resultBox: { backgroundColor: colors.background, borderRadius: 10, padding: 12, marginTop: 10, fontSize: 14, fontWeight: "700", color: colors.foreground, textAlign: "center" },
