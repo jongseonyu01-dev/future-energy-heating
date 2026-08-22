@@ -19,6 +19,7 @@ permissions:
 jobs:
   submit:
     name: Submit existing iOS build
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[submit-only]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -29,6 +30,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.12.0"
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
 
       - name: EAS CLI 설치
         run: npm install -g eas-cli@latest
