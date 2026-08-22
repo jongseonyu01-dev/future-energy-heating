@@ -23,7 +23,7 @@ on:
 
 concurrency:
   group: android-apk-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -165,16 +165,19 @@ jobs:
                   ? release.assets.find((item) => item.name === "future-energy-heating.apk")
                   : null;
                 if (
+                  current.schemaVersion !== 1 ||
+                  current.appId !== "driver" ||
                   current.versionName !== next.versionName ||
                   Number(current.versionCode) !== next.versionCode ||
                   current.sourceSha !== next.sourceSha ||
-                  current.sha256 !== next.sha256 ||
-                  Number(current.fileSize) !== next.fileSize ||
+                  !/^[a-f0-9]{64}$/.test(String(current.sha256 || "")) ||
+                  !Number.isInteger(Number(current.fileSize)) ||
+                  Number(current.fileSize) < 1024 * 1024 ||
                   !asset ||
                   asset.state !== "uploaded" ||
-                  Number(asset.size) !== next.fileSize ||
-                  (asset.digest && asset.digest !== "sha256:" + next.sha256)
-                ) throw new Error("이미 게시된 같은 버전 릴리스의 내용이 다릅니다. versionCode를 올려야 합니다.");
+                  Number(asset.size) !== Number(current.fileSize) ||
+                  (asset.digest && asset.digest !== "sha256:" + current.sha256)
+                ) throw new Error("이미 게시된 같은 버전 릴리스가 손상됐거나 다른 소스에서 생성됐습니다. versionCode를 올려야 합니다.");
                 process.stdout.write("published");
               }
             ')"
@@ -209,12 +212,18 @@ jobs:
               release.isDraft ||
               release.isPrerelease ||
               release.tagName !== "android-v" + expected.versionName + "-" + expected.versionCode ||
+              actual.schemaVersion !== 1 ||
+              actual.appId !== "driver" ||
+              actual.versionName !== expected.versionName ||
+              Number(actual.versionCode) !== Number(expected.versionCode) ||
               actual.sourceSha !== expected.sourceSha ||
-              actual.sha256 !== expected.sha256 ||
+              !/^[a-f0-9]{64}$/.test(String(actual.sha256 || "")) ||
+              !Number.isInteger(Number(actual.fileSize)) ||
+              Number(actual.fileSize) < 1024 * 1024 ||
               !asset ||
               asset.state !== "uploaded" ||
-              Number(asset.size) !== expected.fileSize ||
-              (asset.digest && asset.digest !== "sha256:" + expected.sha256)
+              Number(asset.size) !== Number(actual.fileSize) ||
+              (asset.digest && asset.digest !== "sha256:" + actual.sha256)
             ) throw new Error("공개 APK 릴리스 검증에 실패했습니다.");
             console.log("ANDROID_RELEASE_OK", release.tagName, asset.name, asset.size);
           '
