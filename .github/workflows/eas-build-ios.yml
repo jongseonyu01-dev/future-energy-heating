@@ -1,4 +1,4 @@
-name: EAS iOS TestFlight (v1.1.14)
+name: EAS iOS TestFlight (v1.1.15)
 
 on:
   workflow_dispatch:
@@ -71,4 +71,5 @@ jobs:
             --profile testflight \
             --id "${{ steps.build.outputs.build_id }}" \
             --non-interactive \
-            --wait
+            --wait \
+            --what-to-test "기사 앱 가입·휴대폰 인증, 배정 작업 조회, 견적 작성 및 iPhone 호환 개선"
