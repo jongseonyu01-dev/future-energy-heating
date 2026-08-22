@@ -20,6 +20,15 @@ import { ScreenContainer } from "@/components/screen-container";
 
 type View2 = "login" | "changePw" | "signup" | "findId" | "resetPw";
 
+const normalizePhone = (value: string) => value.replace(/[^0-9]/g, "");
+const normalizeLoginAccount = (value: string) => {
+  const trimmed = value.trim();
+  const phone = /^[0-9\s()+-]+$/.test(trimmed) ? normalizePhone(trimmed) : "";
+  return /^010\d{8}$/.test(phone) ? phone : trimmed;
+};
+const normalizeTechnicianName = (value: string) => value.normalize("NFC").trim();
+const isValidTechnicianName = (value: string) => /^[가-힣]{2,10}$/u.test(normalizeTechnicianName(value));
+
 export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -45,7 +54,6 @@ export default function LoginScreen() {
   const [suCodeSent, setSuCodeSent] = useState(false);
   const [suVerified, setSuVerified] = useState(false);
   const [suSignupGrant, setSuSignupGrant] = useState("");
-  const [suLoginId, setSuLoginId] = useState("");
   const [suPw, setSuPw] = useState("");
   const [suPw2, setSuPw2] = useState("");
 
@@ -170,8 +178,11 @@ export default function LoginScreen() {
   const handleLogin = () => {
     Keyboard.dismiss();
     clearMsg();
-    if (!loginId.trim() || !password.trim()) { setError("아이디와 비밀번호를 입력해주세요."); return; }
-    loginMutation.mutate({ loginId: loginId.trim(), password, source: "app" });
+    if (!loginId.trim() || !password.trim()) {
+      setError(Platform.OS === "web" ? "아이디와 비밀번호를 입력해주세요." : "휴대전화 번호와 비밀번호를 입력해주세요.");
+      return;
+    }
+    loginMutation.mutate({ loginId: normalizeLoginAccount(loginId), password, source: "app" });
   };
 
   const handleChangePw = () => {
@@ -247,17 +258,18 @@ export default function LoginScreen() {
   const handleSignup = () => {
     Keyboard.dismiss();
     clearMsg();
-    if (!suName.trim() || !suPhone.trim() || !suLoginId.trim() || !suPw) { setError("모든 항목을 입력해주세요."); return; }
-    if (suLoginId.trim().length < 4) { setError("아이디는 4자 이상이어야 합니다."); return; }
+    if (!suName.trim() || !suPhone.trim() || !suPw) { setError("모든 항목을 입력해주세요."); return; }
+    if (!isValidTechnicianName(suName)) { setError("이름은 숫자·특수문자 없이 한글 실명 2~10자로 입력해주세요."); return; }
+    const phoneLoginId = normalizePhone(suPhone);
+    if (!/^010\d{8}$/.test(phoneLoginId)) { setError("010으로 시작하는 휴대전화 번호를 입력해주세요."); return; }
     if (suPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     if (suPw !== suPw2) { setError("비밀번호가 일치하지 않습니다."); return; }
     if (!suVerified) { setError("휴대폰 인증을 먼저 완료해주세요."); return; }
     if (!suSignupGrant) { setError("휴대폰 인증이 만료되었습니다. 다시 인증해 주세요."); return; }
     registerTechnicianMutation.mutate(
       ({
-        loginId: suLoginId.trim(),
         password: suPw,
-        name: suName.trim(),
+        name: normalizeTechnicianName(suName),
         phoneNumber: suPhone.trim(),
         signupChannel: "technician_app_v1",
         signupGrant: suSignupGrant,
@@ -265,8 +277,8 @@ export default function LoginScreen() {
       {
         onSuccess: (r: any) => {
           if (r?.success) {
-            setLoginId(suLoginId.trim());
-            setInfo("기사 가입 신청이 완료되었습니다. 본사 승인 후 로그인할 수 있습니다.");
+            setLoginId(String(r.loginId || phoneLoginId));
+            setInfo("기사 가입 신청이 완료되었습니다. 본사 승인 후 휴대전화 번호로 로그인할 수 있습니다.");
             setTimeout(() => go("login"), 2200);
           } else {
             setError(r?.error ?? "기사 가입 신청에 실패했습니다.");
@@ -358,8 +370,8 @@ export default function LoginScreen() {
           {view === "login" && (
             <>
               <View style={s.form}>
-                <Text style={s.label}>아이디</Text>
-                <TextInput style={s.input} value={loginId} onChangeText={setLoginId} onFocus={handleFocus} placeholder="아이디를 입력하세요" placeholderTextColor={colors.muted} returnKeyType="next" {...idInputProps} />
+                <Text style={s.label}>{Platform.OS === "web" ? "아이디" : "휴대전화 번호"}</Text>
+                <TextInput style={s.input} value={loginId} onChangeText={setLoginId} onFocus={handleFocus} placeholder={Platform.OS === "web" ? "아이디를 입력하세요" : "010-0000-0000 (테스트 계정은 아이디)"} placeholderTextColor={colors.muted} returnKeyType="next" {...idInputProps} />
                 <Text style={s.label}>비밀번호</Text>
                 <View style={s.pwWrap}>
                   <TextInput style={[s.input, { flex: 1, borderWidth: 0, backgroundColor: "transparent" }]} value={password} onChangeText={setPassword} onFocus={handleFocus} placeholder="비밀번호를 입력하세요" placeholderTextColor={colors.muted} secureTextEntry={!showPw} returnKeyType="done" onSubmitEditing={handleLogin} {...idInputProps} />
@@ -377,8 +389,12 @@ export default function LoginScreen() {
                   {loginMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>로그인</Text>}
                 </TouchableOpacity>
                 <View style={s.linkRow}>
-                  <TouchableOpacity onPress={() => go("findId")}><Text style={s.link}>아이디 찾기</Text></TouchableOpacity>
-                  <Text style={s.linkDot}>·</Text>
+                  {Platform.OS === "web" && (
+                    <>
+                      <TouchableOpacity onPress={() => go("findId")}><Text style={s.link}>아이디 찾기</Text></TouchableOpacity>
+                      <Text style={s.linkDot}>·</Text>
+                    </>
+                  )}
                   <TouchableOpacity onPress={() => go("resetPw")}><Text style={s.link}>비밀번호 재설정</Text></TouchableOpacity>
                 </View>
                 {Platform.OS !== "web" && (
@@ -421,7 +437,7 @@ export default function LoginScreen() {
               <Text style={s.formTitle}>기사 가입 신청</Text>
               <View style={s.pendingNotice}>
                 <Text style={s.pendingNoticeTitle}>본사 승인 후 이용할 수 있습니다</Text>
-                <Text style={s.pendingNoticeText}>휴대폰 인증과 가입 신청을 완료하면 본사 승인대기 목록에 등록됩니다.</Text>
+                <Text style={s.pendingNoticeText}>휴대폰 인증 후 번호가 로그인 계정으로 자동 등록됩니다. 별도 아이디는 만들지 않습니다.</Text>
               </View>
 
               <Text style={s.label}>이름</Text>
@@ -430,8 +446,12 @@ export default function LoginScreen() {
                 value={suName}
                 onChangeText={setSuName}
                 onFocus={handleFocus}
-                placeholder="기사 이름"
+                placeholder="한글 실명 2~10자"
                 placeholderTextColor={colors.muted}
+                maxLength={10}
+                autoCorrect={false}
+                textContentType="name"
+                autoComplete="name"
                 returnKeyType="next"
               />
 
@@ -493,18 +513,6 @@ export default function LoginScreen() {
                   </View>
                 </>
               )}
-
-              <Text style={s.label}>아이디</Text>
-              <TextInput
-                style={s.input}
-                value={suLoginId}
-                onChangeText={setSuLoginId}
-                onFocus={handleFocus}
-                placeholder="사용할 아이디 (4자 이상)"
-                placeholderTextColor={colors.muted}
-                returnKeyType="next"
-                {...idInputProps}
-              />
 
               <Text style={s.label}>비밀번호</Text>
               <TextInput
