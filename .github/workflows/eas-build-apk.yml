@@ -100,7 +100,7 @@ jobs:
   publish:
     name: Publish APK for Homepage
     needs: build
-    if: ${{ needs.build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.profile == 'production-apk') }}
+    if: ${{ needs.build.result == 'success' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || github.event.inputs.profile == 'production-apk') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
