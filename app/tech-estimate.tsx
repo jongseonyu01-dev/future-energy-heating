@@ -42,10 +42,11 @@ type EstimateLineItem = {
 };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: "보고완료·검토중", color: "#D97706", bg: "#FFFBEB" },
-  viewed: { label: "본사확인", color: "#7C3AED", bg: "#F5F3FF" },
-  approved: { label: "고객승인", color: "#16A34A", bg: "#F0FDF4" },
-  rejected: { label: "고객거절", color: "#DC2626", bg: "#FEF2F2" },
+  report_pending: { label: "검토 대기", color: "#D97706", bg: "#FFFBEB" },
+  pending: { label: "검토 대기", color: "#D97706", bg: "#FFFBEB" },
+  approved: { label: "고객 발송완료", color: "#16A34A", bg: "#F0FDF4" },
+  rejected: { label: "반려", color: "#DC2626", bg: "#FEF2F2" },
+  viewed: { label: "고객 열람", color: "#7C3AED", bg: "#F5F3FF" },
   expired: { label: "만료", color: "#6B7280", bg: "#F3F4F6" },
 };
 
@@ -67,7 +68,7 @@ function fmtDate(d: any): string {
 export default function TechEstimateScreen() {
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ requestId?: string; customerName?: string; customerPhone?: string }>();
+  const params = useLocalSearchParams<{ customerName?: string; customerPhone?: string }>();
   const { user } = useAppAuth();
 
   const [tab, setTab] = useState<"write" | "history">("write");
@@ -85,13 +86,14 @@ export default function TechEstimateScreen() {
   const { data: priceItems = [], isLoading: priceLoading } = trpc.prices.listActive.useQuery();
 
   // ── 내 견적 보고 목록 ──
-  const technicianId = user?.technicianId ?? 0;
-  const { data: myEstimates = [], isLoading: histLoading, refetch: refetchHistory } = trpc.estimates.listMyTechRequests.useQuery(
-    { technicianId },
-    { enabled: tab === "history" && !!technicianId },
+  // 기사 식별자는 Bearer token을 검증한 서버가 결정한다.
+  const estimatesApi = trpc.estimates as any;
+  const { data: myEstimates = [], isLoading: histLoading, refetch: refetchHistory } = estimatesApi.listMyTechRequests.useQuery(
+    undefined,
+    { enabled: tab === "history" && user?.appRole === "technician" },
   );
 
-  const techRequestMutation = trpc.estimates.techRequest.useMutation();
+  const techRequestMutation = estimatesApi.techRequest.useMutation();
 
   // ── 합계 계산 ──
   const totalAmount = useMemo(
@@ -168,7 +170,7 @@ export default function TechEstimateScreen() {
           onPress: async () => {
             try {
               setSubmitting(true);
-              const estimateItems = JSON.stringify(
+              const autoEstimateItems = JSON.stringify(
                 lineItems.map((l) => ({
                   name: l.name,
                   category: l.category,
@@ -179,15 +181,11 @@ export default function TechEstimateScreen() {
               );
               await techRequestMutation.mutateAsync({
                 customerName: customerName.trim(),
-                customerPhone: phone,
+                phoneNumber: phone,
                 title: `현장견적 - ${customerName.trim()}`,
                 amount: totalAmount,
-                estimateItems,
-                memo: memo.trim() || undefined,
-                branchId: user.branchId ?? null,
-                technicianId: user.technicianId!,
-                technicianName: user.name ?? "기사",
-                requestId: params.requestId ? parseInt(params.requestId) : null,
+                autoEstimateItems,
+                techRequestNote: memo.trim() || undefined,
               });
               setSubmitting(false);
               Alert.alert(
@@ -416,15 +414,20 @@ export default function TechEstimateScreen() {
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={{ padding: 16, paddingBottom: 60, gap: 12 }}
               renderItem={({ item }) => {
-                const meta = STATUS_META[item.status] ?? STATUS_META.pending;
+                const statusKey = item.techRequestStatus || item.status;
+                const meta = STATUS_META[statusKey] ?? STATUS_META.pending;
                 let parsedItems: any[] = [];
-                try { parsedItems = JSON.parse(item.description || "[]"); } catch {}
+                try {
+                  parsedItems = typeof item.autoEstimateItems === "string"
+                    ? JSON.parse(item.autoEstimateItems)
+                    : Array.isArray(item.autoEstimateItems) ? item.autoEstimateItems : [];
+                } catch {}
                 return (
                   <View style={s.histCard}>
                     <View style={s.histCardTop}>
                       <View style={{ flex: 1 }}>
                         <Text style={s.histCardName}>{item.customerName}</Text>
-                        <Text style={s.histCardPhone}>{item.customerPhone}</Text>
+                        <Text style={s.histCardPhone}>{item.phoneNumber}</Text>
                       </View>
                       <View style={[s.statusBadge, { backgroundColor: meta.bg }]}>
                         <Text style={[s.statusBadgeText, { color: meta.color }]}>{meta.label}</Text>
@@ -447,8 +450,8 @@ export default function TechEstimateScreen() {
                         )}
                       </View>
                     )}
-                    {!!item.requestMemo && (
-                      <Text style={s.histMemo}>📝 {item.requestMemo}</Text>
+                    {!!item.techRequestNote && (
+                      <Text style={s.histMemo}>📝 {item.techRequestNote}</Text>
                     )}
                     <Text style={s.histDate}>보고: {fmtDate(item.sentAt)}</Text>
                   </View>

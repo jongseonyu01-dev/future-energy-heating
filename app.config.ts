@@ -21,10 +21,8 @@ const bundleId =
       return /^[a-zA-Z]/.test(segment) ? segment : "x" + segment;
     })
     .join(".") || "space.manus.app";
-// Extract timestamp from bundle ID and prefix with "manus" for deep link scheme
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
-const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
-const schemeFromBundleId = `manus${timestamp}`;
+// constants/oauth.ts의 OAuth callback scheme과 반드시 같은 값을 사용한다.
+const deepLinkScheme = "manusfutureenergyheating";
 
 const env = {
   // App branding - update these values directly (do not use env vars)
@@ -33,7 +31,7 @@ const env = {
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
   logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-KjRgngG4L8kpqAHbUhB3yC.png",
-  scheme: schemeFromBundleId,
+  scheme: deepLinkScheme,
   iosBundleId: bundleId,
   androidPackage: bundleId,
 };
@@ -42,7 +40,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.13",
+  version: "1.1.14",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,7 +48,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "13",
+    buildNumber: "14",
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -60,11 +58,13 @@ const config: ExpoConfig = {
       NSCameraUsageDescription: "고장 사진 첨부를 위해 카메라 접근 권한이 필요합니다.",
       NSPhotoLibraryUsageDescription: "고장 사진 첨부를 위해 사진 접근 권한이 필요합니다.",
       NSPhotoLibraryAddUsageDescription: "작업 완료 사진을 저장하기 위해 사진 저장 권한이 필요합니다.",
-      NSMicrophoneUsageDescription: "음성 메모 기능을 위해 마이크 접근 권한이 필요합니다."
+      NSMicrophoneUsageDescription: "음성 메모 기능을 위해 마이크 접근 권한이 필요합니다.",
+      // lib/navigation.ts에서 설치 여부를 확인하는 지도 앱 URL scheme
+      LSApplicationQueriesSchemes: ["kakaomap", "nmap", "tmap"],
     }
   },
   android: {
-    versionCode: 24,
+    versionCode: 25,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
