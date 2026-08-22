@@ -6,7 +6,7 @@ on:
       build_id:
         description: Existing successful EAS iOS build ID
         required: false
-        default: ba73a88d-dd5f-4c90-b5ec-9823e3020ff4
+        default: 30183596-9e7d-4031-be2e-2e5cab1e6bc8
   push:
     branches:
       - main
@@ -49,7 +49,7 @@ jobs:
         run: |
           BUILD_ID="$REQUESTED_BUILD_ID"
           if [ -z "$BUILD_ID" ]; then
-            BUILD_ID="ba73a88d-dd5f-4c90-b5ec-9823e3020ff4"
+            BUILD_ID="30183596-9e7d-4031-be2e-2e5cab1e6bc8"
           fi
 
           eas submit \
