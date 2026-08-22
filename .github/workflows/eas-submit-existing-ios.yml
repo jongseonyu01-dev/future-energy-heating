@@ -1,0 +1,61 @@
+name: Submit existing iOS build to TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Existing successful EAS iOS build ID
+        required: false
+        default: ba73a88d-dd5f-4c90-b5ec-9823e3020ff4
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/eas-submit-existing-ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit existing iOS build
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[submit-only]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.12.0"
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: EAS CLI 설치
+        run: npm install -g eas-cli@latest
+
+      - name: 기존 빌드를 TestFlight에 제출
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          REQUESTED_BUILD_ID: ${{ inputs.build_id }}
+        run: |
+          BUILD_ID="$REQUESTED_BUILD_ID"
+          if [ -z "$BUILD_ID" ]; then
+            BUILD_ID="ba73a88d-dd5f-4c90-b5ec-9823e3020ff4"
+          fi
+
+          eas submit \
+            --platform ios \
+            --profile testflight \
+            --id "$BUILD_ID" \
+            --non-interactive \
+            --wait \
+            --what-to-test "기사 앱 가입·휴대폰 인증, 배정 작업 조회, 견적 작성 및 iPhone 호환 개선"
