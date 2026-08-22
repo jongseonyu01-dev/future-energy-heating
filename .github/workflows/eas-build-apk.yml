@@ -136,4 +136,4 @@ jobs:
           VERSION_CODE: ${{ steps.app.outputs.version_code }}
         run: |
           TAG="android-v${VERSION_NAME}-${VERSION_CODE}"
-          gh release view "$TAG" --json tagName,isLatest,assets
+          gh release view "$TAG" --json tagName,assets
