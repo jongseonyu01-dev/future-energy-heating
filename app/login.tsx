@@ -44,6 +44,7 @@ export default function LoginScreen() {
   const [suCode, setSuCode] = useState("");
   const [suCodeSent, setSuCodeSent] = useState(false);
   const [suVerified, setSuVerified] = useState(false);
+  const [suSignupGrant, setSuSignupGrant] = useState("");
   const [suLoginId, setSuLoginId] = useState("");
   const [suPw, setSuPw] = useState("");
   const [suPw2, setSuPw2] = useState("");
@@ -193,6 +194,7 @@ export default function LoginScreen() {
     setSuCode("");
     setSuCodeSent(false);
     setSuVerified(false);
+    setSuSignupGrant("");
     clearMsg();
   };
 
@@ -201,6 +203,7 @@ export default function LoginScreen() {
     if (!suPhone.trim()) { setError("휴대전화 번호를 입력해주세요."); return; }
     setSuCode("");
     setSuVerified(false);
+    setSuSignupGrant("");
     sendCodeMutation.mutate(
       { phoneNumber: suPhone.trim(), purpose: "signup" },
       {
@@ -224,6 +227,13 @@ export default function LoginScreen() {
       {
         onSuccess: (r: any) => {
           if (r?.success) {
+            const signupGrant = String(r?.signupGrant || "");
+            if (!signupGrant) {
+              setSuVerified(false);
+              setError("가입 인증 정보를 받지 못했습니다. 인증번호를 다시 요청해 주세요.");
+              return;
+            }
+            setSuSignupGrant(signupGrant);
             setSuVerified(true);
             setInfo("휴대폰 인증이 완료되었습니다.");
           } else {
@@ -242,6 +252,7 @@ export default function LoginScreen() {
     if (suPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     if (suPw !== suPw2) { setError("비밀번호가 일치하지 않습니다."); return; }
     if (!suVerified) { setError("휴대폰 인증을 먼저 완료해주세요."); return; }
+    if (!suSignupGrant) { setError("휴대폰 인증이 만료되었습니다. 다시 인증해 주세요."); return; }
     registerTechnicianMutation.mutate(
       ({
         loginId: suLoginId.trim(),
@@ -249,6 +260,7 @@ export default function LoginScreen() {
         name: suName.trim(),
         phoneNumber: suPhone.trim(),
         signupChannel: "technician_app_v1",
+        signupGrant: suSignupGrant,
       } as any),
       {
         onSuccess: (r: any) => {
@@ -458,6 +470,7 @@ export default function LoginScreen() {
                       onChangeText={(value) => {
                         setSuCode(value.replace(/[^0-9]/g, ""));
                         setSuVerified(false);
+                        setSuSignupGrant("");
                       }}
                       onFocus={handleFocus}
                       placeholder="인증번호 6자리"
