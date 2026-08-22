@@ -1,5 +1,5 @@
-name: EAS APK Build (production-apk)
-# 수동 실행 또는 main 브랜치 푸시 시 자동 실행
+name: EAS APK Build and Publish (production-apk)
+
 on:
   workflow_dispatch:
     inputs:
@@ -20,15 +20,20 @@ on:
       - "app.config.ts"
       - "eas.json"
       - ".github/workflows/eas-build-apk.yml"
+
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: EAS Android APK Build
+    name: EAS Android APK Build and Publish
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[submit-only]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - name: 소스 체크아웃
         uses: actions/checkout@v4
+
       - name: Node.js 22 설정
         uses: actions/setup-node@v4
         with:
@@ -38,33 +43,97 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: "9.12.0"
+
       - name: 의존성 설치
         run: pnpm install --frozen-lockfile
+
+      - name: 앱 버전 확인
+        id: app
+        run: |
+          mkdir -p artifacts
+          pnpm exec expo config --type public --json > artifacts/expo-config.json
+          node -e '
+            const fs = require("fs");
+            const config = JSON.parse(fs.readFileSync("artifacts/expo-config.json", "utf8"));
+            const versionName = String(config.version || "");
+            const versionCode = Number(config.android && config.android.versionCode);
+            if (!/^\d+\.\d+\.\d+$/.test(versionName) || !Number.isInteger(versionCode) || versionCode < 1) {
+              throw new Error("유효한 Android 버전 정보를 찾을 수 없습니다.");
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "version_name=" + versionName + "\nversion_code=" + versionCode + "\n");
+          '
+
       - name: EAS CLI 설치
         run: npm install -g eas-cli@latest
+
       - name: EAS 로컬 APK 빌드
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          mkdir -p artifacts
           eas build \
             --platform android \
             --profile ${{ github.event.inputs.profile || 'production-apk' }} \
             --local \
             --non-interactive \
             --freeze-credentials \
-            --output ./artifacts/future-energy-heating-v1.1.14.apk
+            --output ./artifacts/future-energy-heating.apk
+
+      - name: 릴리스 메타데이터 생성
+        env:
+          VERSION_NAME: ${{ steps.app.outputs.version_name }}
+          VERSION_CODE: ${{ steps.app.outputs.version_code }}
+        run: |
+          SHA256="$(sha256sum artifacts/future-energy-heating.apk | awk '{print $1}')"
+          FILE_SIZE="$(stat -c%s artifacts/future-energy-heating.apk)"
+          PUBLISHED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          SHA256="$SHA256" FILE_SIZE="$FILE_SIZE" PUBLISHED_AT="$PUBLISHED_AT" node -e '
+            const fs = require("fs");
+            const metadata = {
+              schemaVersion: 1,
+              appId: "driver",
+              versionName: process.env.VERSION_NAME,
+              versionCode: Number(process.env.VERSION_CODE),
+              minSupportedVersionCode: 1,
+              sha256: process.env.SHA256,
+              fileSize: Number(process.env.FILE_SIZE),
+              releaseNotes: "기사앱 v" + process.env.VERSION_NAME + " 최신 안정화 버전",
+              publishedAt: process.env.PUBLISHED_AT
+            };
+            fs.writeFileSync("artifacts/android-release.json", JSON.stringify(metadata, null, 2) + "\n");
+          '
+
       - name: APK 산출물 보관
         uses: actions/upload-artifact@v4
         with:
-          name: future-energy-heating-v1.1.14-android
-          path: artifacts/future-energy-heating-v1.1.14.apk
+          name: future-energy-heating-v${{ steps.app.outputs.version_name }}-android
+          path: artifacts/future-energy-heating.apk
           if-no-files-found: error
           retention-days: 30
-      - name: 빌드 완료 안내
+
+      - name: 홈페이지용 공개 APK 릴리스 게시
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.app.outputs.version_name }}
+          VERSION_CODE: ${{ steps.app.outputs.version_code }}
         run: |
-          echo "=========================================="
-          echo "✅ Android APK 로컬 빌드가 완료됐습니다."
-          echo ""
-          echo "📱 이 GitHub Actions 실행의 Artifacts에서 APK를 다운로드하세요."
-          echo "=========================================="
+          TAG="android-v${VERSION_NAME}-${VERSION_CODE}"
+          TITLE="퓨처에너지테크 기사앱 Android v${VERSION_NAME} (${VERSION_CODE})"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/future-energy-heating.apk#future-energy-heating.apk --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file artifacts/android-release.json --latest
+          else
+            gh release create "$TAG" \
+              artifacts/future-energy-heating.apk#future-energy-heating.apk \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file artifacts/android-release.json \
+              --latest
+          fi
+
+      - name: 빌드·게시 완료 확인
+        env:
+          VERSION_NAME: ${{ steps.app.outputs.version_name }}
+          VERSION_CODE: ${{ steps.app.outputs.version_code }}
+        run: |
+          TAG="android-v${VERSION_NAME}-${VERSION_CODE}"
+          gh release view "$TAG" --json tagName,isLatest,assets
