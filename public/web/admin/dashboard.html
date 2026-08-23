@@ -949,15 +949,41 @@
       window.location.href = window.location.origin + '/web/login.html';
       return;
     }
+    if (!normalizeStoredAuthToken(user)) {
+      alert('로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.');
+      doLogout();
+      return;
+    }
     document.getElementById('sidebarUsername').textContent = user.name || user.username || '관리자';
   }
 
-  // 센서 API 호출용 인증 헤더 (HMAC 토큰: Bearer <userId>:<token>)
+  // 신규 token(userId:signature)과 레거시 token(signature)을 정확히 한 번만 정규화한다.
+  function normalizeStoredAuthToken(authUser) {
+    if (!authUser || typeof authUser !== 'object') return null;
+    const userIdText = String(authUser.userId ?? '').trim();
+    if (!/^[1-9]\d*$/.test(userIdText)) return null;
+    const numericUserId = Number(userIdText);
+    if (!Number.isSafeInteger(numericUserId) || String(numericUserId) !== userIdText) return null;
+
+    const rawToken = typeof authUser.token === 'string' ? authUser.token.trim() : '';
+    const fullToken = rawToken.match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+    if (fullToken) {
+      if (fullToken[1] !== userIdText) return null;
+      return userIdText + ':' + fullToken[2].toLowerCase();
+    }
+    if (/^[a-f0-9]{64}$/i.test(rawToken)) {
+      return userIdText + ':' + rawToken.toLowerCase();
+    }
+    return null;
+  }
+
+  // HMAC 토큰: Authorization: Bearer <userId>:<signature>
   function authHeaders(extra) {
     const h = Object.assign({}, extra || {});
-    if (user && user.userId && user.token) {
-      h['Authorization'] = 'Bearer ' + user.userId + ':' + user.token;
-    }
+    delete h.Authorization;
+    delete h.authorization;
+    const token = normalizeStoredAuthToken(user);
+    if (token) h['Authorization'] = 'Bearer ' + token;
     return h;
   }
 
@@ -1023,7 +1049,7 @@
       const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
       const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => k !== '_mutation' && k !== '_query' && k !== '_dummy')) : {};
       let url = API + '/' + proc;
-      let opts = { headers: { 'Content-Type': 'application/json' } };
+      let opts = { headers: authHeaders({ 'Content-Type': 'application/json' }) };
       if (!isMutation) {
         url += '?input=' + encodeURIComponent(JSON.stringify({ json: cleanInput }));
         opts.method = 'GET';
@@ -1769,7 +1795,7 @@
       : { json: { name, code, region, phoneNumber: phone, address } };
     const res = await fetch(API + (isEdit ? '/branch.update' : '/branch.create'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body)
     });
     const data = await res.json();
@@ -1788,7 +1814,7 @@
     if (!confirm(`이 지사를 ${label}하시겠습니까?`)) return;
     const res = await fetch(API + '/branch.update', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('token') },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ json: { id: parseInt(id), isActive: newActive } })
     });
     const data = await res.json();
@@ -2030,7 +2056,9 @@
   async function loadTracking() {
     try {
       const apiBase = getApiBase();
-      const res = await fetch(apiBase + '/api/location/active');
+      const res = await fetch(apiBase + '/api/location/active', {
+        headers: authHeaders(),
+      });
       if (!res.ok) throw new Error('요청 실패');
       const { sessions } = await res.json();
       const list = document.getElementById('tracking-list');
@@ -2079,12 +2107,18 @@
 
   // 전화 접수 고객 위치 공유 시작
   async function startManualTracking() {
+    const resultEl = document.getElementById('manual-tracking-result');
+    const requestId = Number(document.getElementById('manual-request-id')?.value || 0);
+    const technicianId = Number(document.getElementById('manual-technician-id')?.value || 0);
+    if (!requestId || !technicianId) {
+      resultEl.innerHTML = '<div style="background:#FFF7ED;color:#9A3412;border-radius:8px;padding:10px;font-size:13px">수동 위치 공유는 보안상 지원하지 않습니다. 기사 앱의 배정된 접수에서 출발 버튼을 사용해 주세요.</div>';
+      return;
+    }
     const customerName = (document.getElementById('manual-customer-name').value || '').trim();
     const customerPhone = (document.getElementById('manual-customer-phone').value || '').trim();
     const technicianName = (document.getElementById('manual-tech-name').value || '').trim();
     const technicianPhone = (document.getElementById('manual-tech-phone').value || '').trim();
     const customerAddress = (document.getElementById('manual-customer-address').value || '').trim();
-    const resultEl = document.getElementById('manual-tracking-result');
     if (!customerName || !customerPhone || !technicianName) {
       resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">고객명, 고객 전화번호, 담당 기사명은 필수입니다.</div>';
       return;
@@ -2094,8 +2128,8 @@
       const apiBase = getApiBase();
       const res = await fetch(apiBase + '/api/location/start-by-admin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerName, customerPhone, technicianName, technicianPhone, customerAddress }),
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ requestId, technicianId, customerName, customerPhone, technicianName, technicianPhone, customerAddress }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -2131,7 +2165,7 @@
       const apiBase = getApiBase();
       const res = await fetch(apiBase + '/api/location/stop-by-admin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ token, reason: '업무취소' }),
       });
       const data = await res.json();
@@ -2248,11 +2282,33 @@
     const btn = document.getElementById('assignSubmitBtn');
     btn.disabled = true; btn.textContent = '처리 중...';
     try {
-      // 1) 기사 배정 (알림은 일정확정에서 일괄 발송하므로 여기서는 notify=false)
-      await trpc('repair.assignTechnician', { id: _assignReqId, technicianId: techId, technicianName: techName, scheduledDate: date, scheduledTime: time, notify: false });
-      // 2) 일정 확정 + 고객 안내
-      await trpc('repair.updateSchedule', { id: _assignReqId, scheduledDate: date, scheduledTime: time, notify });
-      alert('기사 배정과 일정 확정이 완료되었습니다.' + (notify ? '\n고객에게 안내를 발송했습니다.' : ''));
+      const result = await trpc('repair.assignTechnician', {
+        id: _assignReqId,
+        technicianId: techId,
+        technicianName: techName,
+        scheduledDate: date,
+        scheduledTime: time,
+        notify,
+      });
+      if (result === null) return;
+      let noticeMessage = '';
+      if (notify) {
+        if (result.notificationResult === 'SUCCESS' || result.notificationResult === 'REQUESTED') {
+          noticeMessage = result.notificationRetried
+            ? '\n이전 발송 실패 건을 재시도해 고객 안내 발송이 접수되었습니다.'
+            : '\n고객 안내 발송이 접수되었습니다.';
+        } else if (result.notificationResult === 'FAILED' || result.notificationResult === 'SKIPPED') {
+          noticeMessage = '\n배정은 저장되었지만 고객 안내 발송에 실패했습니다.' +
+            (result.notificationError ? '\n사유: ' + result.notificationError : '');
+        } else if (result.notificationSkipped === 'already_sent') {
+          noticeMessage = '\n이미 성공한 동일 안내가 있어 중복 발송하지 않았습니다.';
+        } else if (result.notificationSkipped === 'pending') {
+          noticeMessage = '\n동일 고객 안내가 이미 처리 중이어서 중복 발송하지 않았습니다.';
+        } else {
+          noticeMessage = '\n기존 배정·일정과 같아 고객 안내는 중복 발송하지 않았습니다.';
+        }
+      }
+      alert('기사 배정과 일정 확정이 완료되었습니다.' + noticeMessage);
       closeAssignModal();
       loadCurrentPanel();
     } catch (e) {
@@ -2802,7 +2858,7 @@
     try {
       const res = await fetch(API + '/auth.listAccounts', {
         method: 'GET',
-        headers: buildAuthHeaders()
+        headers: authHeaders()
       });
       const data = await res.json();
       const accounts = (data?.result?.data?.json || []);
@@ -2889,7 +2945,7 @@
     try {
       const res = await fetch(API + '/auth.setActive', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ json: { userId: parseInt(userId), isActive: true } })
       });
       const data = await res.json();
@@ -2911,7 +2967,7 @@
     try {
       const res = await fetch(API + '/auth.setActive', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ json: { userId: parseInt(userId), isActive: false } })
       });
       const data = await res.json();
@@ -2933,7 +2989,7 @@
       const params = encodeURIComponent(JSON.stringify({ json: { loginId } }));
       const res = await fetch(API + '/auth.getTechnicianTestInfo?input=' + params, {
         method: 'GET',
-        headers: buildAuthHeaders()
+        headers: authHeaders()
       });
       const data = await res.json();
       const info = data?.result?.data?.json;
@@ -3002,7 +3058,7 @@
       const params = encodeURIComponent(JSON.stringify({ json: { loginId } }));
       const infoRes = await fetch(API + '/auth.getTechnicianTestInfo?input=' + params, {
         method: 'GET',
-        headers: buildAuthHeaders()
+        headers: authHeaders()
       });
       const infoData = await infoRes.json();
       const info = infoData?.result?.data?.json;
@@ -3010,7 +3066,7 @@
       // 비밀번호 재발급
       const resetRes = await fetch(API + '/auth.resetTempPassword', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ json: { userId: info.userId, tempPassword: newPw } })
       });
       const resetData = await resetRes.json();
@@ -3045,7 +3101,7 @@
 
   // 페이지 로드 시 승인 대기 배지 업데이트
   (function checkPendingBadge() {
-    fetch(API + '/auth.listAccounts', { method: 'GET', headers: buildAuthHeaders() })
+    fetch(API + '/auth.listAccounts', { method: 'GET', headers: authHeaders() })
       .then(r => r.json())
       .then(data => {
         const accounts = data?.result?.data?.json || [];

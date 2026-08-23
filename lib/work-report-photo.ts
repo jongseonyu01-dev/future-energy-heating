@@ -1,8 +1,76 @@
+import { API_BASE_URL } from "../constants/api-origin";
+
 export const MAX_WORK_REPORT_PHOTO_BYTES = 2 * 1024 * 1024;
 export const MAX_WORK_REPORT_PHOTO_WIDTH = 1600;
 export const FALLBACK_WORK_REPORT_PHOTO_WIDTH = 1024;
 
 export type PhotoResizeAction = { resize: { width: number } | { height: number } };
+
+const STORAGE_PHOTO_PATH = /^\/manus-storage\/[A-Za-z0-9/_.-]+$/;
+const SIGNED_PHOTO_PATH = /^\/api\/work-report-photo\/([1-9]\d*)\/(before|after)$/;
+const OFFICIAL_UNICODE_ORIGIN = "https://퓨처에너지테크.kr";
+
+function stripOfficialPhotoOrigin(value: string): string | null {
+  if (value.startsWith("/")) return value;
+  for (const origin of [API_BASE_URL, OFFICIAL_UNICODE_ORIGIN]) {
+    if (value.startsWith(`${origin}/`)) return value.slice(origin.length);
+  }
+  return null;
+}
+
+function isValidSignedPhotoQuery(query: string): boolean {
+  const pairs = query.split("&");
+  if (pairs.length !== 5) return false;
+  const params = new Map<string, string>();
+  for (const pair of pairs) {
+    const separator = pair.indexOf("=");
+    if (separator <= 0 || pair.indexOf("=", separator + 1) !== -1) return false;
+    const key = pair.slice(0, separator);
+    const value = pair.slice(separator + 1);
+    if (params.has(key)) return false;
+    params.set(key, value);
+  }
+  if ([...params.keys()].sort().join(",") !== "exp,sig,tid,v,viewer") return false;
+  const exp = params.get("exp") ?? "";
+  const version = params.get("v") ?? "";
+  const technicianId = params.get("tid") ?? "";
+  const viewerUserId = params.get("viewer") ?? "";
+  const signature = params.get("sig") ?? "";
+  if (!/^\d{10}$/.test(exp)) return false;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const expirySeconds = Number(exp);
+  if (expirySeconds < nowSeconds - 30 || expirySeconds > nowSeconds + 16 * 60) return false;
+  return /^[A-Za-z0-9_-]{43}$/.test(version)
+    && /^[A-Za-z0-9_-]{43}$/.test(signature)
+    && /^[1-9]\d*$/.test(technicianId)
+    && /^[1-9]\d*$/.test(viewerUserId)
+    && Number.isSafeInteger(Number(technicianId))
+    && Number.isSafeInteger(Number(viewerUserId));
+}
+
+/** 네이티브 Image가 읽을 수 있도록 내부 상대 URL만 공식 API origin에 결합한다. */
+export function workReportPhotoDisplayUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("#")) return null;
+  const pathAndQuery = stripOfficialPhotoOrigin(trimmed);
+  if (!pathAndQuery) return null;
+  const queryIndex = pathAndQuery.indexOf("?");
+  const path = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  const query = queryIndex === -1 ? null : pathAndQuery.slice(queryIndex + 1);
+  if (
+    path.includes("..") ||
+    path.includes("//") ||
+    (query !== null && query.includes("?"))
+  ) return null;
+  if (STORAGE_PHOTO_PATH.test(path) && query === null) {
+    return `${API_BASE_URL}${path}`;
+  }
+  if (SIGNED_PHOTO_PATH.test(path) && query !== null && isValidSignedPhotoQuery(query)) {
+    return `${API_BASE_URL}${path}?${query}`;
+  }
+  return null;
+}
 
 export function resizeActionForDimensions(
   width: number | null | undefined,

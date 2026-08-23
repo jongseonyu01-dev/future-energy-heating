@@ -1,11 +1,13 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
+import { API_BASE_URL } from "./api-origin";
+
+export { API_BASE_URL } from "./api-origin";
 
 // ⚠️ API 서버 주소 — 공식 루트 도메인의 퓨니코드 주소로 고정 (정적 상수)
 // www 주소는 루트 도메인으로 308 이동되며, 네이티브 fetch가 다른 origin으로
 // 이동할 때 Authorization 헤더가 제거될 수 있으므로 API에는 사용하지 않는다.
 // 런타임 변환(domainToASCII, punycode 등) 절대 사용 금지
-export const API_BASE_URL = "https://xn--h50b270bp0ceuddugnobx2m.kr";
 
 const env = {
   portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL || "",

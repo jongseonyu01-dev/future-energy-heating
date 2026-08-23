@@ -19,6 +19,8 @@ import {
   friendlySmsError,
   buildBranchAssignedMessage,
   buildScheduleConfirmedMessage,
+  buildTechnicianReassignedMessage,
+  getScheduleNoticeKind,
   buildTechnicianArrivedMessage,
   buildWorkCompletedMessage,
   buildEstimateMessage,
@@ -28,10 +30,12 @@ import {
   buildEstimateApprovedCustomerMessage,
   buildScheduleRequestAdminMessage,
   buildInquiryAdminMessage,
+  buildTechnicianDepartedMessage,
 } from "./notification.js";
 import { dispatchLeakSms } from "./leak-sms.js";
-import { buildTechnicianDepartedMessage } from "./notification.js";
-import { storagePut } from "./storage.js";
+import { storageDelete, storageKeyFromPublicUrl, storagePut } from "./storage.js";
+import { deliverWorkflowNotificationClaim } from "./workflow-notification.js";
+import { geocodeKoreanAddress } from "./kakao-geocode.js";
 
 // 알림 통합 발송 + 이력 기록 헬퍼 (알림톡 우선 → 실패 시 문자 대체)
 async function notifyAndLog(params: {
@@ -54,10 +58,215 @@ async function notifyAndLog(params: {
   return r;
 }
 
+async function notifyClaimedAndLog(params: {
+  claimId: number;
+  requestId: number;
+  phoneNumber: string;
+  messageType: string;
+  content: string;
+}): Promise<{ channel: string; result: string; fallbackUsed: boolean; errorMessage?: string }> {
+  let notification: Awaited<ReturnType<typeof sendNotification>>;
+  try {
+    notification = await sendNotification(params.phoneNumber, params.content);
+  } catch (error) {
+    notification = {
+      channel: "SMS",
+      result: "FAILED",
+      fallbackUsed: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+  try {
+    await db.completeRepairNotificationClaim({
+      claimId: params.claimId,
+      messageType: params.messageType,
+      content: params.content,
+      channel: notification.channel as "SMS" | "ALIMTALK",
+      result: notification.result,
+      errorMessage: notification.errorMessage,
+      fallbackUsed: notification.fallbackUsed,
+    });
+  } catch (logError) {
+    console.error("[notification] claimed delivery log update failed", logError);
+  }
+  return notification;
+}
+
+type AssignmentNotificationOutcome = {
+  notificationResult?: string;
+  notificationError?: string;
+  notificationRetried: boolean;
+  notificationSkipped?: "unchanged" | "already_sent" | "pending";
+};
+
+async function deliverEstimateScheduleNotificationClaim(
+  claim: db.EstimateScheduleNotificationClaim,
+): Promise<AssignmentNotificationOutcome & { accepted: boolean }> {
+  if (!claim.claimed) {
+    return {
+      accepted: claim.reason === "already_sent",
+      notificationRetried: false,
+      notificationSkipped: claim.reason === "already_sent" ? "already_sent" : "pending",
+    };
+  }
+  let result: Awaited<ReturnType<typeof sendNotification>>;
+  try {
+    result = await sendNotification(claim.phoneNumber, claim.content);
+  } catch (error) {
+    result = {
+      channel: "SMS",
+      result: "FAILED",
+      fallbackUsed: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+  try {
+    await db.completeEstimateScheduleNotificationClaim({
+      claimId: claim.claimId,
+      result: result.result,
+    });
+  } catch {
+    return {
+      accepted: false,
+      notificationResult: result.result,
+      notificationError: "고객 안내 발송 결과를 저장하지 못했습니다. 다시 시도해 주세요.",
+      notificationRetried: claim.retried,
+    };
+  }
+  const accepted = result.result === "SUCCESS" || result.result === "REQUESTED";
+  return {
+    accepted,
+    notificationResult: result.result,
+    notificationError: accepted ? undefined : result.errorMessage,
+    notificationRetried: claim.retried,
+  };
+}
+
+/** assignTechnicianAuthorized의 durable claim을 사용하는 모든 진입점의 공통 발송. */
+async function deliverAssignmentNotification(params: {
+  assignment: Awaited<ReturnType<typeof db.assignTechnicianAuthorized>>;
+  technicianId: number;
+  notify: boolean;
+}): Promise<AssignmentNotificationOutcome> {
+  const { assignment } = params;
+  if (!params.notify) return { notificationRetried: false };
+
+  const firstAssignment = assignment.previousTechnicianId === null;
+  const sameTechnician = assignment.previousTechnicianId === params.technicianId;
+  const scheduleChanged =
+    assignment.previousScheduledDate !== assignment.scheduledDate ||
+    assignment.previousScheduledTime !== assignment.scheduledTime;
+  const scheduleNoticeKind = firstAssignment
+    ? (assignment.scheduledDate ? "confirmed" : "none")
+    : !sameTechnician && scheduleChanged
+      ? "changed"
+      : sameTechnician
+        ? getScheduleNoticeKind(
+            assignment.previousScheduledDate,
+            assignment.previousScheduledTime,
+            assignment.scheduledDate,
+            assignment.scheduledTime,
+          )
+        : "unchanged";
+
+  let messageType: string;
+  let message: string;
+  const technicianReassigned = !firstAssignment && !sameTechnician;
+  if (technicianReassigned) {
+    messageType = scheduleChanged ? "일정변경" : "기사재배정";
+    message = buildTechnicianReassignedMessage(
+      assignment.request.customerName,
+      assignment.technicianName,
+      assignment.scheduledDate,
+      assignment.scheduledTime,
+      scheduleChanged,
+    );
+  } else if (assignment.scheduledDate) {
+    messageType = scheduleNoticeKind === "changed" ? "일정변경" : "일정확정";
+    message = buildScheduleConfirmedMessage(
+      assignment.request.customerName,
+      assignment.scheduledDate,
+      assignment.scheduledTime ?? "",
+      scheduleNoticeKind === "changed",
+    );
+  } else {
+    messageType = "기사배정";
+    message = buildStatusChangeMessage(
+      assignment.request.customerName,
+      assignment.request.requestNumber,
+      "방문예정",
+      assignment.technicianName,
+    );
+  }
+
+  const claim = assignment.notificationClaim;
+  if (claim?.claimed) {
+    const claimedMessageType = claim.retryMessageType ?? messageType;
+    const claimedMessage = claim.retryContent ?? message;
+    const notification = await notifyClaimedAndLog({
+      claimId: claim.claimId,
+      requestId: assignment.request.id,
+      phoneNumber: assignment.request.phoneNumber,
+      messageType: claimedMessageType,
+      content: claimedMessage,
+    });
+    return {
+      notificationResult: notification.result,
+      notificationError: notification.errorMessage,
+      notificationRetried: claim.retried,
+    };
+  }
+  if (claim) {
+    return {
+      notificationRetried: false,
+      notificationSkipped: claim.reason,
+    };
+  }
+  return { notificationRetried: false, notificationSkipped: "unchanged" };
+}
+
 // 추측 불가능한 긴 일회용 위치코드 생성 (256비트 = 43자 base64url)
 // 예: "Xa7kQ2..." (대소문자+숫자+-_, URL-safe)
 function generateTrackingToken(): string {
   return crypto.randomBytes(32).toString("base64url");
+}
+
+const OFFICIAL_TRACKING_ORIGIN = "https://퓨처에너지테크.kr";
+const MAX_WORK_REPORT_JPEG_BYTES = 8 * 1024 * 1024;
+const MAX_WORK_REPORT_JPEG_BASE64_LENGTH = Math.ceil(MAX_WORK_REPORT_JPEG_BYTES / 3) * 4 + 64;
+
+function buildPublicTrackingUrl(token: string): string {
+  return `${OFFICIAL_TRACKING_ORIGIN}/track/${encodeURIComponent(token)}`;
+}
+
+function decodeWorkReportJpeg(value: string): Buffer {
+  const dataUrlPrefix = "data:image/jpeg;base64,";
+  if (value.startsWith("data:") && !value.startsWith(dataUrlPrefix)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "JPEG 사진만 업로드할 수 있습니다." });
+  }
+  const rawBase64 = value.startsWith(dataUrlPrefix) ? value.slice(dataUrlPrefix.length) : value;
+  if (
+    !rawBase64 ||
+    rawBase64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(rawBase64)
+  ) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "사진 데이터가 올바르지 않습니다." });
+  }
+  const buffer = Buffer.from(rawBase64, "base64");
+  const canonicalInput = rawBase64.replace(/=+$/, "");
+  const canonicalDecoded = buffer.toString("base64").replace(/=+$/, "");
+  if (
+    buffer.length < 4 ||
+    buffer.length > MAX_WORK_REPORT_JPEG_BYTES ||
+    canonicalInput !== canonicalDecoded ||
+    buffer[0] !== 0xff ||
+    buffer[1] !== 0xd8 ||
+    buffer[buffer.length - 2] !== 0xff ||
+    buffer[buffer.length - 1] !== 0xd9
+  ) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "유효한 JPEG 사진이 아닙니다." });
+  }
+  return buffer;
 }
 
 // 증상 enum
@@ -78,7 +287,6 @@ const statusValues = [
   "방문예정",
   "기사확인대기",
   "기사확인완료",
-  "기사일정확인",
   "출발",
   "도착",
   "공사중",
@@ -147,18 +355,28 @@ function generateSafeUserId(seed: string): number {
 async function resolveCallerRole(ctx: any): Promise<{ userId: number; appRole: string; branchId: number | null } | null> {
   const authHeader = ctx?.req?.headers?.authorization || ctx?.req?.headers?.Authorization;
   if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
-    const parts = authHeader.slice(7).trim().split(":");
-    if (parts.length === 2) {
-      const userId = parseInt(parts[0], 10);
-      const token = parts[1];
-      if (!isNaN(userId) && token) {
+    const tokenMatch = authHeader.slice(7).trim().match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+    if (tokenMatch) {
+      const userId = Number(tokenMatch[1]);
+      const token = tokenMatch[2].toLowerCase();
+      if (Number.isSafeInteger(userId)) {
         const role = await db.getAppRole(userId);
-        if (role && role.isActive) {
+        if (role && role.isActive && role.passwordHash) {
           const expected = crypto
-            .createHmac("sha256", (role.passwordHash || "seed"))
+            .createHmac("sha256", role.passwordHash)
             .update(String(role.userId))
             .digest("hex");
-          if (expected === token) {
+          const actualBuffer = Buffer.from(token, "utf8");
+          const expectedBuffer = Buffer.from(expected, "utf8");
+          if (
+            actualBuffer.length === expectedBuffer.length &&
+            crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+          ) {
+            if (role.appRole === "branch_manager") {
+              const managedBranch = await db.getManagedActiveBranchByUserId(role.userId);
+              if (!managedBranch) return null;
+              return { userId: role.userId, appRole: role.appRole, branchId: managedBranch.id };
+            }
             return { userId: role.userId, appRole: role.appRole, branchId: role.branchId ?? null };
           }
         }
@@ -166,6 +384,201 @@ async function resolveCallerRole(ctx: any): Promise<{ userId: number; appRole: s
     }
   }
   return null;
+}
+
+async function requireActiveTechnician(ctx: any) {
+  const caller = await resolveCallerRole(ctx);
+  if (!caller) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+  }
+  if (caller.appRole !== "technician") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "기사 계정만 처리할 수 있습니다." });
+  }
+  const role = await db.getAppRole(caller.userId);
+  const technician = await db.resolveActiveTechnicianForUser(
+    caller.userId,
+    role?.phoneNumber,
+  );
+  if (!technician) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "활성 기사 계정을 확인할 수 없습니다." });
+  }
+  return { caller, technician };
+}
+
+async function requireCurrentTechnicianAssignment(ctx: any, requestId: number) {
+  const access = await requireActiveTechnician(ctx);
+  const request = await db.getRepairRequestById(requestId);
+  if (!request || request.isDeleted) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+  }
+  if (request.technicianId !== access.technician.id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "현재 본인에게 배정된 접수만 처리할 수 있습니다." });
+  }
+  return { ...access, request };
+}
+
+async function requireLocationSessionReadAccess(ctx: any, requestId: number) {
+  const caller = await resolveCallerRole(ctx);
+  if (!caller) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+  }
+  const request = await db.getRepairRequestById(requestId);
+  if (!request || request.isDeleted) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+  }
+  if (caller.appRole === "technician") {
+    const role = await db.getAppRole(caller.userId);
+    const technician = await db.resolveActiveTechnicianForUser(caller.userId, role?.phoneNumber);
+    if (
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted ||
+      request.technicianId !== technician.id
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "현재 본인에게 배정된 접수만 조회할 수 있습니다." });
+    }
+    return { caller, request, technician };
+  }
+  if (caller.appRole === "customer") {
+    const role = await db.getAppRole(caller.userId);
+    if (!role?.phoneNumber || normalizePhone(role.phoneNumber) !== normalizePhone(request.phoneNumber)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "본인 접수만 조회할 수 있습니다." });
+    }
+    return { caller, request, technician: null };
+  }
+  if (caller.appRole === "hq_admin") {
+    return { caller, request, technician: null };
+  }
+  if (caller.appRole === "branch_manager" && caller.branchId !== null && request.branchId === caller.branchId) {
+    return { caller, request, technician: null };
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "접수 조회 권한이 없습니다." });
+}
+
+async function requireLocationSessionMutationAccess(ctx: any, token: string) {
+  const caller = await resolveCallerRole(ctx);
+  if (!caller) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+  }
+  const session = await db.getLocationSessionByToken(token);
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "위치 세션을 찾을 수 없습니다." });
+  }
+  const request = await db.getRepairRequestById(session.requestId);
+  if (!request || request.isDeleted) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+  }
+  if (caller.appRole === "technician") {
+    const role = await db.getAppRole(caller.userId);
+    const technician = await db.resolveActiveTechnicianForUser(caller.userId, role?.phoneNumber);
+    if (
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted ||
+      session.technicianId !== technician.id ||
+      request.technicianId !== technician.id
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "현재 본인의 위치 세션만 처리할 수 있습니다." });
+    }
+    return { caller, request, session, technician };
+  }
+  if (caller.appRole === "hq_admin") {
+    return { caller, request, session, technician: null };
+  }
+  if (
+    caller.appRole === "branch_manager" &&
+    caller.branchId !== null &&
+    request.branchId === caller.branchId &&
+    session.branchId === caller.branchId
+  ) {
+    return { caller, request, session, technician: null };
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "위치 세션 처리 권한이 없습니다." });
+}
+
+async function requireManagerCaller(ctx: any) {
+  const caller = await resolveCallerRole(ctx);
+  if (!caller) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+  }
+  if (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "관리자 권한이 필요합니다." });
+  }
+  if (caller.appRole === "branch_manager" && caller.branchId === null) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "소속 지사를 확인할 수 없습니다." });
+  }
+  return caller;
+}
+
+function rethrowLocationMutationError(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message === "LOCATION_REQUEST_NOT_FOUND" || message === "LOCATION_SESSION_NOT_FOUND") {
+    throw new TRPCError({ code: "NOT_FOUND", message: "접수 또는 위치 세션을 찾을 수 없습니다." });
+  }
+  if (
+    message === "LOCATION_ASSIGNMENT_CHANGED" ||
+    message === "LOCATION_TECHNICIAN_NOT_ACTIVE" ||
+    message === "LOCATION_SESSION_MISMATCH" ||
+    message === "LOCATION_MANAGER_FORBIDDEN"
+  ) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "기사 배정 또는 위치 세션 정보가 변경되었습니다." });
+  }
+  if (message === "LOCATION_ALREADY_ARRIVED" || message === "LOCATION_SESSION_ENDED") {
+    throw new TRPCError({ code: "CONFLICT", message: "이미 도착했거나 종료된 방문입니다." });
+  }
+  if (message === "LOCATION_DELIVERY_PENDING") {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "앞선 출발 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요.",
+    });
+  }
+  throw error;
+}
+
+function rethrowRepairScheduleError(error: unknown): never {
+  if (error instanceof db.RepairScheduleAuthorizationError) {
+    if (error.reason === "not_found") {
+      throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+    }
+    if (error.reason === "invalid_technician") {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "활성 기사를 확인할 수 없습니다." });
+    }
+    if (error.reason === "report_exists") {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "작업 보고서가 등록된 접수는 다른 기사에게 재배정할 수 없습니다.",
+      });
+    }
+    if (error.reason === "terminal") {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "이미 완료된 접수는 기사 배정이나 방문 일정을 변경할 수 없습니다.",
+      });
+    }
+    if (error.reason === "delivery_pending") {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "앞선 고객 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요.",
+      });
+    }
+    throw new TRPCError({ code: "FORBIDDEN", message: "접수 처리 권한이 없습니다." });
+  }
+  throw error;
+}
+
+function canonicalCustomerAddress(request: Awaited<ReturnType<typeof db.getRepairRequestById>>): string {
+  if (!request) return "";
+  const area = request.roadAddress?.trim() || [
+    request.sido,
+    request.sigungu,
+    request.eupmyeondong,
+    request.apartmentName,
+  ].filter(Boolean).join(" ");
+  return [
+    area,
+    request.dong ? (/동$/.test(request.dong) ? request.dong : `${request.dong}동`) : "",
+    request.ho ? (/호$/.test(request.ho) ? request.ho : `${request.ho}호`) : "",
+  ].filter(Boolean).join(" ").slice(0, 200);
 }
 
 export const appRouter = router({
@@ -186,6 +599,9 @@ export const appRouter = router({
         if (!role.isActive) {
           return { success: false, error: "비활성화된 계정입니다. 관리자에게 문의하세요." };
         }
+        if (!role.passwordHash) {
+          return { success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." };
+        }
         const check = verifyPassword(input.password, role.passwordHash);
         if (!check.ok) {
           return { success: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." };
@@ -198,24 +614,42 @@ export const appRouter = router({
         if (input.source === "app" && (role.appRole === "hq_admin" || role.appRole === "branch_manager")) {
           return { success: false, blockedRole: role.appRole, error: "본사와 지사는 홈페이지 관리시스템을 이용해 주세요. https://퓨처에너지테크.kr" };
         }
+        // 토큰은 DB에 실제 저장된 해시와 반드시 같은 키로 서명한다.
+        // 레거시 업그레이드 성공 직후 stale role.passwordHash로 서명하면 즉시 401이 된다.
+        let tokenPasswordHash = role.passwordHash;
         // 레거시 해시로 로그인 성공 시 bcrypt로 자동 업그레이드
         if (check.isLegacy) {
-          try { await db.updateAppRoleFields(role.userId, { passwordHash: hashPassword(input.password) }); } catch {}
+          const upgradedPasswordHash = hashPassword(input.password);
+          try {
+            await db.updateAppRoleFields(role.userId, { passwordHash: upgradedPasswordHash });
+            tokenPasswordHash = upgradedPasswordHash;
+          } catch {
+            // 커넥션 오류가 commit 이후 발생했을 가능성까지 고려해 현재 DB 값을 재확인한다.
+            try {
+              const refreshedRole = await db.getAppRole(role.userId);
+              tokenPasswordHash = refreshedRole?.passwordHash || tokenPasswordHash;
+            } catch {}
+          }
         }
         // 권한별 부가정보
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          // technicians.userId = role.userId 로 조회한 technicians.id만 사용 (명시적 연결)
-          const techByUserId = await db.getTechnicianByUserId(role.userId);
-          if (techByUserId && techByUserId.isActive) {
-            technicianId = techByUserId.id;
-            if (techByUserId.branchId) branchId = techByUserId.branchId;
+          const technician = await db.resolveActiveTechnicianForUser(
+            role.userId,
+            role.phoneNumber,
+          );
+          if (!technician) {
+            return { success: false, error: "기사 계정과 기사 배정 정보를 연결할 수 없습니다. 본사에 문의하세요." };
           }
+          technicianId = technician.id;
+          if (technician.branchId) branchId = technician.branchId;
         } else if (role.appRole === "branch_manager") {
-          const allBranches = await db.getAllBranches();
-          const branch = allBranches.find(b => b.managerUserId === role.userId);
-          if (branch) branchId = branch.id;
+          const branch = await db.getManagedActiveBranchByUserId(role.userId);
+          if (!branch) {
+            return { success: false, error: "활성 소속 지사를 확인할 수 없습니다. 본사에 문의하세요." };
+          }
+          branchId = branch.id;
         }
         // 소속 지사명 조회 (화면 표시용)
         let branchName: string | null = null;
@@ -225,7 +659,7 @@ export const appRouter = router({
         }
         // 세션 토큰: userId:서명값 형식 (resolveCallerRole 및 context.ts HMAC 검증과 동일 형식)
         const sig = crypto
-          .createHmac("sha256", (role.passwordHash || "seed"))
+          .createHmac("sha256", tokenPasswordHash)
           .update(String(role.userId))
           .digest("hex");
         const token = `${role.userId}:${sig}`;
@@ -248,27 +682,31 @@ export const appRouter = router({
       .input(z.object({ userId: z.number(), token: z.string() }))
       .mutation(async ({ input }) => {
         const role = await db.getAppRole(input.userId);
-        if (!role || !role.isActive) return { success: false };
+        if (!role || !role.isActive || !role.passwordHash) return { success: false };
         const sig = crypto
-          .createHmac("sha256", (role.passwordHash || "seed"))
+          .createHmac("sha256", role.passwordHash)
           .update(String(role.userId))
           .digest("hex");
         // userId:서명값 형식과 서명값만 형식 모두 지원 (하위 호환)
-        const tokenSig = input.token.includes(":") ? input.token.split(":")[1] : input.token;
-        if (sig !== tokenSig) return { success: false };
+        const fullTokenMatch = input.token.match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+        const legacySignatureMatch = input.token.match(/^[a-f0-9]{64}$/i);
+        if (fullTokenMatch && Number(fullTokenMatch[1]) !== role.userId) return { success: false };
+        const tokenSig = fullTokenMatch?.[2] ?? legacySignatureMatch?.[0];
+        if (!tokenSig || sig !== tokenSig.toLowerCase()) return { success: false };
         let technicianId: number | null = null;
         let branchId: number | null = role.branchId ?? null;
         if (role.appRole === "technician") {
-          // technicians.userId = role.userId 로 조회한 technicians.id만 사용 (명시적 연결)
-          const techByUserId3 = await db.getTechnicianByUserId(role.userId);
-          if (techByUserId3 && techByUserId3.isActive) {
-            technicianId = techByUserId3.id;
-            if (techByUserId3.branchId && !branchId) branchId = techByUserId3.branchId;
-          }
+          const technician = await db.resolveActiveTechnicianForUser(
+            role.userId,
+            role.phoneNumber,
+          );
+          if (!technician) return { success: false };
+          technicianId = technician.id;
+          if (technician.branchId && !branchId) branchId = technician.branchId;
         } else if (role.appRole === "branch_manager") {
-          const allBranches = await db.getAllBranches();
-          const branch = allBranches.find(b => b.managerUserId === role.userId);
-          if (branch) branchId = branch.id;
+          const branch = await db.getManagedActiveBranchByUserId(role.userId);
+          if (!branch) return { success: false };
+          branchId = branch.id;
         }
         let branchName: string | null = null;
         if (branchId) {
@@ -978,7 +1416,8 @@ export const appRouter = router({
         const callerRole = (ctx.user as any).appRole;
         const allowedAdminRoles = ['hq_admin', 'admin', 'headquarters', 'branch_manager', 'staff'];
         if (!allowedAdminRoles.includes(callerRole)) {
-          const tech = await db.getTechnicianByUserId(ctx.user.id);
+          const roleRecord = await db.getAppRole(ctx.user.id);
+          const tech = await db.resolveActiveTechnicianForUser(ctx.user.id, roleRecord?.phoneNumber);
           if (!tech || req.technicianId !== tech.id) {
             throw new TRPCError({ code: 'FORBIDDEN', message: '본인 배정 작업만 조회할 수 있습니다.' });
           }
@@ -1001,121 +1440,164 @@ export const appRouter = router({
       .query(async ({ input }) => db.getRepairRequestsByBranch(input.branchId)),
 
         // 기사별 배정 목록 (기사용 - technicianId 기준) - 인증 필수
-    listByTechnician: publicProcedure
+    listByTechnician: protectedProcedure
       .input(z.object({ technicianId: z.number() }))
       .query(async ({ input, ctx }) => {
-        if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' });
-        const role = (ctx.user as any).appRole;
-        const allowedAdminRoles = ['hq_admin', 'admin', 'headquarters', 'branch_manager', 'staff'];
-        if (!allowedAdminRoles.includes(role)) {
-          const tech = await db.getTechnicianByUserId(ctx.user.id);
-          if (!tech || tech.id !== input.technicianId) {
-            throw new TRPCError({ code: 'FORBIDDEN', message: '본인 작업만 조회할 수 있습니다.' });
-          }
+        const caller = await resolveCallerRole(ctx);
+        if (!caller) throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+        if (caller.appRole === "technician") {
+          const roleRecord = await db.getAppRole(ctx.user.id);
+          const tech = await db.resolveActiveTechnicianForUser(ctx.user.id, roleRecord?.phoneNumber);
+          if (!tech) throw new TRPCError({ code: "FORBIDDEN", message: "기사 정보를 확인할 수 없습니다." });
+          // 기사 caller에서는 저장된 구버전 client ID를 신뢰하지 않는다.
+          return db.getRepairRequestsByTechnicianIds([tech.id]);
         }
-        return db.getRepairRequestsByTechnician(input.technicianId);
+        if (caller.appRole === "hq_admin") {
+          return db.getRepairRequestsByTechnician(input.technicianId);
+        }
+        if (caller.appRole === "branch_manager" && caller.branchId !== null) {
+          const target = await db.getTechnicianById(input.technicianId);
+          if (!target || target.branchId !== caller.branchId || target.isDeleted) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "다른 지사의 기사 일정은 조회할 수 없습니다." });
+          }
+          return db.getRepairRequestsByTechnician(input.technicianId);
+        }
+        throw new TRPCError({ code: "FORBIDDEN", message: "기사 일정 조회 권한이 없습니다." });
       }),
-    // 기사별 배정 목록 (userId 기준 - 신규 가입 기사용, phoneNumber fallback 포함) - 인증 필수
+    // 레거시 클라이언트 호환용 userId 조회. client phoneNumber는 신뢰하지 않는다.
     listByTechnicianUserId: publicProcedure
       .input(z.object({ userId: z.number(), phoneNumber: z.string().optional() }))
       .query(async ({ input, ctx }) => {
         if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' });
         const callerRole = (ctx.user as any).appRole;
-        const allowedAdminRoles = ['hq_admin', 'admin', 'headquarters', 'branch_manager', 'staff'];
-        if (!allowedAdminRoles.includes(callerRole) && ctx.user.id !== input.userId) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '본인 작업만 조회할 수 있습니다.' });
+        const targetUserId = callerRole === "technician" ? ctx.user.id : input.userId;
+        if (callerRole === "technician" && input.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "본인 작업만 조회할 수 있습니다." });
         }
-        // 모든 관련 technicianId 수집 (technicians 테이블 + app_roles 테이블 모두 포함)
-        const techIdSet = new Set<number>();
-        // 1) technicians 테이블: userId로 직접 조회
-        const techByUserId = await db.getTechnicianByUserId(input.userId);
-        if (techByUserId) techIdSet.add(techByUserId.id);
-        // 2) technicians 테이블: phoneNumber로 모든 매칭 레코드 조회
-        if (input.phoneNumber) {
-          const allTechs = await db.getTechniciansByPhone(input.phoneNumber);
-          for (const t of allTechs) techIdSet.add(t.id);
-          // userId 없는 레코드에 userId 연결
-          const noUserId = allTechs.find((t: any) => !t.userId);
-          if (noUserId) {
-            try { await db.updateTechnicianUserId(noUserId.id, input.userId); } catch {}
+        if (!["technician", "hq_admin", "branch_manager"].includes(callerRole)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "작업 조회 권한이 없습니다." });
+        }
+        const targetRole = await db.getAppRole(targetUserId);
+        if (!targetRole || targetRole.appRole !== "technician") return [];
+        const technician = await db.resolveActiveTechnicianForUser(
+          targetUserId,
+          targetRole.phoneNumber,
+        );
+        if (!technician) return [];
+        if (callerRole === "branch_manager") {
+          const managedBranch = await db.getManagedActiveBranchByUserId(ctx.user.id);
+          if (!managedBranch || technician.branchId !== managedBranch.id) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "다른 지사의 기사 일정은 조회할 수 없습니다." });
           }
-          // 3) app_roles 테이블: phoneNumber로 모든 기사 계정 조회 (repair_requests.technicianId가 app_roles.id를 참조하는 경우 대응)
-          const appRolesByPhone = await db.getAppRolesByPhoneNormalized(input.phoneNumber);
-          for (const r of appRolesByPhone) techIdSet.add(r.id);
         }
-        // 4) app_roles 테이블: userId로 직접 조회 (app_roles.id를 technicianId로 사용하는 경우)
-        const appRoleByUserId = await db.getAppRole(input.userId);
-        if (appRoleByUserId?.appRole === "technician") techIdSet.add(appRoleByUserId.id);
-        if (techIdSet.size === 0) return [];
-        return db.getRepairRequestsByTechnicianIds(Array.from(techIdSet));
+        return db.getRepairRequestsByTechnicianIds([technician.id]);
       }),
     // 세션 기반 내 일정 조회 (protectedProcedure - 타인 조회 불가)
     listMySchedule: protectedProcedure
       .query(async ({ ctx }) => {
         const userId = ctx.user.id;
-        // technicians.userId = userId 로 조회한 technicians.id만 사용 (세션 기반)
-        const techByUserId = await db.getTechnicianByUserId(userId);
-        if (!techByUserId || !techByUserId.isActive) return [];
-        return db.getRepairRequestsByTechnicianIds([techByUserId.id]);
+        const role = await db.getAppRole(userId);
+        if (!role || role.appRole !== "technician") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "기사 계정만 조회할 수 있습니다." });
+        }
+        const technician = await db.resolveActiveTechnicianForUser(userId, role.phoneNumber);
+        if (!technician) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "기사 계정과 기사 배정 정보를 연결할 수 없습니다. 본사에 문의하세요.",
+          });
+        }
+        return db.getRepairRequestsByTechnicianIds([technician.id]);
       }),
     // 상태 변경
-    updateStatus: publicProcedure
+    updateStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
         status: z.enum(statusValues),
         adminMemo: z.string().optional(),
         notify: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
-        await db.updateRepairStatus(input.id, input.status, input.adminMemo);
-        if (input.notify) {
-          const req = await db.getRepairRequestById(input.id);
-          if (req) {
-            const message = buildStatusChangeMessage(
-              req.customerName, req.requestNumber, input.status,
-              req.technicianName, req.scheduledDate, req.scheduledTime
-            );
-            const sendResult = await sendSms(req.phoneNumber, message);
-            await db.createNotificationLog({
-              requestId: req.id, phoneNumber: req.phoneNumber, channel: "SMS",
-              messageType: `상태변경:${input.status}`, content: message,
-              result: sendResult.result, errorMessage: sendResult.errorMessage,
-            });
+      .mutation(async ({ input, ctx }) => {
+        const caller = await resolveCallerRole(ctx);
+        if (caller?.appRole === "technician") {
+          const role = await db.getAppRole(caller.userId);
+          const technician = await db.resolveActiveTechnicianForUser(caller.userId, role?.phoneNumber);
+          if (!technician) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "활성 기사 계정을 확인할 수 없습니다." });
           }
         }
-        return { success: true };
+        let result: Awaited<ReturnType<typeof db.updateRepairStatusAuthorized>>;
+        try {
+          result = await db.updateRepairStatusAuthorized({
+            ...input,
+            callerUserId: ctx.user.id,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (message === "WORK_REPORT_REQUEST_NOT_FOUND") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+          }
+          if (message === "WORK_REPORT_ALREADY_COMPLETED") {
+            throw new TRPCError({ code: "CONFLICT", message: "완료된 접수 상태는 변경할 수 없습니다." });
+          }
+          if (message === "LEGACY_STATUS_DEDICATED_MUTATION_REQUIRED") {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "출발·도착·완료 전용 처리 버튼을 사용해 주세요." });
+          }
+          if (message === "LEGACY_STATUS_FORBIDDEN") {
+            throw new TRPCError({ code: "FORBIDDEN", message: "이 접수 상태를 변경할 권한이 없습니다." });
+          }
+          throw error;
+        }
+        const notification = result.notificationClaim
+          ? await deliverWorkflowNotificationClaim(result.notificationClaim)
+          : null;
+        return {
+          success: true,
+          notificationResult: notification?.result,
+          notificationError: notification?.errorMessage,
+        };
       }),
 
     // 기사 배정
-    assignTechnician: publicProcedure
+    assignTechnician: protectedProcedure
       .input(z.object({
         id: z.number(),
         technicianId: z.number(),
-        technicianName: z.string(),
+        // 구버전 클라이언트 호환용. 서버는 DB의 기사명을 사용한다.
+        technicianName: z.string().optional(),
         scheduledDate: z.string().optional(),
         scheduledTime: z.string().optional(),
         notify: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
-        await db.assignTechnician(input.id, input.technicianId, input.technicianName, input.scheduledDate, input.scheduledTime);
-        if (input.notify) {
-          const req = await db.getRepairRequestById(input.id);
-          if (req) {
-            const message = buildStatusChangeMessage(
-              req.customerName, req.requestNumber, "방문예정",
-              input.technicianName, input.scheduledDate ?? req.scheduledDate, input.scheduledTime ?? req.scheduledTime
-            );
-            await notifyAndLog({
-              requestId: req.id, phoneNumber: req.phoneNumber,
-              messageType: "기사배정", content: message,
-            });
-          }
+      .mutation(async ({ input, ctx }) => {
+        const manager = await requireManagerCaller(ctx);
+        let assignment: Awaited<ReturnType<typeof db.assignTechnicianAuthorized>>;
+        try {
+          assignment = await db.assignTechnicianAuthorized({
+            id: input.id,
+            technicianId: input.technicianId,
+            callerUserId: manager.userId,
+            scheduledDate: input.scheduledDate,
+            scheduledTime: input.scheduledTime,
+            claimNotification: input.notify,
+          });
+        } catch (error) {
+          rethrowRepairScheduleError(error);
         }
-        return { success: true };
+
+        const notification = await deliverAssignmentNotification({
+          assignment,
+          technicianId: input.technicianId,
+          notify: input.notify,
+        });
+        return {
+          success: true,
+          ...notification,
+        };
       }),
 
     // 방문 일정 변경/확정 (지사장/본사만 가능 → 프론트 권한 제한, 변경 시 고객 안내)
-    updateSchedule: publicProcedure
+    updateSchedule: protectedProcedure
       .input(z.object({
         id: z.number(),
         scheduledDate: z.string(),
@@ -1123,26 +1605,69 @@ export const appRouter = router({
         changeReason: z.string().optional(),
         notify: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
-        const before = await db.getRepairRequestById(input.id);
-        const isChanged = Boolean(
-          before && (before.scheduledDate !== input.scheduledDate || before.scheduledTime !== input.scheduledTime)
-        );
-        if (input.changeReason && input.changeReason.trim()) {
-          await db.updateScheduleWithReason(input.id, input.scheduledDate, input.scheduledTime, input.changeReason.trim());
-        } else {
-          await db.updateSchedule(input.id, input.scheduledDate, input.scheduledTime);
-        }
-        if (input.notify && before) {
-          const message = buildScheduleConfirmedMessage(
-            before.customerName, input.scheduledDate, input.scheduledTime, isChanged, input.changeReason
-          );
-          await notifyAndLog({
-            requestId: input.id, phoneNumber: before.phoneNumber,
-            messageType: isChanged ? "일정변경" : "일정확정", content: message,
+      .mutation(async ({ input, ctx }) => {
+        const manager = await requireManagerCaller(ctx);
+        let schedule: Awaited<ReturnType<typeof db.updateScheduleAuthorized>>;
+        try {
+          schedule = await db.updateScheduleAuthorized({
+            id: input.id,
+            callerUserId: manager.userId,
+            scheduledDate: input.scheduledDate,
+            scheduledTime: input.scheduledTime,
+            changeReason: input.changeReason,
+            claimNotification: input.notify && Boolean(input.scheduledDate.trim()),
           });
+        } catch (error) {
+          rethrowRepairScheduleError(error);
         }
-        return { success: true };
+        const noticeKind = getScheduleNoticeKind(
+          schedule.previousScheduledDate,
+          schedule.previousScheduledTime,
+          schedule.scheduledDate,
+          schedule.scheduledTime,
+        );
+        let notificationResult: string | undefined;
+        let notificationError: string | undefined;
+        let notificationRetried = false;
+        let notificationSkipped: "unchanged" | "already_sent" | "pending" | undefined;
+        if (input.notify && schedule.scheduledDate) {
+          let messageType = noticeKind === "changed" ? "일정변경" : "일정확정";
+          let message = buildScheduleConfirmedMessage(
+            schedule.request.customerName,
+            schedule.scheduledDate,
+            schedule.scheduledTime ?? "",
+            noticeKind === "changed",
+            input.changeReason,
+          );
+          const claim = schedule.notificationClaim;
+          if (claim?.claimed) {
+            notificationRetried = claim.retried;
+            const claimedMessageType = claim.retryMessageType ?? messageType;
+            const claimedMessage = claim.retryContent ?? message;
+            const notification = await notifyClaimedAndLog({
+              claimId: claim.claimId,
+              requestId: schedule.request.id,
+              phoneNumber: schedule.request.phoneNumber,
+              messageType: claimedMessageType,
+              content: claimedMessage,
+            });
+            notificationResult = notification.result;
+            notificationError = notification.errorMessage;
+          } else if (claim) {
+            notificationSkipped = claim.reason;
+          } else {
+            notificationSkipped = "unchanged";
+          }
+        } else if (input.notify && schedule.unchanged) {
+          notificationSkipped = "unchanged";
+        }
+        return {
+          success: true,
+          notificationSkipped,
+          notificationResult,
+          notificationError,
+          notificationRetried,
+        };
       }),
 
     // 지사 배정 안내 발송 (본사 관리자용, 발송 여부 선택)
@@ -1194,11 +1719,32 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // 점검 결과 등록
-    updateInspectionResult: publicProcedure
-      .input(z.object({ id: z.number(), inspectionResult: z.string() }))
-      .mutation(async ({ input }) => {
-        await db.updateInspectionResult(input.id, input.inspectionResult);
+    // 점검 결과 등록 (기사 본인의 현재 배정만, 완료 상태 전환은 하지 않음)
+    updateInspectionResult: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        inspectionResult: z.string().trim().min(1).max(5000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.id);
+        try {
+          await db.updateInspectionResultAuthorized({
+            id: input.id,
+            technicianId: technician.id,
+            inspectionResult: input.inspectionResult,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === "WORK_REPORT_REQUEST_NOT_FOUND") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ASSIGNMENT_CHANGED") {
+            throw new TRPCError({ code: "CONFLICT", message: "접수 배정 정보가 변경되었습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ALREADY_COMPLETED") {
+            throw new TRPCError({ code: "CONFLICT", message: "이미 완료된 작업입니다." });
+          }
+          throw error;
+        }
         return { success: true };
       }),
 
@@ -1226,15 +1772,34 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // 재방문 설정 (기사용)
-    setRevisit: publicProcedure
-      .input(z.object({ id: z.number(), needsRevisit: z.boolean(), revisitReason: z.string().optional() }))
-      .mutation(async ({ input }) => {
-        const db2 = await db.getDb();
-        if (!db2) throw new Error("Database not available");
-        const { repairRequests: rr } = await import("../drizzle/schema.js");
-        const { eq } = await import("drizzle-orm");
-        await db2.update(rr).set({ needsRevisit: input.needsRevisit, revisitReason: input.revisitReason ?? null }).where(eq(rr.id, input.id));
+    // 구버전 기사 앱 호환용. 최신 앱은 workReport.save에 함께 저장한다.
+    setRevisit: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        needsRevisit: z.boolean(),
+        revisitReason: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.id);
+        try {
+          await db.setRepairRevisitAuthorized({
+            id: input.id,
+            technicianId: technician.id,
+            needsRevisit: input.needsRevisit,
+            revisitReason: input.revisitReason,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === "WORK_REPORT_REQUEST_NOT_FOUND") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ASSIGNMENT_CHANGED") {
+            throw new TRPCError({ code: "CONFLICT", message: "접수 배정 정보가 변경되었습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ALREADY_COMPLETED") {
+            throw new TRPCError({ code: "CONFLICT", message: "이미 완료된 작업입니다." });
+          }
+          throw error;
+        }
         return { success: true };
       }),
 
@@ -1264,61 +1829,55 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // 기사 일정확인 (기사가 배정된 접수건 일정 확인 시)
-    confirmJobSchedule: publicProcedure
+    // 기사 일정확인 (현재 배정 기사만)
+    confirmJobSchedule: protectedProcedure
       .input(z.object({
         id: z.number(),
-        technicianId: z.number(),
+        // 구버전 클라이언트 호환용. 서버는 세션의 canonical 기사 ID를 사용한다.
+        technicianId: z.number().optional(),
       }))
-      .mutation(async ({ input }) => {
-        const req = await db.getRepairRequestById(input.id);
-        if (!req) throw new Error("접수건을 찾을 수 없습니다.");
-        // 기사 본인 접수건만 확인 가능
-        if (req.technicianId !== input.technicianId) throw new Error("자신에게 배정된 접수건만 확인할 수 있습니다.");
-        await db.updateRepairStatus(input.id, "기사확인완료");
-        try { await db.setWorkflowStage(input.id, "기사배정"); } catch {}
+      .mutation(async ({ input, ctx }) => {
+        await requireCurrentTechnicianAssignment(ctx, input.id);
+        await db.updateRepairStatusAuthorized({
+          id: input.id,
+          status: "기사확인완료",
+          callerUserId: ctx.user.id,
+          notify: false,
+        });
         return { success: true, message: "일정을 확인했습니다." };
       }),
 
-    // 기사 워크플로우 상태 변경 (출발/도착/공사중/공사완료)
-    updateWorkflowStatus: publicProcedure
+    // 레거시 기사 상태 변경. 출발·도착·완료는 위치/완료보고 전용 mutation만 허용한다.
+    updateWorkflowStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
-        technicianId: z.number(),
-        status: z.enum(["기사확인대기", "기사확인완료", "기사일정확인", "출발", "도착", "공사중", "공사완료"]),
+        // 구버전 클라이언트 호환용. 권한 판정에는 사용하지 않는다.
+        technicianId: z.number().optional(),
+        status: z.enum(["기사확인대기", "기사확인완료", "출발", "도착", "공사중", "공사완료"]),
         notify: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
-        const req = await db.getRepairRequestById(input.id);
-        if (!req) throw new Error("접수건을 찾을 수 없습니다.");
-        if (req.technicianId !== input.technicianId) throw new Error("자신에게 배정된 접수건만 변경할 수 있습니다.");
-        await db.updateRepairStatus(input.id, input.status);
-        // workflowStage ENUM 매핑 (status 값과 workflowStage ENUM이 다를 수 있음)
-        const stageMap: Record<string, string> = {
-          '기사확인대기': '기사배정',
-          '기사확인완료': '기사일정확인',
-          '기사일정확인': '기사일정확인',
-          '출발': '기사출발',
-          '도착': '기사도착',
-          '공사중': '작업진행',
-          '공사완료': '작업완료',
-        };
-        const mappedStage = stageMap[input.status] ?? input.status;
-        try { await db.setWorkflowStage(input.id, mappedStage as any); } catch (e: any) {
-          console.warn('[updateWorkflowStatus] setWorkflowStage failed:', e?.message);
+      .mutation(async ({ input, ctx }) => {
+        await requireCurrentTechnicianAssignment(ctx, input.id);
+        if (["출발", "도착", "공사완료"].includes(input.status)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "출발·도착·완료 전용 처리 버튼을 사용해 주세요.",
+          });
         }
-        if (input.notify && req.phoneNumber) {
-          let msg = "";
-          if (input.status === "출발") {
-            msg = `[퓨처에너지테크] ${req.customerName}님, 담당 기사(${req.technicianName})가 출발하였습니다. 공사 중 문의: 031-8042-7310`;
-          } else if (input.status === "도착") {
-            msg = `[퓨처에너지테크] ${req.customerName}님, 담당 기사(${req.technicianName})가 도착하였습니다. 잠시만 기다려 주세요. 문의: 031-8042-7310`;
-          } else if (input.status === "공사완료") {
-            msg = `[퓨처에너지테크] ${req.customerName}님, 요청하신 공사가 완료되었습니다. 이용해 주셔서 감사합니다. 문의: 031-8042-7310`;
-          }
-          if (msg) {
-            try { await notifyAndLog({ requestId: input.id, phoneNumber: req.phoneNumber, messageType: input.status, content: msg }); } catch {}
-          }
+        const result = await db.updateRepairStatusAuthorized({
+          id: input.id,
+          status: input.status,
+          callerUserId: ctx.user.id,
+          notify: input.notify,
+        });
+        const notification = result.notificationClaim
+          ? await deliverWorkflowNotificationClaim(result.notificationClaim)
+          : null;
+        if (notification && !notification.accepted) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: notification.errorMessage || "고객 안내 발송에 실패했습니다. 다시 시도해 주세요.",
+          });
         }
         return { success: true, message: `상태가 '${input.status}'로 변경되었습니다.` };
       }),
@@ -1382,57 +1941,125 @@ export const appRouter = router({
 
   // ─── 작업 보고서 ──────────────────────────────────────────────
   workReport: router({
-    getByRequest: publicProcedure
+    getByRequest: protectedProcedure
       .input(z.object({ requestId: z.number() }))
-      .query(async ({ input }) => db.getWorkReportByRequestId(input.requestId)),
+      .query(async ({ input, ctx }) => {
+        await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        return db.getWorkReportByRequestId(input.requestId);
+      }),
 
-    save: publicProcedure
+    save: protectedProcedure
       .input(z.object({
-        requestId: z.number(),
-        technicianId: z.number(),
+        requestId: z.number().int().positive(),
+        // 구버전 앱 호환용이며 서버 저장 값에는 사용하지 않는다.
+        technicianId: z.number().optional(),
         checkItems: z.string().optional(),
         usedMaterials: z.string().optional(),
         workMemo: z.string().optional(),
+        needsRevisit: z.boolean().optional(),
+        revisitReason: z.string().trim().max(2000).optional(),
         isCompleted: z.boolean().default(false),
-        beforePhotoUrl: z.string().optional(),
-        afterPhotoUrl: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const result = await db.upsertWorkReport({
-          ...input,
-          completedAt: input.isCompleted ? new Date() : undefined,
-        });
-        if (input.isCompleted) {
-          await db.updateRepairStatus(input.requestId, "작업완료");
+      }).refine(
+        (value) => !(value.isCompleted && value.needsRevisit),
+        { message: "재방문 필요와 작업 완료를 동시에 선택할 수 없습니다.", path: ["needsRevisit"] },
+      ))
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        const {
+          technicianId: _legacyTechnicianId,
+          needsRevisit,
+          revisitReason,
+          ...reportInput
+        } = input;
+        let result: Awaited<ReturnType<typeof db.upsertWorkReport>>;
+        try {
+          result = await db.upsertWorkReport({
+            ...reportInput,
+            technicianId: technician.id,
+            completedAt: input.isCompleted ? new Date() : undefined,
+          }, {
+            needsRevisit,
+            revisitReason,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === "LOCATION_DELIVERY_PENDING") {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "앞선 출발 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요.",
+            });
+          }
+          if (error instanceof Error && (
+            error.message === "WORK_REPORT_ASSIGNMENT_CHANGED" ||
+            error.message === "WORK_REPORT_ALREADY_COMPLETED"
+          )) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: error.message === "WORK_REPORT_ALREADY_COMPLETED"
+                ? "이미 완료된 작업입니다. 최신 내역을 다시 확인해 주세요."
+                : "접수 배정 정보가 변경되었습니다.",
+            });
+          }
+          throw error;
         }
-        return result;
+        const notification = result.completion
+          ? await deliverWorkflowNotificationClaim(result.completion.notificationClaim)
+          : null;
+        if (result.alreadyCompletedConflict) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "이미 완료된 작업입니다. 최신 내역을 다시 확인해 주세요.",
+          });
+        }
+        return {
+          id: result.id,
+          alreadyCompleted: false,
+          notificationResult: notification?.result,
+          notificationError: notification?.errorMessage,
+        };
       }),
 
     // 작업 보고서 사진 업로드 (기사 본인 접수만 허용)
-    uploadPhoto: publicProcedure
+    uploadPhoto: protectedProcedure
       .input(z.object({
         requestId: z.number(),
         photoType: z.enum(["before", "after"]),
-        base64: z.string(),
-        mimeType: z.string().default("image/jpeg"),
+        base64: z.string().max(MAX_WORK_REPORT_JPEG_BASE64_LENGTH),
+        mimeType: z.literal("image/jpeg").default("image/jpeg"),
       }))
       .mutation(async ({ input, ctx }) => {
-        const caller = await resolveCallerRole(ctx);
-        if (!caller) throw new TRPCError({ code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
-        const tech = await db.getTechnicianByUserId(caller.userId);
-        if (!tech) throw new TRPCError({ code: "FORBIDDEN", message: "기사 계정이 아닙니다." });
-        const req = await db.getRepairRequestById(input.requestId);
-        if (!req) throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
-        if (req.technicianId !== tech.id) throw new TRPCError({ code: "FORBIDDEN", message: "본인 접수만 사진을 업로드할 수 있습니다." });
-        const rawBase64 = input.base64.replace(/^data:[^;]+;base64,/, "");
-        const buffer = Buffer.from(rawBase64, "base64");
-        const ext = input.mimeType.split("/")[1] || "jpg";
-        const key = `work-reports/${input.requestId}/${input.photoType}-${Date.now()}.${ext}`;
-        const { url } = await storagePut(key, buffer, input.mimeType);
-        const existing = await db.getWorkReportByRequestId(input.requestId);
-        if (existing) {
-          const field = input.photoType === "before" ? { beforePhotoUrl: url } : { afterPhotoUrl: url };
-          await db.upsertWorkReport({ ...existing, ...field });
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        const buffer = decodeWorkReportJpeg(input.base64);
+        const requestedKey = `work-reports/${input.requestId}/${input.photoType}-${Date.now()}.jpg`;
+        const { key, url } = await storagePut(requestedKey, buffer, "image/jpeg");
+        let photoUpdate: Awaited<ReturnType<typeof db.setWorkReportPhotoUrl>>;
+        try {
+          photoUpdate = await db.setWorkReportPhotoUrl({
+            requestId: input.requestId,
+            technicianId: technician.id,
+            photoType: input.photoType,
+            url,
+          });
+        } catch (error) {
+          try {
+            await storageDelete(key);
+          } catch (cleanupError) {
+            console.error("[work-report] orphan upload cleanup failed", cleanupError);
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ASSIGNMENT_CHANGED") {
+            throw new TRPCError({ code: "CONFLICT", message: "접수 배정 정보가 변경되었습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ALREADY_COMPLETED") {
+            throw new TRPCError({ code: "CONFLICT", message: "이미 완료된 작업은 사진을 변경할 수 없습니다." });
+          }
+          throw error;
+        }
+        const previousKey = storageKeyFromPublicUrl(photoUpdate.previousUrl);
+        if (previousKey && previousKey !== key) {
+          try {
+            await storageDelete(previousKey);
+          } catch (cleanupError) {
+            console.error("[work-report] replaced photo cleanup failed", cleanupError);
+          }
         }
         return { url };
       }),
@@ -1954,23 +2581,31 @@ export const appRouter = router({
   // ─── 위치 추적 ───────────────────────────────────────────────────────────
   location: router({
     // 동의 여부 확인
-    getConsent: publicProcedure
+    getConsent: protectedProcedure
       .input(z.object({ technicianId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const { technician } = await requireActiveTechnician(ctx);
+        if (technician.id !== input.technicianId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "본인 위치 동의만 조회할 수 있습니다." });
+        }
         const consent = await db.getLocationConsent(input.technicianId);
         return { hasConsented: !!consent };
       }),
 
     // 동의 저장
-    saveConsent: publicProcedure
+    saveConsent: protectedProcedure
       .input(z.object({ technicianId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireActiveTechnician(ctx);
+        if (technician.id !== input.technicianId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "본인 위치 동의만 저장할 수 있습니다." });
+        }
         await db.createLocationConsent(input.technicianId);
         return { success: true };
       }),
 
     // 위치 세션 시작 (기사가 "고객 집으로 출발" 누를 때)
-    startTracking: publicProcedure
+    startTracking: protectedProcedure
       .input(z.object({
         requestId: z.number(),
         technicianId: z.number(),
@@ -1983,98 +2618,113 @@ export const appRouter = router({
         customerLng: z.number().optional(),
         branchId: z.number().optional(),
         branchName: z.string().optional(),
-        demoMode: z.boolean().optional(), // 데모 모드: SMS 발송 안 함
+        demoMode: z.boolean().optional(), // 로컬 개발 환경에서만 SMS 발송 안 함
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const { request, technician } = await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        if (technician.id !== input.technicianId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "본인 기사 정보와 일치하지 않습니다." });
+        }
         // 견적 게이팅: 견적이 고객에게 전달되었으나 아직 승인되지 않았다면 출발 차단
-        const reqForGate = await db.getRepairRequestById(input.requestId);
-        if (reqForGate && reqForGate.estimateSentAt && !reqForGate.estimateApprovedAt) {
-          throw new Error("고객이 견적을 아직 승인하지 않았습니다. 견적 승인 후 출발 처리할 수 있습니다.");
+        if (request.estimateSentAt && !request.estimateApprovedAt) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "고객이 견적을 아직 승인하지 않았습니다. 견적 승인 후 출발 처리할 수 있습니다.",
+          });
         }
-        // 이미 이동중인 세션이 있으면 종료
-        const existing = await db.getLocationSessionByRequestId(input.requestId);
-        if (existing) {
-          await db.stopLocationSession(existing.trackingToken, "업무취소");
+        if (["도착", "공사중", "작업진행중", "공사완료", "작업완료"].includes(request.status)) {
+          throw new TRPCError({ code: "CONFLICT", message: "이미 도착했거나 완료된 접수입니다." });
         }
-        // 추측 불가능한 긴 일회용 위치코드 생성
+        const customerAddress = canonicalCustomerAddress(request);
+        const branch = request.branchId ? await db.getBranchById(request.branchId) : null;
+
+        // 후보 토큰을 만든 뒤 접수 행 잠금 안에서 기존 세션 재사용/단일 생성을 결정한다.
         const token = generateTrackingToken();
         const now = new Date();
         const expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000); // 4시간 후 만료
         // 카카오 지오코딩으로 customerLat/customerLng 자동 보완
-        let resolvedCustomerLat = input.customerLat !== undefined ? String(input.customerLat) : null;
-        let resolvedCustomerLng = input.customerLng !== undefined ? String(input.customerLng) : null;
-        if ((!resolvedCustomerLat || !resolvedCustomerLng) && input.customerAddress) {
-          try {
-            const kakaoKey = process.env.KAKAO_REST_API_KEY || "";
-            if (kakaoKey) {
-              const geoUrl = `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(input.customerAddress)}`;
-              const geoRes = await fetch(geoUrl, { headers: { Authorization: `KakaoAK ${kakaoKey}` } });
-              if (geoRes.ok) {
-                const geoData = await geoRes.json() as { documents?: Array<{ x: string; y: string }> };
-                const doc = geoData.documents?.[0];
-                if (doc) {
-                  resolvedCustomerLat = doc.y;
-                  resolvedCustomerLng = doc.x;
-                  console.log(`[위치추적] 지오코딩 성공: ${input.customerAddress} -> ${doc.y},${doc.x}`);
-                }
-              }
-            }
-          } catch (geoErr) {
-            console.warn("[위치추적] 카카오 지오코딩 실패:", geoErr);
+        let resolvedCustomerLat = request.customerLat !== null ? String(request.customerLat) : null;
+        let resolvedCustomerLng = request.customerLng !== null ? String(request.customerLng) : null;
+        if ((!resolvedCustomerLat || !resolvedCustomerLng) && customerAddress) {
+          const geocoded = await geocodeKoreanAddress(customerAddress);
+          if (geocoded.ok) {
+            resolvedCustomerLat = String(geocoded.lat);
+            resolvedCustomerLng = String(geocoded.lng);
           }
         }
-        const session = await db.createLocationSession({
-          requestId: input.requestId,
-          technicianId: input.technicianId,
-          technicianName: input.technicianName,
-          technicianPhone: input.technicianPhone ?? null,
-          customerName: input.customerName,
-          customerPhone: input.customerPhone,
-          customerAddress: input.customerAddress,
-          customerLat: resolvedCustomerLat,
-          customerLng: resolvedCustomerLng,
-          branchId: input.branchId ?? null,
-          branchName: input.branchName ?? null,
-          trackingToken: token,
-          status: "이동중",
-          departedAt: now,
-          expiresAt,
-        });
-        if (!session) throw new Error("세션 생성 실패");
-        // 고객용 전용 링크 생성
-        const baseUrl = process.env.SITE_URL || "https://퓨처에너지테크.kr";
-        const trackingUrl = `${baseUrl}/track/${token}`;
-        // 워크플로우 단계: 기사출발
-        try { await db.setWorkflowStage(input.requestId, "기사출발"); } catch {}
-        // 고객 알림 발송 (데모 모드가 아닌 경우, 알림톡 우선 → 문자 대체)
+        let locationSessionResult: Awaited<ReturnType<typeof db.getOrCreateActiveLocationSession>>;
+        try {
+          locationSessionResult = await db.getOrCreateActiveLocationSession({
+            requestId: request.id,
+            technicianId: technician.id,
+            technicianName: technician.name,
+            technicianPhone: technician.phoneNumber ?? null,
+            customerName: request.customerName,
+            customerPhone: request.phoneNumber,
+            customerAddress,
+            customerLat: resolvedCustomerLat,
+            customerLng: resolvedCustomerLng,
+            branchId: request.branchId ?? null,
+            branchName: branch?.name ?? null,
+            trackingToken: token,
+            status: "이동중",
+            departedAt: now,
+            expiresAt,
+          });
+        } catch (error) {
+          rethrowLocationMutationError(error);
+        }
+        const { session, created } = locationSessionResult;
+        const effectiveToken = session.trackingToken;
+        const trackingUrl = buildPublicTrackingUrl(effectiveToken);
+
+        // 발송권을 DB에서 선점해 동시 시작/재시도에도 문자를 한 번만 보낸다.
         let smsSent = false;
-        if (!input.demoMode) {
-          try {
-            const msg = buildTechnicianDepartedMessage(
-              input.customerName,
-              input.technicianName,
-              trackingUrl
-            );
-            const r = await notifyAndLog({
-              requestId: input.requestId,
-              phoneNumber: input.customerPhone,
-              messageType: "기사출발",
-              content: msg,
-            });
-            if (r.result === "SUCCESS") {
-              smsSent = true;
-              await db.markLocationSessionSmsSent(token);
+        const suppressSmsForLocalDemo = process.env.NODE_ENV !== "production" && input.demoMode === true;
+        if (!suppressSmsForLocalDemo) {
+          const claim = {
+            token: effectiveToken,
+            requestId: request.id,
+            technicianId: technician.id,
+          };
+          const claimed = await db.claimLocationSessionSms(claim);
+          if (claimed) {
+            const claimIsCurrent = await db.validateLocationSessionSmsClaim(claim);
+            if (!claimIsCurrent) {
+              await db.clearLocationSessionSmsClaim(claim);
+            } else {
+            try {
+              const msg = buildTechnicianDepartedMessage(
+                request.customerName,
+                technician.name,
+                trackingUrl,
+              );
+              const r = await notifyAndLog({
+                requestId: request.id,
+                phoneNumber: request.phoneNumber,
+                messageType: "기사출발",
+                content: msg,
+              });
+              if (r.result === "SUCCESS" || r.result === "REQUESTED") {
+                smsSent = true;
+              } else {
+                await db.clearLocationSessionSmsClaim(claim);
+              }
+            } catch (smsErr) {
+              await db.clearLocationSessionSmsClaim(claim);
+              console.error("[위치추적] SMS 발송 오류:", smsErr);
             }
-          } catch (smsErr) {
-            console.error("[위치추적] SMS 발송 오류:", smsErr);
+            }
+          } else {
+            smsSent = await db.hasAcceptedLocationSessionSms(claim);
           }
         }
-        return { success: true, token, trackingUrl, smsSent };
+        return { success: true, token: effectiveToken, trackingUrl, smsSent, reused: !created };
       }),
 
     // 관리자/지사장이 직접 위치 공유 시작 (전화 접수 고객 등 앱 미사용 케이스)
     // 기사 앱이 없어도 관리자가 세션을 만들고 고객에게 링크 SMS를 보낼 수 있음
-    startTrackingByAdmin: publicProcedure
+    startTrackingByAdmin: protectedProcedure
       .input(z.object({
         requestId: z.number(),
         technicianId: z.number(),
@@ -2089,164 +2739,257 @@ export const appRouter = router({
         branchName: z.string().optional(),
         expireHours: z.number().optional(), // 만료 시간(시간 단위), 기본 4시간
       }))
-      .mutation(async ({ input }) => {
-        // 이미 이동중인 세션이 있으면 종료(새 링크 발급)
-        const existing = await db.getLocationSessionByRequestId(input.requestId);
-        if (existing) {
-          await db.stopLocationSession(existing.trackingToken, "업무취소");
+      .mutation(async ({ input, ctx }) => {
+        const manager = await requireManagerCaller(ctx);
+        const request = await db.getRepairRequestById(input.requestId);
+        const technician = await db.getTechnicianById(input.technicianId);
+        if (!request || request.isDeleted) throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+        if (!technician || !technician.isActive || technician.isDeleted) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "활성 기사를 찾을 수 없습니다." });
         }
+        if (request.technicianId !== technician.id) {
+          throw new TRPCError({ code: "CONFLICT", message: "현재 배정 기사와 일치하지 않습니다." });
+        }
+        if (
+          manager.appRole === "branch_manager" &&
+          (request.branchId !== manager.branchId || technician.branchId !== manager.branchId)
+        ) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "다른 지사의 접수는 처리할 수 없습니다." });
+        }
+        const branch = request.branchId ? await db.getBranchById(request.branchId) : null;
         const token = generateTrackingToken();
         const now = new Date();
-        const hours = input.expireHours && input.expireHours > 0 ? input.expireHours : 4;
+        const hours = input.expireHours
+          ? Math.min(8, Math.max(1, input.expireHours))
+          : 4;
         const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
-        const session = await db.createLocationSession({
-          requestId: input.requestId,
-          technicianId: input.technicianId,
-          technicianName: input.technicianName,
-          technicianPhone: input.technicianPhone ?? null,
-          customerName: input.customerName,
-          customerPhone: input.customerPhone,
-          customerAddress: input.customerAddress,
-          customerLat: input.customerLat !== undefined ? String(input.customerLat) : null,
-          customerLng: input.customerLng !== undefined ? String(input.customerLng) : null,
-          branchId: input.branchId ?? null,
-          branchName: input.branchName ?? null,
-          trackingToken: token,
-          status: "이동중",
-          departedAt: now,
-          expiresAt,
-        });
-        if (!session) throw new Error("세션 생성 실패");
-        const baseUrl = process.env.SITE_URL || "https://퓨처에너지테크.kr";
-        const trackingUrl = `${baseUrl}/track/${token}`;
-        let smsSent = false;
-        let smsError: string | undefined;
+        let result: Awaited<ReturnType<typeof db.getOrCreateActiveLocationSession>>;
         try {
-          const msg = buildTechnicianDepartedMessage(
-            input.customerName,
-            input.technicianName,
-            trackingUrl
-          );
-          const result = await sendSms(input.customerPhone, msg);
-          if (result.result === "SUCCESS") {
-            smsSent = true;
-            await db.markLocationSessionSmsSent(token);
-          } else {
-            smsError = friendlySmsError(result.errorMessage);
-          }
-        } catch (smsErr) {
-          smsError = smsErr instanceof Error ? smsErr.message : String(smsErr);
-          console.error("[위치추적] 관리자 SMS 발송 오류:", smsErr);
+          result = await db.getOrCreateActiveLocationSession({
+            requestId: request.id,
+            technicianId: technician.id,
+            technicianName: technician.name,
+            technicianPhone: technician.phoneNumber ?? null,
+            customerName: request.customerName,
+            customerPhone: request.phoneNumber,
+            customerAddress: canonicalCustomerAddress(request),
+            customerLat: request.customerLat !== null ? String(request.customerLat) : null,
+            customerLng: request.customerLng !== null ? String(request.customerLng) : null,
+            branchId: request.branchId ?? null,
+            branchName: branch?.name ?? null,
+            trackingToken: token,
+            status: "이동중",
+            departedAt: now,
+            expiresAt,
+          }, { managerUserId: manager.userId });
+        } catch (error) {
+          rethrowLocationMutationError(error);
         }
-        return { success: true, token, trackingUrl, smsSent, smsError };
+        const effectiveToken = result.session.trackingToken;
+        const trackingUrl = buildPublicTrackingUrl(effectiveToken);
+        let smsSent = false;
+        const claim = { token: effectiveToken, requestId: request.id, technicianId: technician.id };
+        const claimed = await db.claimLocationSessionSms(claim);
+        if (claimed) {
+          const claimIsCurrent = await db.validateLocationSessionSmsClaim(claim);
+          if (!claimIsCurrent) {
+            await db.clearLocationSessionSmsClaim(claim);
+          } else {
+          try {
+            const msg = buildTechnicianDepartedMessage(request.customerName, technician.name, trackingUrl);
+            const notification = await notifyAndLog({
+              requestId: request.id,
+              phoneNumber: request.phoneNumber,
+              messageType: "기사출발",
+              content: msg,
+            });
+            if (notification.result === "SUCCESS" || notification.result === "REQUESTED") {
+              smsSent = true;
+            } else {
+              await db.clearLocationSessionSmsClaim(claim);
+            }
+          } catch (smsError) {
+            await db.clearLocationSessionSmsClaim(claim);
+            console.error("[위치추적] 관리자 SMS 발송 오류:", smsError);
+          }
+          }
+        } else {
+          smsSent = await db.hasAcceptedLocationSessionSms(claim);
+        }
+        return { success: true, token: effectiveToken, trackingUrl, smsSent, reused: !result.created };
       }),
 
     // 관리자/지사장이 위치 세션 강제 종료 (도착완료/업무취소)
-    stopTracking: publicProcedure
+    stopTracking: protectedProcedure
       .input(z.object({
         token: z.string(),
         reason: z.enum(["도착완료", "업무취소"]).optional(),
       }))
-      .mutation(async ({ input }) => {
-        await db.stopLocationSession(input.token, input.reason ?? "업무취소");
-        return { success: true, status: input.reason ?? "업무취소" };
+      .mutation(async ({ input, ctx }) => {
+        const access = await requireLocationSessionMutationAccess(ctx, input.token);
+        const reason = input.reason ?? "업무취소";
+        try {
+          if (access.technician) {
+            const result = await db.stopLocationSessionAuthorized({
+              token: input.token,
+              technicianId: access.technician.id,
+              reason,
+            });
+            if (result === "not_found") throw new TRPCError({ code: "NOT_FOUND" });
+            if (result === "forbidden") throw new TRPCError({ code: "FORBIDDEN" });
+          } else {
+            const result = await db.stopLocationSessionByManagerAuthorized({
+              token: input.token,
+              managerUserId: access.caller.userId,
+              reason,
+            });
+            if (result === "not_found") throw new TRPCError({ code: "NOT_FOUND" });
+            if (result === "forbidden") throw new TRPCError({ code: "FORBIDDEN" });
+          }
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          rethrowLocationMutationError(error);
+        }
+        return { success: true, status: reason };
       }),
 
     // 기사 도착 처리 (도착 버튼) → 단계 갱신 + 고객 도착 안내
-    markArrived: publicProcedure
-      .input(z.object({ requestId: z.number(), token: z.string().optional() }))
-      .mutation(async ({ input }) => {
-        if (input.token) {
-          await db.stopLocationSession(input.token, "도착완료");
-        }
-        try { await db.setWorkflowStage(input.requestId, "기사도착"); } catch {}
-        const req = await db.getRepairRequestById(input.requestId);
-        if (req) {
-          const message = buildTechnicianArrivedMessage(req.customerName, req.technicianName ?? "담당 기사");
-          await notifyAndLog({
-            requestId: req.id, phoneNumber: req.phoneNumber,
-            messageType: "기사도착", content: message,
+    markArrived: protectedProcedure
+      .input(z.object({
+        requestId: z.number(),
+        token: z.string().min(32).max(64),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        let arrival: Awaited<ReturnType<typeof db.markLocationSessionArrivedAuthorized>>;
+        try {
+          arrival = await db.markLocationSessionArrivedAuthorized({
+            requestId: input.requestId,
+            token: input.token,
+            technicianId: technician.id,
           });
+        } catch (error) {
+          rethrowLocationMutationError(error);
         }
-        return { success: true };
+
+        const notification = await deliverWorkflowNotificationClaim(arrival.notificationClaim);
+        return {
+          success: true,
+          alreadyArrived: !arrival.firstArrival,
+          notificationResult: notification.result,
+          notificationError: notification.errorMessage,
+        };
       }),
 
     // 작업 완료 처리 (완료 버튼) → 단계 갱신 + 고객 완료 안내
-    markWorkCompleted: publicProcedure
-      .input(z.object({ requestId: z.number(), reviewUrl: z.string().optional() }))
-      .mutation(async ({ input }) => {
-        try { await db.setWorkflowStage(input.requestId, "작업완료"); } catch {}
-        // 공사완료 후 위치추적 세션 자동 만료 (보안: 위치확인 링크 접근 차단)
+    markWorkCompleted: protectedProcedure
+      .input(z.object({ requestId: z.number(), reviewUrl: z.string().max(500).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { technician } = await requireCurrentTechnicianAssignment(ctx, input.requestId);
+        let completion: Awaited<ReturnType<typeof db.markRepairWorkCompletedAuthorized>>;
         try {
-          const activeSession = await db.getLocationSessionByRequestId(input.requestId);
-          if (activeSession && activeSession.status === "이동중") {
-            await db.stopLocationSession(activeSession.trackingToken, "도착완료");
-          }
-        } catch (e) {
-          console.error('[markWorkCompleted] 세션 만료 오류:', e);
-        }
-        const req = await db.getRepairRequestById(input.requestId);
-        if (req) {
-          const message = buildWorkCompletedMessage(req.customerName, input.reviewUrl);
-          await notifyAndLog({
-            requestId: req.id, phoneNumber: req.phoneNumber,
-            messageType: "작업완료", content: message,
+          completion = await db.markRepairWorkCompletedAuthorized({
+            requestId: input.requestId,
+            technicianId: technician.id,
+            reviewUrl: input.reviewUrl,
           });
+        } catch (error) {
+          if (error instanceof Error && error.message === "LOCATION_DELIVERY_PENDING") {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "앞선 출발 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요.",
+            });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_REQUEST_NOT_FOUND") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "접수를 찾을 수 없습니다." });
+          }
+          if (error instanceof Error && error.message === "WORK_REPORT_ASSIGNMENT_CHANGED") {
+            throw new TRPCError({ code: "CONFLICT", message: "접수 배정 정보가 변경되었습니다." });
+          }
+          throw error;
         }
-        return { success: true };
+        const notification = await deliverWorkflowNotificationClaim(completion.notificationClaim);
+        return {
+          success: true,
+          alreadyCompleted: !completion.firstCompletion,
+          notificationResult: notification.result,
+          notificationError: notification.errorMessage,
+        };
       }),
 
     // 토큰으로 위치 세션 재발송 SMS (고객이 문자를 못 받은 경우)
-    resendTrackingSms: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .mutation(async ({ input }) => {
-        const session = await db.getLocationSessionByToken(input.token);
-        if (!session) throw new Error("세션을 찾을 수 없습니다.");
+    resendTrackingSms: protectedProcedure
+      .input(z.object({ token: z.string().min(32).max(64) }))
+      .mutation(async ({ input, ctx }) => {
+        const { caller, session } = await requireLocationSessionMutationAccess(ctx, input.token);
         if (session.status !== "이동중") {
-          return { success: false, smsSent: false, smsError: "이미 종료된 세션입니다." };
+          return {
+            success: false,
+            smsSent: false,
+            smsPending: false,
+            smsError: "이미 종료된 세션입니다.",
+          };
         }
-        const baseUrl = process.env.SITE_URL || "https://퓨처에너지테크.kr";
-        const trackingUrl = `${baseUrl}/track/${session.trackingToken}`;
-        let smsSent = false;
-        let smsError: string | undefined;
+        const trackingUrl = buildPublicTrackingUrl(session.trackingToken);
+        let claim: Awaited<ReturnType<typeof db.claimLocationSessionResendSms>>;
         try {
-          const msg = buildTechnicianDepartedMessage(
-            session.customerName ?? "고객",
-            session.technicianName ?? "담당 기사",
-            trackingUrl
-          );
-          const result = await sendSms(session.customerPhone ?? "", msg);
-          if (result.result === "SUCCESS") {
-            smsSent = true;
-            await db.markLocationSessionSmsSent(session.trackingToken);
-          } else {
-            smsError = friendlySmsError(result.errorMessage);
-          }
-        } catch (e) {
-          smsError = e instanceof Error ? e.message : String(e);
+          claim = await db.claimLocationSessionResendSms({
+            token: session.trackingToken,
+            callerUserId: caller.userId,
+          });
+        } catch (error) {
+          rethrowLocationMutationError(error);
         }
-        return { success: true, smsSent, smsError, trackingUrl };
+        const notification = await deliverWorkflowNotificationClaim(claim);
+        return {
+          success: notification.accepted,
+          smsSent: notification.accepted,
+          smsPending: notification.pending,
+          smsError: notification.errorMessage,
+          trackingUrl,
+        };
       }),
 
     // 현재 방문 건의 위치 세션 조회
-    getSessionByRequest: publicProcedure
+    getSessionByRequest: protectedProcedure
       .input(z.object({ requestId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await requireLocationSessionReadAccess(ctx, input.requestId);
         const session = await db.getLocationSessionByRequestId(input.requestId);
-        return session;
+        if (!session) return null;
+        const reconciled = await db.getCustomerLocationSessionByToken(session.trackingToken);
+        if (!reconciled || reconciled.status !== "이동중") return null;
+        return {
+          status: reconciled.status,
+          trackingUrl: buildPublicTrackingUrl(reconciled.trackingToken),
+        };
       }),
 
     // 이동 중 전체 목록 (관리자용)
-    getActiveSessions: publicProcedure
-      .query(async () => {
+    getActiveSessions: protectedProcedure
+      .query(async ({ ctx }) => {
+        const caller = await resolveCallerRole(ctx);
+        if (!caller || !["hq_admin", "branch_manager"].includes(caller.appRole)) {
+          throw new TRPCError({ code: caller ? "FORBIDDEN" : "UNAUTHORIZED" });
+        }
         await db.expireOldLocationSessions();
-        return db.getActiveLocationSessions();
+        const sessions = await db.getActiveLocationSessions();
+        return caller.appRole === "hq_admin"
+          ? sessions
+          : sessions.filter((session) => session.branchId === caller.branchId);
       }),
 
     // 지사별 이동 중 목록 (지사장용)
-    getActiveSessionsByBranch: publicProcedure
+    getActiveSessionsByBranch: protectedProcedure
       .input(z.object({ branchId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const caller = await resolveCallerRole(ctx);
+        if (!caller || !["hq_admin", "branch_manager"].includes(caller.appRole)) {
+          throw new TRPCError({ code: caller ? "FORBIDDEN" : "UNAUTHORIZED" });
+        }
+        if (caller.appRole === "branch_manager" && caller.branchId !== input.branchId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "다른 지사의 위치 정보는 볼 수 없습니다." });
+        }
         await db.expireOldLocationSessions();
         return db.getActiveLocationSessionsByBranch(input.branchId);
       }),
@@ -2377,7 +3120,7 @@ export const appRouter = router({
           estimateNumber,
           token,
           customerName: input.customerName,
-          phoneNumber: input.phoneNumber.replace(/[^0-9]/g, ""),
+          customerPhone: input.phoneNumber.replace(/[^0-9]/g, ""),
           title: input.title ?? null,
           amount: input.amount != null ? String(input.amount) : null,
           memo: input.memo ?? null,
@@ -2450,7 +3193,7 @@ export const appRouter = router({
           estimateNumber,
           token,
           customerName: input.customerName,
-          phoneNumber: input.phoneNumber.replace(/[^0-9]/g, ""),
+          customerPhone: input.phoneNumber.replace(/[^0-9]/g, ""),
           title: input.title ?? `${input.customerName} 고객 견적`,
           amount: input.amount != null ? String(input.amount) : null,
           description: input.description ?? null,
@@ -2670,28 +3413,57 @@ export const appRouter = router({
       }),
 
     // ─── 본사/지사 일정 확정 ────────────────────────────────────────────────
-    confirmSchedule: publicProcedure
+    confirmSchedule: protectedProcedure
       .input(z.object({
-        estimateId: z.number(),
-        confirmedDate: z.string(),
-        confirmedTime: z.string().optional(),
+        estimateId: z.number().int().positive().optional(),
+        // 현재 dashboard/branch의 구버전 payload 호환.
+        id: z.number().int().positive().optional(),
+        confirmedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        confirmedTime: z.string().max(50).optional(),
         confirmedByName: z.string().optional(),
         confirmedById: z.number().optional(),
+      }).refine((value) => Boolean(value.estimateId ?? value.id), {
+        message: "견적 ID가 필요합니다.",
       }))
-      .mutation(async ({ input }) => {
-        const est = await db.getEstimateById(input.estimateId);
-        if (!est) throw new Error("곬적서를 찾을 수 없습니다.");
-        await db.updateEstimateById(est.id, {
-          status: "schedule_confirmed",
-          scheduleConfirmedAt: new Date(),
-          scheduleConfirmedDate: input.confirmedDate,
-          scheduleConfirmedTime: input.confirmedTime ?? null,
-          scheduleConfirmedBy: input.confirmedById ?? null,
-          scheduleConfirmedByName: input.confirmedByName ?? null,
-        });
-        const custMsg = `[퓨처에너지테크] ${est.customerName} 고객님, 방문 일정이 확정되었습니다.\n방문일: ${input.confirmedDate} ${input.confirmedTime ?? ""}\n문의: 010-3440-7310`;
-        try { await sendNotification(est.phoneNumber, custMsg); } catch {}
-        return { success: true, message: "일정이 확정되었습니다." };
+      .mutation(async ({ input, ctx }) => {
+        const manager = await requireManagerCaller(ctx);
+        let confirmation: Awaited<ReturnType<typeof db.confirmEstimateScheduleAuthorizedAndClaim>>;
+        try {
+          confirmation = await db.confirmEstimateScheduleAuthorizedAndClaim({
+            estimateId: input.estimateId ?? input.id!,
+            callerUserId: manager.userId,
+            confirmedDate: input.confirmedDate,
+            confirmedTime: input.confirmedTime,
+          });
+        } catch (error) {
+          if (error instanceof db.EstimateScheduleAuthorizationError) {
+            const message = error.reason === "delivery_pending"
+              ? "앞선 일정 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요."
+              : error.reason === "forbidden"
+                ? "해당 지사 견적의 일정을 확정할 권한이 없습니다."
+                : error.reason === "invalid_status"
+                  ? "현재 견적 상태에서는 일정을 확정할 수 없습니다."
+                  : "견적서를 찾을 수 없습니다.";
+            throw new TRPCError({
+              code: error.reason === "forbidden" ? "FORBIDDEN" : "CONFLICT",
+              message,
+            });
+          }
+          throw error;
+        }
+        const notification = await deliverEstimateScheduleNotificationClaim(
+          confirmation.notificationClaim,
+        );
+        return {
+          success: notification.accepted,
+          scheduleSaved: true,
+          ...notification,
+          message: notification.accepted
+            ? "일정이 확정되었고 고객 안내가 접수되었습니다."
+            : notification.notificationSkipped === "pending"
+              ? "일정은 확정되었고 고객 안내는 처리 중입니다."
+              : "일정은 확정되었으나 고객 안내에 실패했습니다. 다시 시도해 주세요.",
+        };
       }),
 
     // 곬적 승인 (고객) + 주소/일정 입력 → 신규 오더(접수) 생성 (하위 호환 유지)
@@ -2825,7 +3597,7 @@ export const appRouter = router({
           estimateNumber,
           token,
           customerName: input.customerName,
-          phoneNumber: input.phoneNumber.replace(/[^0-9]/g, ""),
+          customerPhone: input.phoneNumber.replace(/[^0-9]/g, ""),
           title: input.title ?? `견적서 ${estimateNumber}`,
           amount: input.amount != null ? String(input.amount) : null,
           memo: input.memo ?? null,
@@ -2892,7 +3664,7 @@ export const appRouter = router({
           estimateNumber,
           token,
           customerName: input.customerName,
-          phoneNumber: input.phoneNumber.replace(/[^0-9]/g, ""),
+          customerPhone: input.phoneNumber.replace(/[^0-9]/g, ""),
           title: input.title ?? `현장 견적 ${estimateNumber}`,
           amount: input.amount != null ? String(input.amount) : null,
           memo: null,
@@ -3089,83 +3861,150 @@ export const appRouter = router({
       }),
 
     // ─── 접수전환 + 기사배정 통합 ────────────────────────────────────
-    convertToOrderAndAssign: publicProcedure
+    convertToOrderAndAssign: protectedProcedure
       .input(z.object({
-        estimateId: z.number(),
+        estimateId: z.number().int().positive(),
         ownerType: z.enum(["hq", "branch"]),
-        ownerId: z.number(),
-        ownerName: z.string().optional(),
-        technicianId: z.number(),
-        technicianName: z.string(),
-        scheduledDate: z.string().optional(),
-        scheduledTime: z.string().optional(),
+        ownerId: z.number().int().nonnegative(),
+        // 구버전 클라이언트 호환용 표시값이며 서버 저장에는 사용하지 않는다.
+        ownerName: z.string().max(100).optional(),
+        technicianId: z.number().int().positive(),
+        technicianName: z.string().max(100),
+        scheduledDate: z.string().max(30).optional(),
+        scheduledTime: z.string().max(50).optional(),
         notify: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const manager = await requireManagerCaller(ctx);
         const est = await db.getEstimateById(input.estimateId);
         if (!est) throw new Error("견적서를 찾을 수 없습니다.");
-        // 중복 방지: 이미 전환된 견적서인지 확인
-        if (est.orderId) {
-          // 기사배정만 추가로 수행
-          await db.assignTechnician(est.orderId, input.technicianId, input.technicianName, input.scheduledDate, input.scheduledTime);
-          if (input.notify) {
-            const req = await db.getRepairRequestById(est.orderId);
-            if (req) {
-              const msg = buildStatusChangeMessage(req.customerName, req.requestNumber, "방문예정", input.technicianName, input.scheduledDate ?? req.scheduledDate, input.scheduledTime ?? req.scheduledTime);
-              await notifyAndLog({ requestId: req.id, phoneNumber: req.phoneNumber, messageType: "기사배정", content: msg });
-            }
+
+        let orderId = est.orderId ?? null;
+        let alreadyConverted = Boolean(orderId);
+        let requestNumber: string | undefined;
+        if (!orderId) {
+          // status/orderId 갱신 직후 응답이 끊긴 재호출도 기존 접수를 재사용한다.
+          const existing = await db.findRepairByEstimateId(est.id);
+          if (existing) {
+            orderId = existing.id;
+            requestNumber = existing.requestNumber;
+            alreadyConverted = true;
+            await db.updateEstimateById(est.id, { status: "converted", orderId });
           }
-          return { success: true, orderId: est.orderId, alreadyConverted: true, message: "이미 접수 전환된 견적입니다. 기사가 배정되었습니다." };
         }
-        // 고객 주소 정보 추출
-        const apartmentName = est.approvedApartmentName ?? est.buildingName ?? "";
-        const dong = est.approvedDong ?? est.dong ?? "";
-        const ho = est.approvedHo ?? est.ho ?? "";
-        const addressFull = est.addressFull ?? `${apartmentName} ${dong}동 ${ho}호`.trim();
-        const addressDetail = est.approvedAddressDetail ?? est.addressDetail ?? null;
-        // 고객 희망일정 (confirmSchedule로 확정된 날짜 우선)
-        const preferredDate = est.scheduleConfirmedDate ?? est.customerPreferredDate ?? input.scheduledDate ?? null;
-        const preferredTime = est.scheduleConfirmedTime ?? est.customerPreferredTime ?? input.scheduledTime ?? null;
-        // 지사 ID 결정
-        let branchId: number | null = null;
-        if (input.ownerType === "branch") branchId = input.ownerId;
-        else branchId = est.branchId ?? null;
-        // DB 컬럼 자동 추가 (최초 실행 시)
-        await db.ensureRepairRequestsColumns();
-        // 신규 접수건 생성
-        const insertData: Parameters<typeof db.createRepairRequest>[0] = {
-          branchId,
-          customerName: est.customerName,
-          phoneNumber: est.phoneNumber,
-          apartmentName,
-          dong,
-          ho,
-          addressFull,
-          addressDetail,
-          requestType: "난방고장",
-          symptom: est.symptom ?? "기타문의",
-          requestContent: est.requestContent ?? null,
-          estimateId: est.id,
-          estimateTotal: est.totalAmount ?? null,
-          fromEstimateId: est.id,
-          customerPreferredDate: preferredDate,
-          customerPreferredTime: preferredTime,
-          status: "기사확인대기",
-          technicianId: input.technicianId,
-          technicianName: input.technicianName,
-          scheduledDate: preferredDate,
-          scheduledTime: preferredTime,
-          ownerType: input.ownerType === 'hq' ? 'headquarters' : 'branch',
+
+        if (!orderId) {
+          let branchId: number | null = null;
+          if (manager.appRole === "branch_manager") {
+            if (
+              manager.branchId === null ||
+              input.ownerType !== "branch" ||
+              input.ownerId !== manager.branchId
+            ) {
+              throw new TRPCError({ code: "FORBIDDEN", message: "소속 지사 접수만 전환할 수 있습니다." });
+            }
+            branchId = manager.branchId;
+          } else if (input.ownerType === "branch") {
+            const branch = await db.getBranchById(input.ownerId);
+            if (!branch || !branch.isActive || branch.isDeleted) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "유효한 지사를 선택해 주세요." });
+            }
+            branchId = branch.id;
+          }
+
+          const apartmentName = est.approvedApartmentName ?? est.buildingName ?? "";
+          const dong = est.approvedDong ?? est.dong ?? "";
+          const ho = est.approvedHo ?? est.ho ?? "";
+          const addressFull = est.addressFull ?? `${apartmentName} ${dong}동 ${ho}호`.trim();
+          const addressDetail = est.approvedAddressDetail ?? est.addressDetail ?? null;
+          const preferredDate = est.visitDate ?? input.scheduledDate ?? null;
+          const preferredTime = est.visitTime ?? input.scheduledTime ?? null;
+
+          await db.ensureRepairRequestsColumns();
+          const order = await db.createRepairRequest({
+            branchId,
+            customerName: est.customerName,
+            phoneNumber: est.phoneNumber || est.customerPhone || "",
+            apartmentName,
+            dong,
+            ho,
+            addressFull,
+            addressDetail,
+            requestType: "난방고장",
+            symptom: est.symptom ?? "기타문의",
+            requestContent: est.requestContent ?? null,
+            estimateId: est.id,
+            estimateTotal: est.totalAmount ?? null,
+            fromEstimateId: est.id,
+            customerPreferredDate: preferredDate,
+            customerPreferredTime: preferredTime,
+            status: "기사배정대기",
+            workflowStage: "견적승인",
+            technicianId: null,
+            technicianName: null,
+            scheduledDate: preferredDate,
+            scheduledTime: preferredTime,
+            ownerType: branchId ? "branch" : "headquarters",
+          } as any);
+          orderId = order.id;
+          requestNumber = order.requestNumber;
+          await db.updateEstimateById(est.id, { status: "converted", orderId });
+        }
+
+        let assignment: Awaited<ReturnType<typeof db.assignTechnicianAuthorized>>;
+        try {
+          assignment = await db.assignTechnicianAuthorized({
+            id: orderId,
+            technicianId: input.technicianId,
+            callerUserId: manager.userId,
+            scheduledDate: input.scheduledDate,
+            scheduledTime: input.scheduledTime,
+            claimNotification: input.notify,
+            estimateScheduleNotification: { estimateId: est.id },
+          });
+        } catch (error) {
+          rethrowRepairScheduleError(error);
+        }
+        let notification: AssignmentNotificationOutcome;
+        if (!input.notify) {
+          notification = await deliverAssignmentNotification({
+            assignment,
+            technicianId: input.technicianId,
+            notify: false,
+          });
+        } else {
+          if (assignment.estimateNotificationClaim) {
+            notification = await deliverEstimateScheduleNotificationClaim(
+              assignment.estimateNotificationClaim,
+            );
+          } else {
+            notification = await deliverAssignmentNotification({
+              assignment,
+              technicianId: input.technicianId,
+              notify: true,
+            });
+          }
+        }
+        const notificationAccepted =
+          !input.notify ||
+          notification.notificationResult === "SUCCESS" ||
+          notification.notificationResult === "REQUESTED" ||
+          notification.notificationSkipped === "already_sent";
+        return {
+          success: notificationAccepted,
+          assignmentSaved: true,
+          orderId,
+          requestNumber: requestNumber ?? assignment.request.requestNumber,
+          alreadyConverted,
+          ...notification,
+          message: notificationAccepted
+            ? alreadyConverted
+              ? "기존 접수에 기사 배정이 반영되었습니다."
+              : "접수 전환 및 기사 배정이 완료되었습니다."
+            : notification.notificationSkipped === "pending"
+              ? "접수와 기사 배정은 저장되었고 고객 안내는 처리 중입니다."
+              : "접수와 기사 배정은 저장되었으나 고객 안내에 실패했습니다. 다시 시도해 주세요.",
         };
-        const order = await db.createRepairRequest(insertData);
-        // 견적서 상태 업데이트
-        await db.updateEstimateById(est.id, { status: "converted", orderId: order.id });
-        // 고객 알림 발송
-        if (input.notify) {
-          const msg = buildStatusChangeMessage(est.customerName, order.requestNumber, "방문예정", input.technicianName, preferredDate ?? undefined, preferredTime ?? undefined);
-          await notifyAndLog({ requestId: order.id, phoneNumber: est.phoneNumber, messageType: "기사배정", content: msg });
-        }
-        return { success: true, orderId: order.id, requestNumber: order.requestNumber, message: "접수 전환 및 기사 배정이 완료되었습니다." };
       }),
   }),
   // ─── 단가 관리 ─────────────────────────────────────────────────
@@ -3220,12 +4059,14 @@ export const appRouter = router({
         if (!allowedRoles.includes((ctx.user as any).appRole)) throw new TRPCError({ code: "FORBIDDEN" });
         return db.deletePriceItem(input.id);
       }),
-    // 관리자 전용 DB 마이그레이션 엔드포인트 (2026-07-10 재활성화: 스트레이너 분배기교체 단가 추가)
-    migrate: publicProcedure
-      .input(z.object({ adminKey: z.string() }))
-      .mutation(async ({ input }) => {
-        if (input.adminKey !== 'FutureEnergy2026!') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '관리자 키가 올바르지 않습니다.' });
+    // 본사 관리자 전용 DB 마이그레이션 엔드포인트.
+    // 구버전 호출의 adminKey 필드는 입력 호환만 유지하며 인증에는 사용하지 않는다.
+    migrate: protectedProcedure
+      .input(z.object({ adminKey: z.string().optional() }).optional())
+      .mutation(async ({ ctx }) => {
+        const manager = await requireManagerCaller(ctx);
+        if (manager.appRole !== "hq_admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "본사 관리자만 실행할 수 있습니다." });
         }
         const results: string[] = [];
         // 스트레이너 25A (분배기교체) 단가 추가

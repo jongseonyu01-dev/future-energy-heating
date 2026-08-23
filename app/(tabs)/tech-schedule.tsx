@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Linking, Platform, ActivityIndicator, Alert, RefreshControl,
+  Linking, Platform, ActivityIndicator, RefreshControl,
 } from "react-native";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -12,24 +12,41 @@ import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
 import { openNavigation } from "@/lib/navigation";
 import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
-import {
-  requestLocationPermissions,
-} from "@/lib/location-tracking";
 import { getApiBaseUrl } from "@/constants/oauth";
-import { useLocationTracking } from "@/lib/location-tracking-context";
 import * as Auth from "@/lib/_core/auth";
+import {
+  DEPARTABLE_VISIT_STATUSES,
+  useTechnicianVisitTracking,
+} from "@/components/technician-visit-tracking";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280",
   "기사배정대기": "#F59E0B",
   "방문예정": "#3B82F6",
+  "기사확인대기": "#8B5CF6",
+  "기사확인완료": "#2563EB",
+  "기사일정확인": "#2563EB",
+  "출발": "#FF6B35",
+  "도착": "#16A34A",
+  "공사중": "#F59E0B",
   "작업진행중": "#FF6B35",
   "견적승인대기": "#8B5CF6",
   "작업완료": "#22C55E",
+  "공사완료": "#22C55E",
   "재방문필요": "#EF4444",
 };
 
-export default function TechScheduleScreen() {
+type ScheduleTab = "today" | "tomorrow" | "overdue" | "all";
+
+interface TechScheduleScreenProps {
+  defaultTab?: ScheduleTab;
+}
+
+function isScheduleTab(value: string | undefined): value is ScheduleTab {
+  return value === "today" || value === "tomorrow" || value === "overdue" || value === "all";
+}
+
+export function TechScheduleScreen({ defaultTab = "today" }: TechScheduleScreenProps) {
   const colors = useColors();
   const router = useRouter();
   const { user } = useAppAuth();
@@ -51,30 +68,11 @@ export default function TechScheduleScreen() {
 
   // URL 파라미터로 초기 탭 설정 (홈 화면 버튼 연동)
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [showConsentModal, setShowConsentModal] = useState(false);
-  const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
-  const [isStartingTracking, setIsStartingTracking] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">(
-    (params.tab as any) || "today"
-  );
+  const requestedTab = isScheduleTab(params.tab) ? params.tab : undefined;
+  const [activeTab, setActiveTab] = useState<ScheduleTab>(requestedTab ?? defaultTab);
   // 유량 이상 상태 맵 (전화번호 → 알림 데이터)
   const [flowAlertMap, setFlowAlertMap] = useState<Record<string, any>>({});
-
-  // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
-  const {
-    isTracking,
-    trackingToken,
-    trackingRequestId,
-    trackingUrl,
-    debugState,
-    permStatus,
-    startTracking,
-    stopTracking,
-    checkPermissions,
-  } = useLocationTracking();
-
-
 
   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
   const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery(
@@ -84,162 +82,40 @@ export default function TechScheduleScreen() {
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
 
+  const {
+    trackingToken,
+    trackingRequestId,
+    debugState,
+    permStatus,
+    showConsentModal,
+    handleConsent,
+    handleDeclineConsent,
+    handleDepart,
+    handleArrive,
+    handleStopSharing,
+    handleResendTrackingSms,
+    handleStopLegacyTracking,
+    hasUnmatchedLegacyTracking,
+    isLegacyStopPending,
+    isConsentLoading,
+    isStartingAny,
+    isStartingRequest,
+    isArrivingRequest,
+    isResendingRequest,
+  } = useTechnicianVisitTracking({
+    works: allWorks ?? [],
+    technicianId: resolvedTechnicianId,
+    workListReady: !isLoading,
+    refetch,
+  });
+
   // 화면 진입 시 자동 재조회 (기사배정 후 즉시 반영)
   useFocusEffect(
     useCallback(() => {
       refetch();
-      // URL 파라미터로 탭 전환 (홈 화면 버튼 연동)
-      if (params.tab && ["today", "tomorrow", "overdue", "all"].includes(params.tab)) {
-        setActiveTab(params.tab as "today" | "tomorrow" | "overdue" | "all");
-      }
-    }, [params.tab])
+      setActiveTab(requestedTab ?? defaultTab);
+    }, [defaultTab, refetch, requestedTab])
   );
-
-  const consentQuery = trpc.location.getConsent.useQuery(
-    { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
-    { enabled: !!(resolvedTechnicianId ?? technicianId) }
-  );
-
-  const startTrackingMutation = trpc.location.startTracking.useMutation();
-  const saveConsentMutation = trpc.location.saveConsent.useMutation();
-  const sessionQuery = trpc.location.getSessionByRequest.useQuery(
-    { requestId: trackingRequestId ?? 0 },
-    { enabled: !!trackingRequestId, refetchInterval: 10000 }
-  );
-
-
-
-
-
-  // 출발 버튼 처리
-  const handleDepart = async (work: any) => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // 동의 여부 확인
-    if (!consentQuery.data?.hasConsented) {
-      setPendingDepartRequestId(work.id);
-      setShowConsentModal(true);
-      return;
-    }
-    await doDepart(work);
-  };
-
-  const doDepart = async (work: any) => {
-    setIsStartingTracking(true);
-    try {
-      // 위치 권한 요청
-      const { granted, backgroundGranted } = await requestLocationPermissions();
-      await checkPermissions();
-      if (!granted && Platform.OS !== "web") {
-        Alert.alert(
-          "위치 권한 필요",
-          "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 앱 사용 중 허용",
-          [{ text: "확인" }]
-        );
-        setIsStartingTracking(false);
-        return;
-      }
-      if (!backgroundGranted && Platform.OS !== "web") {
-        Alert.alert(
-          "백그라운드 위치 권한 권장",
-          "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면\n위치 권한을 '항상 허용'으로 설정해 주세요.\n\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용\n\n(지금은 앱 켜진 상태에서만 위치가 전송됩니다)",
-          [{ text: "나중에" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
-        );
-      }
-
-      // 목적지 좌표 - 접수건에 저장된 좌표 사용 (카카오 지오코딩 연동 시 자동 저장됨)
-      const destLat = work.customerLat ? Number(work.customerLat) : undefined;
-      const destLng = work.customerLng ? Number(work.customerLng) : undefined;
-
-      // 서버에 세션 시작 요청
-      const result = await startTrackingMutation.mutateAsync({
-        requestId: work.id,
-        technicianId: (resolvedTechnicianId ?? technicianId)!,
-        technicianName: user?.loginId || "기사",
-        technicianPhone: user?.phoneNumber || "",
-        customerName: work.customerName,
-        customerPhone: work.phoneNumber,
-        customerAddress: formatFullAddress(work),
-        customerLat: destLat,
-        customerLng: destLng,
-        branchId: work.branchId ?? undefined,
-        branchName: work.branchName ?? undefined,
-        demoMode: false,
-      });
-
-      if (!result.success || !result.token) throw new Error("세션 시작 실패");
-
-      // 전역 위치 추적 컨텍스트로 시작 (화면 이동 후에도 위치 전송 유지)
-      const trackResult = await startTracking({
-        token: result.token,
-        requestId: work.id,
-        trackingUrl: result.trackingUrl,
-      });
-      if (!trackResult.ok) {
-        console.warn('[TechSchedule] 전역 추적 시작 실패:', trackResult.error);
-      }
-
-      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      Alert.alert(
-        "출발 완료 ✅",
-        result.smsSent
-          ? `고객에게 위치 공유 링크 문자가 발송되었습니다.\n\n위치 공유 중 - 화면 상단에 표시됩니다.`
-          : `위치 공유가 시작되었습니다.\n(SMS 미설정 - 데모 모드)`,
-        [{ text: "확인" }]
-      );
-    } catch (e: any) {
-      Alert.alert("오류", e.message || "출발 처리 중 오류가 발생했습니다.");
-    } finally {
-      setIsStartingTracking(false);
-    }
-  };
-
-  // 도착 버튼 처리
-  const handleArrive = async (work: any) => {
-    if (!trackingToken || trackingRequestId !== work.id) {
-      Alert.alert("알림", "이 방문 건의 위치 공유가 시작되지 않았습니다.");
-      return;
-    }
-    Alert.alert(
-      "도착 확인",
-      `${work.customerName} 고객님 댁에 도착하셨나요?`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "도착 완료",
-          onPress: async () => {
-            if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            await stopTracking("도착완료");
-            refetch();
-            Alert.alert("도착 완료", "위치 공유가 종료되었습니다.\n고객용 링크가 만료됩니다.");
-          },
-        },
-      ]
-    );
-  };
-
-  // 업무 취소 버튼 처리
-  const handleCancel = async (work: any) => {
-    Alert.alert(
-      "업무 취소",
-      "이 방문 건을 취소하시겠습니까?\n위치 공유도 즉시 종료됩니다.",
-      [
-        { text: "아니오", style: "cancel" },
-        {
-          text: "취소 확인",
-          style: "destructive",
-          onPress: async () => {
-            if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            if (trackingToken && trackingRequestId === work.id) {
-              await stopTracking("업무취소");
-            }
-            refetch();
-          },
-        },
-      ]
-    );
-  };
 
   const handleCall = (phone: string) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -310,12 +186,18 @@ export default function TechScheduleScreen() {
 
   // 오더 카드 렌더링 함수
   const renderWorkCard = (work: any) => {
+    const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
     const isThisTracking = trackingRequestId === work.id && !!trackingToken;
+    const canDepart = DEPARTABLE_VISIT_STATUSES.has(work.status);
+    const isStartingTracking = isStartingRequest(work.id);
+    const isArriving = isArrivingRequest(work.id);
+    const isResending = isResendingRequest(work.id);
+    const isAnotherVisitTracking = !!trackingToken && trackingRequestId !== work.id;
     return (
       <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
         <View style={s.cardHeader}>
-          <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
-            <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
+          <View style={[s.statusBadge, { backgroundColor: `${statusColor}20` }]}>
+            <Text style={[s.statusText, { color: statusColor }]}>{work.status}</Text>
           </View>
           <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
         </View>
@@ -415,39 +297,73 @@ export default function TechScheduleScreen() {
         )}
 
         {/* 출발/도착/취소 버튼 */}
-        <View style={s.locationBtns}>
-          {!isThisTracking ? (
-            <TouchableOpacity
-              style={[s.departBtn, isStartingTracking && s.btnDisabled]}
-              onPress={() => handleDepart(work)}
-              activeOpacity={0.8}
-              disabled={isStartingTracking}
-            >
-              {isStartingTracking ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={s.trackingActions}>
+        {!isThisTracking && work.status === "도착" ? (
+          <View style={s.arrivedState}>
+            <Text style={s.arrivedStateText}>✅ 도착 완료</Text>
+          </View>
+        ) : (isThisTracking || canDepart) && (
+          <View style={s.locationBtns}>
+            {isThisTracking ? (
+              <View style={s.trackingActionGroup}>
+                <View style={s.trackingActions}>
+                  <TouchableOpacity
+                    style={s.arriveBtn}
+                    onPress={() => handleArrive(work)}
+                    activeOpacity={0.8}
+                    disabled={isArriving || isResending}
+                  >
+                    {isArriving ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={s.arriveBtnText}>✅ 도착</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.cancelBtn, (isArriving || isResending) && s.btnDisabled]}
+                    onPress={() => handleStopSharing(work)}
+                    disabled={isArriving || isResending}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={s.cancelBtnText}>⏹ 위치 공유 종료</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[s.resendSmsBtn, (isArriving || isResending) && s.btnDisabled]}
+                  onPress={() => handleResendTrackingSms(work)}
+                  disabled={isArriving || isResending}
+                  activeOpacity={0.8}
+                >
+                  {isResending ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={s.resendSmsBtnText}>📨 고객 위치링크 재발송</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
               <TouchableOpacity
-                style={s.arriveBtn}
-                onPress={() => handleArrive(work)}
+                style={[s.departBtn, (isStartingAny || isAnotherVisitTracking || isConsentLoading) && s.btnDisabled]}
+                onPress={() => handleDepart(work)}
                 activeOpacity={0.8}
+                disabled={isStartingAny || isAnotherVisitTracking || isConsentLoading}
               >
-                <Text style={s.arriveBtnText}>✅ 도착</Text>
+                {isStartingTracking ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.departBtnText}>
+                    {isAnotherVisitTracking
+                      ? "📍 다른 방문 위치 공유 중"
+                      : isConsentLoading
+                        ? "⏳ 위치 동의 확인 중"
+                      : work.status === "출발"
+                        ? "🚗 위치 공유 다시 연결"
+                        : "🚗 고객 집으로 출발"}
+                  </Text>
+                )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={s.cancelBtn}
-                onPress={() => handleCancel(work)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+            )}
+          </View>
+        )}
 
         {/* 기존 액션 버튼 */}
         <View style={s.actions}>
@@ -487,8 +403,34 @@ export default function TechScheduleScreen() {
 
   return (
     <ScreenContainer>
+      {hasUnmatchedLegacyTracking && (
+        <View style={s.legacyRecoveryBanner}>
+          <View style={s.legacyRecoveryCopy}>
+            <Text style={s.legacyRecoveryTitle}>⚠️ 이전 위치 공유 확인 필요</Text>
+            <Text style={s.legacyRecoveryText}>
+              방문 건을 찾지 못한 이전 공유가 남아 있습니다. 종료 후 새 출발이 가능합니다.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              s.legacyRecoveryButton,
+              isLegacyStopPending && s.btnDisabled,
+            ]}
+            onPress={handleStopLegacyTracking}
+            disabled={isLegacyStopPending}
+            activeOpacity={0.8}
+          >
+            {isLegacyStopPending ? (
+              <ActivityIndicator color="#991B1B" size="small" />
+            ) : (
+              <Text style={s.legacyRecoveryButtonText}>이전 공유 종료</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* 위치 공유 중 배너 */}
-      {trackingToken && (
+      {trackingToken && !hasUnmatchedLegacyTracking && (
         <TouchableOpacity
           style={s.trackingBanner}
           onPress={() => setShowDebug((v) => !v)}
@@ -508,7 +450,7 @@ export default function TechScheduleScreen() {
       )}
 
       {/* GPS 디버그 패널 */}
-      {trackingToken && showDebug && (
+      {trackingToken && !hasUnmatchedLegacyTracking && showDebug && (
         <View style={s.debugPanel}>
           <Text style={s.debugTitle}>📡 GPS 디버그</Text>
           <Text style={s.debugRow}>위도: {debugState?.lat?.toFixed(6) ?? '-'}</Text>
@@ -613,31 +555,15 @@ export default function TechScheduleScreen() {
       {/* 위치 동의 모달 */}
       <LocationConsentModal
         visible={showConsentModal}
-        onConsent={async () => {
-          setShowConsentModal(false);
-          // 동의 저장
-          const effectiveTechId = resolvedTechnicianId ?? technicianId;
-          if (effectiveTechId) {
-            try {
-              await saveConsentMutation.mutateAsync({ technicianId: effectiveTechId });
-              consentQuery.refetch();
-            } catch {}
-          }
-          // 대기 중인 방문 건 출발 처리
-          if (pendingDepartRequestId !== null) {
-            const allDisplayWorks: any[] = allWorks ?? [];
-            const work = allDisplayWorks.find((w) => w.id === pendingDepartRequestId);
-            if (work) await doDepart(work);
-            setPendingDepartRequestId(null);
-          }
-        }}
-        onDecline={() => {
-          setShowConsentModal(false);
-          setPendingDepartRequestId(null);
-        }}
+        onConsent={handleConsent}
+        onDecline={handleDeclineConsent}
       />
     </ScreenContainer>
   );
+}
+
+export default function TechScheduleRoute() {
+  return <TechScheduleScreen />;
 }
 
 const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
@@ -689,6 +615,30 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   trackingBannerText: { flex: 1 },
   trackingBannerTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
   trackingBannerSub: { color: "rgba(255,255,255,0.85)", fontSize: 12 },
+  legacyRecoveryBanner: {
+    backgroundColor: "#FEF2F2",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FCA5A5",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  legacyRecoveryCopy: { flex: 1 },
+  legacyRecoveryTitle: { color: "#991B1B", fontSize: 14, fontWeight: "800" },
+  legacyRecoveryText: { color: "#7F1D1D", fontSize: 11, marginTop: 3 },
+  legacyRecoveryButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#EF4444",
+    borderRadius: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    minWidth: 92,
+    alignItems: "center",
+  },
+  legacyRecoveryButtonText: { color: "#991B1B", fontSize: 12, fontWeight: "800" },
   trackingDot: {
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: "#fff",
@@ -715,6 +665,16 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   trackingLinkText: { color: "#3B82F6", fontSize: 13, fontWeight: "600" },
   // 출발/도착/취소 버튼
   locationBtns: { marginTop: 10 },
+  arrivedState: {
+    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  arrivedStateText: { color: "#166534", fontSize: 14, fontWeight: "800" },
   departBtn: {
     backgroundColor: "#FF6B35",
     borderRadius: 12,
@@ -724,6 +684,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   departBtnText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   btnDisabled: { backgroundColor: "#D1D5DB" },
   trackingActions: { flexDirection: "row", gap: 10 },
+  trackingActionGroup: { gap: 8 },
   arriveBtn: {
     flex: 1,
     backgroundColor: "#22C55E",
@@ -740,6 +701,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     alignItems: "center",
   },
   cancelBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  resendSmsBtn: {
+    backgroundColor: "#2563EB",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  resendSmsBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   // GPS 디버그 패널
   debugPanel: {
     backgroundColor: '#1a1a2e',

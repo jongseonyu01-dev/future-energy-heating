@@ -22,7 +22,8 @@ function normalizeKey(relKey: string): string {
 }
 
 function appendHashSuffix(relKey: string): string {
-  const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  // 사진 URL 자체가 capability처럼 노출될 수 있으므로 UUID 전체 128-bit 난수를 쓴다.
+  const hash = crypto.randomUUID().replace(/-/g, "");
   const lastDot = relKey.lastIndexOf(".");
   if (lastDot === -1) return `${relKey}_${hash}`;
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
@@ -94,4 +95,51 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
 
   const { url } = (await resp.json()) as { url: string };
   return url;
+}
+
+/** 내부 공개 URL에서 이 저장소가 발급한 object key만 엄격히 추출한다. */
+export function storageKeyFromPublicUrl(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith("/manus-storage/")) return null;
+  const key = value.slice("/manus-storage/".length);
+  if (
+    !key ||
+    key.includes("..") ||
+    key.includes("//") ||
+    key.includes("?") ||
+    key.includes("#") ||
+    !/^[A-Za-z0-9/_.-]+$/.test(key)
+  ) {
+    return null;
+  }
+  return key;
+}
+
+/** Forge가 발급한 presigned DELETE URL로 내부 object를 삭제한다. */
+export async function storageDelete(relKey: string): Promise<void> {
+  const { forgeUrl, forgeKey } = getForgeConfig();
+  const key = normalizeKey(relKey);
+  if (
+    !key ||
+    key.includes("..") ||
+    key.includes("//") ||
+    !/^[A-Za-z0-9/_.-]+$/.test(key)
+  ) {
+    throw new Error("Invalid storage key");
+  }
+
+  const presignUrl = new URL("v1/storage/presign/delete", forgeUrl + "/");
+  presignUrl.searchParams.set("path", key);
+  const presignResp = await fetch(presignUrl, {
+    headers: { Authorization: `Bearer ${forgeKey}` },
+  });
+  if (!presignResp.ok) {
+    const msg = await presignResp.text().catch(() => presignResp.statusText);
+    throw new Error(`Storage delete presign failed (${presignResp.status}): ${msg}`);
+  }
+  const { url: s3Url } = (await presignResp.json()) as { url: string };
+  if (!s3Url) throw new Error("Forge returned empty delete URL");
+  const deleteResp = await fetch(s3Url, { method: "DELETE" });
+  if (!deleteResp.ok && deleteResp.status !== 404) {
+    throw new Error(`Storage delete failed (${deleteResp.status})`);
+  }
 }

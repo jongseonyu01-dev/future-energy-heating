@@ -137,10 +137,10 @@ jobs:
               appId: "driver",
               versionName: process.env.VERSION_NAME,
               versionCode: Number(process.env.VERSION_CODE),
-              minSupportedVersionCode: 28,
+              minSupportedVersionCode: 29,
               sha256: process.env.SHA256,
               fileSize: Number(process.env.FILE_SIZE),
-              releaseNotes: "기사 일정 0건 표시 및 인증 리다이렉트 수정",
+              releaseNotes: "기사 출발 버튼·실시간 위치공유·도착 처리 복구",
               publishedAt: process.env.PUBLISHED_AT,
               sourceSha: process.env.SOURCE_SHA
             };
