@@ -1,14 +1,18 @@
 import React, { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, TextInput, RefreshControl,
+  ActivityIndicator, TextInput, RefreshControl, Platform, Alert, Linking,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import { formatFullAddress } from "@/constants/address-data";
+import { LocationConsentModal } from "@/components/location-consent-modal";
+import { requestLocationPermissions } from "@/lib/location-tracking";
+import { useLocationTracking } from "@/lib/location-tracking-context";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
@@ -24,14 +28,31 @@ export default function TechWorksScreen() {
   const [activeFilter, setActiveFilter] = useState("전체");
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
+  const [startingTrackingRequestId, setStartingTrackingRequestId] = useState<number | null>(null);
 
   const userId = user?.userId;
+  const technicianId = user?.technicianId;
+
+  const {
+    trackingRequestId,
+    startTracking,
+    checkPermissions,
+  } = useLocationTracking();
 
   // 세션 기반 보안 조회 - 서버에서 기사 ID를 확인하므로 클라이언트에서 technicianId를 전달하지 않음
   const { data: works = [], isLoading, error, refetch } = trpc.repair.listMySchedule.useQuery(
     undefined,
     { enabled: !!userId }
   );
+  const resolvedTechnicianId = technicianId ?? (works.length > 0 ? works[0].technicianId : null);
+  const consentQuery = trpc.location.getConsent.useQuery(
+    { technicianId: resolvedTechnicianId ?? 0 },
+    { enabled: !!resolvedTechnicianId }
+  );
+  const startTrackingMutation = trpc.location.startTracking.useMutation();
+  const saveConsentMutation = trpc.location.saveConsent.useMutation();
 
   // 화면 재진입 시 자동 refetch
   useFocusEffect(
@@ -50,6 +71,82 @@ export default function TechWorksScreen() {
     const matchSearch = !search || w.customerName.includes(search) || w.apartmentName.includes(search) || w.requestNumber.includes(search);
     return matchFilter && matchSearch;
   });
+
+  const doDepart = async (work: any) => {
+    if (!resolvedTechnicianId) {
+      Alert.alert("기사 정보 오류", "기사 계정 연결 정보를 찾을 수 없습니다. 본사에 문의해주세요.");
+      return;
+    }
+    setStartingTrackingRequestId(work.id);
+    try {
+      const { granted, backgroundGranted } = await requestLocationPermissions();
+      await checkPermissions();
+      if (!granted && Platform.OS !== "web") {
+        Alert.alert(
+          "위치 권한 필요",
+          "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 앱 사용 중 허용"
+        );
+        return;
+      }
+      if (!backgroundGranted && Platform.OS !== "web") {
+        Alert.alert(
+          "백그라운드 위치 권한 권장",
+          "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면 위치 권한을 '항상 허용'으로 설정해 주세요.",
+          [{ text: "나중에" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+        );
+      }
+
+      const result = await startTrackingMutation.mutateAsync({
+        requestId: work.id,
+        technicianId: resolvedTechnicianId,
+        technicianName: user?.name || user?.loginId || "담당 기사",
+        technicianPhone: user?.phoneNumber || "",
+        customerName: work.customerName,
+        customerPhone: work.phoneNumber,
+        customerAddress: formatFullAddress(work),
+        customerLat: work.customerLat ? Number(work.customerLat) : undefined,
+        customerLng: work.customerLng ? Number(work.customerLng) : undefined,
+        branchId: work.branchId ?? undefined,
+        branchName: work.branchName ?? undefined,
+        demoMode: false,
+      });
+      if (!result.success || !result.token) throw new Error("위치 공유 세션을 시작하지 못했습니다.");
+
+      const trackingResult = await startTracking({
+        token: result.token,
+        requestId: work.id,
+        trackingUrl: result.trackingUrl,
+      });
+      if (!trackingResult.ok) throw new Error(trackingResult.error || "위치 전송을 시작하지 못했습니다.");
+
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      await refetch();
+      Alert.alert(
+        "출발 완료 ✅",
+        result.smsSent
+          ? "고객에게 실시간 위치 확인 링크를 문자로 보냈습니다."
+          : "실시간 위치 공유를 시작했습니다."
+      );
+    } catch (e: any) {
+      Alert.alert("출발 처리 오류", e?.message || "출발 처리 중 오류가 발생했습니다.");
+    } finally {
+      setStartingTrackingRequestId(null);
+    }
+  };
+
+  const handleDepart = async (work: any) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    if (!consentQuery.data?.hasConsented) {
+      setPendingDepartRequestId(work.id);
+      setShowConsentModal(true);
+      return;
+    }
+    await doDepart(work);
+  };
 
   const s = styles(colors);
 
@@ -133,10 +230,13 @@ export default function TechWorksScreen() {
           contentContainerStyle={s.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}
         >
-          {filtered.map((work) => (
+          {filtered.map((work) => {
+            const isCompleted = ["공사완료", "작업완료"].includes(work.status);
+            const isThisTracking = trackingRequestId === work.id;
+            return (
             <TouchableOpacity
               key={work.id}
-              style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}
               onPress={() => router.push(`/work-report?id=${work.id}` as any)}
               activeOpacity={0.8}
             >
@@ -159,10 +259,56 @@ export default function TechWorksScreen() {
                   {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}
                 </Text>
               </View>
+
+              {!isCompleted && (
+                <TouchableOpacity
+                  style={[s.departBtn, (startingTrackingRequestId !== null || isThisTracking) && s.departBtnDisabled]}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    if (!isThisTracking) handleDepart(work);
+                  }}
+                  disabled={startingTrackingRequestId !== null || isThisTracking}
+                  activeOpacity={0.8}
+                >
+                  {startingTrackingRequestId === work.id ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={s.departBtnText}>
+                      {isThisTracking ? "📍 실시간 위치 공유 중" : "🚗 고객 집으로 출발"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
-          ))}
+          );})}
         </ScrollView>
       )}
+
+      <LocationConsentModal
+        visible={showConsentModal}
+        onConsent={async () => {
+          setShowConsentModal(false);
+          if (resolvedTechnicianId) {
+            try {
+              await saveConsentMutation.mutateAsync({ technicianId: resolvedTechnicianId });
+              await consentQuery.refetch();
+            } catch (e: any) {
+              Alert.alert("동의 저장 오류", e?.message || "위치정보 이용 동의를 저장하지 못했습니다.");
+              setPendingDepartRequestId(null);
+              return;
+            }
+          }
+          if (pendingDepartRequestId !== null) {
+            const work = works.find((item) => item.id === pendingDepartRequestId);
+            setPendingDepartRequestId(null);
+            if (work) await doDepart(work);
+          }
+        }}
+        onDecline={() => {
+          setShowConsentModal(false);
+          setPendingDepartRequestId(null);
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -182,6 +328,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 60 },
   list: { padding: 12, gap: 10 },
   card: { borderRadius: 14, padding: 14, borderWidth: 1, gap: 4 },
+  cardTracking: { borderWidth: 2 },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
   statusText: { fontSize: 12, fontWeight: "700" },
@@ -192,4 +339,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   symptom: { fontSize: 13, fontWeight: "600" },
   date: { fontSize: 12 },
   schedLine: { fontSize: 12, marginTop: 2 },
+  departBtn: {
+    backgroundColor: "#FF6B35",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  departBtnDisabled: { backgroundColor: "#9CA3AF" },
+  departBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });
