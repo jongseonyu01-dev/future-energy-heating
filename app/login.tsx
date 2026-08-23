@@ -23,6 +23,13 @@ type View2 = "login" | "changePw" | "signup" | "findId" | "resetPw";
 const TEST_TECHNICIAN_LOGIN_ID = "yjs1";
 const normalizePhone = (value: string) => value.replace(/[^0-9]/g, "");
 const isValidMobileLoginId = (value: string) => /^010\d{8}$/.test(value);
+const normalizeAppLoginId = (value: string) => {
+  const trimmed = value.trim();
+  const normalizedPhone = normalizePhone(trimmed);
+  return /^[0-9\s()+.\-]+$/.test(trimmed) && isValidMobileLoginId(normalizedPhone)
+    ? normalizedPhone
+    : trimmed;
+};
 const normalizeTechnicianName = (value: string) => value.normalize("NFC").trim();
 const isValidTechnicianName = (value: string) => /^[가-힣]{2,10}$/u.test(normalizeTechnicianName(value));
 
@@ -181,17 +188,13 @@ export default function LoginScreen() {
       ? loginId.trim()
       : isTestLogin
         ? TEST_TECHNICIAN_LOGIN_ID
-        : normalizePhone(loginId);
+        : normalizeAppLoginId(loginId);
     if (!loginAccount || !password.trim()) {
-      setError(Platform.OS === "web" ? "아이디와 비밀번호를 입력해주세요." : "휴대전화 번호와 비밀번호를 입력해주세요.");
+      setError("아이디 또는 휴대전화 번호와 비밀번호를 입력해주세요.");
       return;
     }
     if (isNative && isTestLogin && loginId.trim() !== TEST_TECHNICIAN_LOGIN_ID) {
       setError("테스트 계정 아이디를 확인해주세요.");
-      return;
-    }
-    if (isNative && !isTestLogin && !isValidMobileLoginId(loginAccount)) {
-      setError("010으로 시작하는 휴대전화 번호 11자리를 입력해주세요.");
       return;
     }
     loginMutation.mutate({ loginId: loginAccount, password, source: "app" });
@@ -202,7 +205,7 @@ export default function LoginScreen() {
       setLoginId(value);
       return;
     }
-    if (!isTestLogin) setLoginId(normalizePhone(value).slice(0, 11));
+    if (!isTestLogin) setLoginId(value.slice(0, 64));
   };
 
   const toggleTestLogin = () => {
@@ -409,23 +412,23 @@ export default function LoginScreen() {
           {view === "login" && (
             <>
               <View style={s.form}>
-                <Text style={s.label}>{Platform.OS === "web" ? "아이디" : isTestLogin ? "테스트 계정" : "휴대전화 번호"}</Text>
+                <Text style={s.label}>{Platform.OS === "web" ? "아이디" : isTestLogin ? "테스트 계정" : "기사 아이디 또는 휴대전화 번호"}</Text>
                 <TextInput
                   style={[s.input, isNative && isTestLogin && s.readOnlyInput]}
                   value={loginId}
                   onChangeText={handleLoginAccountChange}
                   onFocus={handleFocus}
-                  placeholder={Platform.OS === "web" ? "아이디를 입력하세요" : isTestLogin ? TEST_TECHNICIAN_LOGIN_ID : "01012345678"}
+                  placeholder={Platform.OS === "web" ? "아이디를 입력하세요" : isTestLogin ? TEST_TECHNICIAN_LOGIN_ID : "기사 아이디 또는 01012345678"}
                   placeholderTextColor={colors.muted}
                   editable={!isNative || !isTestLogin}
-                  keyboardType={isNative && !isTestLogin ? "phone-pad" : "default"}
-                  inputMode={isNative && !isTestLogin ? "tel" : "text"}
+                  keyboardType="default"
+                  inputMode="text"
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
-                  autoComplete={isNative && !isTestLogin ? "tel" : "off"}
-                  textContentType={isNative && !isTestLogin ? "telephoneNumber" : "none"}
-                  importantForAutofill={isNative && !isTestLogin ? "yes" : "no"}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
                   returnKeyType="next"
                 />
                 {isNative && (
