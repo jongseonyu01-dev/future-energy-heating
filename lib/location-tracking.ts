@@ -11,11 +11,10 @@
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSessionToken } from "@/lib/_core/auth";
+import { API_BASE_URL } from "@/constants/oauth";
 
 const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
-// 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
-const API_BASE_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
 
 async function authorizedJsonHeaders(): Promise<Record<string, string>> {

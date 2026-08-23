@@ -1,4 +1,4 @@
-name: EAS iOS TestFlight (v1.1.16)
+name: EAS iOS TestFlight (v1.1.17)
 
 on:
   workflow_dispatch:

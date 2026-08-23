@@ -3,10 +3,7 @@ import { httpLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "@/server/routers";
 import * as Auth from "@/lib/_core/auth";
-
-// ⚠️ API 서버 주소 — www 포함 퓨니코드 주소로 고정
-// www 없는 주소는 308 리다이렉트가 발생하므로 반드시 www 포함 주소 사용
-const API_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
+import { API_BASE_URL } from "@/constants/oauth";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -21,7 +18,8 @@ export function createTRPCClient() {
   return trpc.createClient({
     links: [
       httpLink({
-        url: `${API_URL}/api/trpc`,
+        // Authorization 헤더를 보존하도록 308 이동이 없는 공식 루트 도메인에 직접 요청한다.
+        url: `${API_BASE_URL}/api/trpc`,
         // tRPC v11: transformer는 httpLink 내부에 설정
         transformer: superjson,
         async headers() {

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { SESSION_TOKEN_KEY } from "@/constants/oauth";
+import { API_BASE_URL, SESSION_TOKEN_KEY } from "@/constants/oauth";
 
 export type AppRole = "customer" | "technician" | "branch_manager" | "hq_admin";
 
@@ -79,7 +79,7 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<Ver
     // 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)
     const API_BASE = Platform.OS === "web"
       ? "/api/trpc"
-      : "https://www.xn--h50b270bp0ceuddugnobx2m.kr/api/trpc";
+      : `${API_BASE_URL}/api/trpc`;
     const res = await fetch(`${API_BASE}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
