@@ -12,9 +12,11 @@ function read(relativePath: string) {
 
 describe("native API origin", () => {
   it("uses the non-redirecting official origin", () => {
+    const apiOriginSource = read("constants/api-origin.ts");
     const oauthSource = read("constants/oauth.ts");
-    expect(oauthSource).toContain(`export const API_BASE_URL = "${officialApiOrigin}"`);
-    expect(oauthSource).not.toContain(`export const API_BASE_URL = "${redirectedWwwOrigin}"`);
+    expect(apiOriginSource).toContain(`export const API_BASE_URL = "${officialApiOrigin}"`);
+    expect(apiOriginSource).not.toContain(redirectedWwwOrigin);
+    expect(oauthSource).toContain('export { API_BASE_URL } from "./api-origin"');
   });
 
   it("shares one API constant across authenticated native requests", () => {
@@ -27,7 +29,7 @@ describe("native API origin", () => {
 
   it("requires the first fixed Android build", () => {
     const workflowSource = read(".github/workflows/eas-build-apk.yml");
-    expect(workflowSource).toContain("minSupportedVersionCode: 28");
-    expect(read("app.config.ts")).toContain("versionCode: 28");
+    expect(workflowSource).toContain("minSupportedVersionCode: 29");
+    expect(read("app.config.ts")).toContain("versionCode: 29");
   });
 });

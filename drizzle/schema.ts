@@ -235,7 +235,9 @@ export const technicians = mysqlTable("technicians", {
 // ─── 현장 점검표 테이블 ──────────────────────────────────────────
 export const workReports = mysqlTable("work_reports", {
   id: int("id").autoincrement().primaryKey(),
-  requestId: int("requestId").notNull(), // repair_requests.id
+  // 접수 1건에는 작업 보고서도 정확히 1건만 존재한다. 애플리케이션의
+  // 트랜잭션 잠금과 별개로 DB가 레거시/동시 쓰기까지 최종 방어한다.
+  requestId: int("requestId").notNull().unique("work_reports_request_id_unique"), // repair_requests.id
   technicianId: int("technicianId").notNull(),
   // 점검 내용
   checkItems: text("checkItems"),        // JSON 배열
@@ -493,7 +495,20 @@ export const estimates = mysqlTable("estimates", {
   ownerType: mysqlEnum("ownerType", ["unassigned", "headquarters", "branch"]).notNull().default("headquarters"),
   branchId: int("branchId"),
   branchName: varchar("branchName", { length: 100 }),
-  status: mysqlEnum("status", ["pending", "viewed", "approved", "rejected", "expired"]).notNull().default("pending"),
+  status: mysqlEnum("status", [
+    "pending",
+    "viewed",
+    "approved",
+    "rejected",
+    "expired",
+    "schedule_requested",
+    "schedule_confirmed",
+    "converted",
+    "cancelled",
+    "inquiry_received",
+    "report_pending",
+    "sent",
+  ]).notNull().default("pending"),
   viewedAt: timestamp("viewedAt"),
   addressFull: text("addressFull"),
   sido: varchar("sido", { length: 50 }),
@@ -532,7 +547,7 @@ export const estimateMessageLogs = mysqlTable("estimate_message_logs", {
   messageType: varchar("messageType", { length: 50 }).notNull(),
   messageBody: text("messageBody"),
   linkUrl: text("linkUrl"),
-  sendStatus: mysqlEnum("sendStatus", ["SUCCESS", "FAILED", "SKIPPED"]).notNull().default("SKIPPED"),
+  sendStatus: mysqlEnum("sendStatus", ["SUCCESS", "FAILED", "SKIPPED", "REQUESTED"]).notNull().default("SKIPPED"),
   sentAt: timestamp("sentAt").defaultNow().notNull(),
 });
 

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   buildBranchAssignedMessage,
   buildScheduleConfirmedMessage,
+  buildTechnicianReassignedMessage,
+  getScheduleNoticeKind,
   buildTechnicianArrivedMessage,
   buildTechnicianDepartedMessage,
   buildWorkCompletedMessage,
@@ -28,6 +30,28 @@ describe("워크플로우 단계별 알림 메시지 빌더", () => {
     const msg = buildScheduleConfirmedMessage("홍길동", "2026-06-17", "14:00", true, "기사 일정 조정");
     expect(msg).toContain("변경");
     expect(msg).toContain("변경 사유: 기사 일정 조정");
+  });
+
+  it("기사만 바뀌면 재배정, 기사와 일정이 함께 바뀌면 두 변경을 안내한다", () => {
+    const reassigned = buildTechnicianReassignedMessage("홍길동", "새기사", "2026-08-25", "10:00", false);
+    expect(reassigned).toContain("담당 기사가 재배정되었습니다");
+    expect(reassigned).toContain("담당 기사: 새기사");
+    expect(reassigned).not.toContain("방문 일정이 변경");
+
+    const changed = buildTechnicianReassignedMessage("홍길동", "새기사", "2026-08-26", "14:00", true);
+    expect(changed).toContain("담당 기사와 방문 일정이 변경되었습니다");
+    expect(changed).toContain("2026-08-26 14:00");
+  });
+
+  it("이전 일정이 없으면 최초 확정, 실제 차이가 있으면 변경으로 분류한다", () => {
+    expect(getScheduleNoticeKind(null, null, "2026-08-25", "10:00")).toBe("confirmed");
+    expect(getScheduleNoticeKind("2026-08-25", "10:00", "2026-08-26", "10:00")).toBe("changed");
+    expect(getScheduleNoticeKind("2026-08-25", "10:00", "2026-08-25", "11:00")).toBe("changed");
+  });
+
+  it("null·빈 문자열을 동일하게 정규화하고 중복/미정 일정을 발송 대상에서 제외한다", () => {
+    expect(getScheduleNoticeKind("2026-08-25", null, "2026-08-25", "   ")).toBe("unchanged");
+    expect(getScheduleNoticeKind(null, "", "", "")).toBe("none");
   });
 
   it("기사 출발 메시지에 위치 확인 링크가 포함된다", () => {

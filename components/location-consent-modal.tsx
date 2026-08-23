@@ -47,7 +47,7 @@ export function LocationConsentModal({ visible, onConsent, onDecline }: Location
             <View style={[styles.infoBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.infoTitle, { color: colors.foreground }]}>수집 시점</Text>
               <Text style={[styles.infoText, { color: colors.muted }]}>
-                "고객 집으로 출발" 버튼을 누른 시점부터 "도착" 또는 "업무 취소" 버튼을 누를 때까지만 수집합니다.{"\n"}
+                “고객 집으로 출발” 버튼을 누른 시점부터 “도착” 또는 “위치 공유 종료” 버튼을 누를 때까지만 수집합니다.{"\n"}
                 상시 추적하지 않습니다.
               </Text>
             </View>

@@ -20,7 +20,9 @@ describe("work report photo integration", () => {
 
   it("uses the shared SecureStore key when restoring a validated session", () => {
     const source = readFileSync(path.join(root, "lib/auth-context.tsx"), "utf8");
-    expect(source).toContain('import { SESSION_TOKEN_KEY } from "@/constants/oauth"');
+    expect(source).toMatch(
+      /import\s*\{[^}]*SESSION_TOKEN_KEY[^}]*\}\s*from "@\/constants\/oauth"/s,
+    );
     expect(source).toContain("SecureStore.setItemAsync(SESSION_TOKEN_KEY, saved.token)");
     expect(source).not.toContain("APP_SESSION_TOKEN_KEY");
   });
@@ -31,7 +33,7 @@ describe("work report photo integration", () => {
     const configSource = readFileSync(path.join(root, "app.config.ts"), "utf8");
     expect(packageSource).toContain('"expo-image-manipulator": "~14.0.8"');
     expect(lockSource).toContain("expo-image-manipulator@14.0.8");
-    expect(configSource).toContain('version: "1.1.13"');
-    expect(configSource).toContain("versionCode: 24");
+    expect(configSource).toContain('version: "1.1.18"');
+    expect(configSource).toContain("versionCode: 29");
   });
 });

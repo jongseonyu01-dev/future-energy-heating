@@ -174,7 +174,6 @@
   <div>목적지 위도(customerLat): <span id="dbg-dest-lat" style="color:#94a3b8">-</span></div>
   <div>목적지 경도(customerLng): <span id="dbg-dest-lng" style="color:#94a3b8">-</span></div>
   <div>KAKAO_JS_KEY: <span id="dbg-js-key" style="color:#94a3b8">확인 중...</span></div>
-  <div>KAKAO_REST_KEY: <span id="dbg-rest-key" style="color:#94a3b8">확인 중...</span></div>
   <div>SDK URL: <span id="dbg-sdk-url" style="color:#94a3b8;word-break:break-all">-</span></div>
   <div>kakao SDK: <span id="dbg-sdk-status" style="color:#fbbf24">로딩 전</span></div>
   <div>kakao 객체: <span id="dbg-kakao-diag" style="color:#94a3b8;word-break:break-all">-</span></div>
@@ -236,7 +235,7 @@ function showDebugErrors() {
   if (!el || _consoleErrors.length === 0) return;
   el.classList.add('visible');
   el.innerHTML = '<div style="color:#f87171;font-weight:bold;margin-bottom:4px">⚠️ JavaScript 오류</div>' +
-    _consoleErrors.map(function(e) { return '<div>' + e + '</div>'; }).join('');
+    _consoleErrors.map(function(e) { return '<div>' + escapeHtml(e) + '</div>'; }).join('');
 }
 // ═══════════════════════════════════════════════════════════════════════════
 // 디버그 헬퍼
@@ -246,6 +245,12 @@ function dbg(id, text, color) {
   if (!el) return;
   el.textContent = text;
   if (color) el.style.color = color;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -307,7 +312,7 @@ function showMapMessage(icon, text) {
 // 카카오맵 초기화
 // ═══════════════════════════════════════════════════════════════════════════
 function initKakaoMap(techLat, techLng, destLat, destLng) {
-  console.log('[지도] initKakaoMap 호출 - tech:', techLat, techLng, 'dest:', destLat, destLng);
+  console.log('[지도] initKakaoMap 호출');
 
   // ── 1. SDK 로드 여부 확인 (SDK 실패 ≠ 좌표 null)
   if (typeof kakao === 'undefined' || !kakao.maps) {
@@ -417,7 +422,7 @@ function updateTechMarkerOnly(techLat, techLng) {
     kakaoMap.setCenter(newPos);
     lastTechLat = techLat;
     lastTechLng = techLng;
-    console.log('[지도] 기사 마커 위치 업데이트:', techLat, techLng);
+    console.log('[지도] 기사 마커 위치 업데이트');
     return true;
   } catch(e) {
     console.error('[지도] 마커 업데이트 실패:', e);
@@ -426,17 +431,23 @@ function updateTechMarkerOnly(techLat, techLng) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 카카오 지오코딩 (클라이언트 사이드 - KAKAO_REST_API_KEY 사용)
+// 카카오 지오코딩 (REST 키는 서버 same-origin 프록시에서만 사용)
 // ═══════════════════════════════════════════════════════════════════════════
 function geocodeAddress(address, callback) {
-  var apiKey = window.KAKAO_REST_API_KEY || '';
-  if (!apiKey || !address) { callback(null); return; }
-  var url = 'https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(address);
-  fetch(url, { headers: { 'Authorization': 'KakaoAK ' + apiKey } })
-    .then(function(r) { return r.json(); })
+  if (!address) { callback(null); return; }
+  fetch('/api/kakao/local/address', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: address })
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function(data) {
-      var doc = data.documents && data.documents[0];
-      callback(doc ? { lat: parseFloat(doc.y), lng: parseFloat(doc.x) } : null);
+      callback(Number.isFinite(data.lat) && Number.isFinite(data.lng)
+        ? { lat: data.lat, lng: data.lng }
+        : null);
     })
     .catch(function(e) { console.warn('[지오코딩 실패]', e); callback(null); });
 }
@@ -451,10 +462,10 @@ function triggerMapInit(techLat, techLng, destLat, destLng, customerAddress) {
 
   function runWithGeocoding(dLat, dLng) {
     if ((!dLat || !dLng) && customerAddress) {
-      console.log('[지오코딩] 주소 변환 시도:', customerAddress);
+      console.log('[지오코딩] 주소 변환 시도');
       geocodeAddress(customerAddress, function(result) {
         if (result) {
-          console.log('[지오코딩] 성공:', result.lat, result.lng);
+          console.log('[지오코딩] 성공');
           doInit(result.lat, result.lng);
         } else {
           console.warn('[지오코딩] 실패');
@@ -487,8 +498,6 @@ function loadKakaoMapSdk() {
 
   // 키 디버그 표시
   dbg('dbg-js-key', jsKey ? jsKey.substring(0, 8) + '...' : 'undefined (미설정)', jsKey ? '#4ade80' : '#f87171');
-  var restKey = window.KAKAO_REST_API_KEY || '';
-  dbg('dbg-rest-key', restKey ? '설정됨 ✅' : 'undefined (미설정)', restKey ? '#4ade80' : '#f87171');
 
   if (!jsKey) {
     console.warn('[지도] KAKAO_JAVASCRIPT_KEY 없음');
@@ -503,7 +512,7 @@ function loadKakaoMapSdk() {
   // ★ autoload=false 추가 → kakao.maps.load() 콜백이 클래스 초기화를 보장
   // (autoload=false 없으면 load() 콜백해도 LatLng/Map이 undefined일 수 있음)
   var sdkUrl = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + jsKey + '&autoload=false&libraries=services';
-  console.log('[지도] SDK 로드 시작:', sdkUrl);
+  console.log('[지도] SDK 로드 시작');
   dbg('dbg-sdk-url', sdkUrl.replace(jsKey, jsKey.substring(0, 6) + '...'), '#94a3b8');
   dbg('dbg-sdk-status', '로딩 중...', '#fbbf24');
 
@@ -559,7 +568,7 @@ function loadKakaoMapSdk() {
         console.error('[지도]', emsg);
         dbg('dbg-sdk-status', 'load콜백 실행됨, 클래스 미준비 ❌', '#f87171');
         dbg('dbg-map-result', '실패: ' + emsg, '#f87171');
-        dbg('dbg-sdk-url', sdkUrl, '#f87171');
+        dbg('dbg-sdk-url', sdkUrl.replace(jsKey, jsKey.substring(0, 6) + '...'), '#f87171');
         showMapMessage('🗺️', '카카오 지도 SDK 초기화 실패<br><span style="font-size:13px;color:#94a3b8">LatLng=' + diag.LatLng + ' / Map=' + diag.Map + '</span>');
         pendingMapArgs = null;
         return;
@@ -576,10 +585,10 @@ function loadKakaoMapSdk() {
         var dLat = args.destLat;
         var dLng = args.destLng;
         if ((!dLat || !dLng) && args.customerAddress) {
-          console.log('[지오코딩] 주소 변환 시도:', args.customerAddress);
+          console.log('[지오코딩] 주소 변환 시도');
           geocodeAddress(args.customerAddress, function(result) {
             if (result) {
-              console.log('[지오코딩] 성공:', result.lat, result.lng);
+              console.log('[지오코딩] 성공');
               initKakaoMap(args.techLat, args.techLng, result.lat, result.lng);
             } else {
               console.warn('[지오코딩] 실패');
@@ -729,7 +738,7 @@ function pollLocationOnly() {
           mapHeaderSub.textContent = '실시간 업데이트';
         }
 
-        console.log('[폴링] 위치 업데이트:', techLat, techLng, data.currentUpdatedAt);
+        console.log('[폴링] 위치 업데이트 수신');
       });
     })
     .catch(function(e) {
@@ -774,9 +783,9 @@ function render(data) {
     app.innerHTML = '<div class="ended-card">' +
       '<div class="ended-icon">✅</div>' +
       '<div class="ended-title">기사가 도착했습니다!</div>' +
-      '<div class="ended-desc">담당 기사(' + (data.technicianName || '기사') + ')가 도착하여<br>위치 공유가 종료되었습니다.<br><br>도착 시각: ' + formatTime(data.arrivedAt) + '</div>' +
+      '<div class="ended-desc">담당 기사(' + escapeHtml(data.technicianName || '기사') + ')가 도착하여<br>위치 공유가 종료되었습니다.<br><br>도착 시각: ' + escapeHtml(formatTime(data.arrivedAt)) + '</div>' +
       '</div>' +
-      '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+      '<div class="footer">퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
     if (refreshInterval) clearInterval(refreshInterval);
     return;
   }
@@ -790,13 +799,14 @@ function render(data) {
       '<div class="ended-title">' + (isExpired ? '위치 공유 링크 만료' : '방문이 취소되었습니다') + '</div>' +
       '<div class="ended-desc">' + (isExpired ? '위치 공유 링크가 만료되었습니다.<br>문의사항은 고객센터로 연락해 주세요.' : '담당 기사의 방문이 취소되었습니다.<br>불편을 드려 죄송합니다.') + '</div>' +
       '</div>' +
-      '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+      '<div class="footer">퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
     if (refreshInterval) clearInterval(refreshInterval);
     return;
   }
 
   // 이동 중 (기본)
   var techName = data.technicianName || '담당 기사';
+  var safeTechName = escapeHtml(techName);
   var techPhone = data.technicianPhone || '';
   var hasLocation = !!(techLat && techLng);
 
@@ -810,8 +820,8 @@ function render(data) {
   lastDestLat = destLat;
   lastDestLng = destLng;
 
-  var etaHtml = eta ? '<div style="background:#FFF3E0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;color:#FF6B35;text-align:center;margin-bottom:8px">⏱ ' + eta + '</div>' : '';
-  var addrHtml = data.customerAddress ? '<div class="info-item" style="grid-column:1/-1"><div class="info-item-label">방문 주소</div><div class="info-item-value">' + data.customerAddress + '</div></div>' : '';
+  var etaHtml = eta ? '<div style="background:#FFF3E0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;color:#FF6B35;text-align:center;margin-bottom:8px">⏱ ' + escapeHtml(eta) + '</div>' : '';
+  var addrHtml = data.customerAddress ? '<div class="info-item" style="grid-column:1/-1"><div class="info-item-label">방문 주소</div><div class="info-item-value">' + escapeHtml(data.customerAddress) + '</div></div>' : '';
   var callHtml = techPhone ? '<a class="call-btn" href="tel:' + techPhone.replace(/[^0-9]/g,'') + '">📞 전화</a>' : '';
   var mapPlaceholder = hasLocation ? '' : '<div class="map-placeholder"><div class="map-placeholder-icon">📍</div><div class="map-placeholder-text">기사 위치 정보를 수신하는 중입니다...</div></div>';
 
@@ -845,13 +855,13 @@ function render(data) {
     '<div class="tech-card">' +
       '<div class="tech-card-title">담당 기사 정보</div>' +
       '<div class="tech-info">' +
-        '<div class="tech-avatar">' + (techName[0] || '기').toUpperCase() + '</div>' +
-        '<div><div class="tech-name">' + techName + '</div><div class="tech-company">퍼치에너지테크</div></div>' +
+        '<div class="tech-avatar">' + escapeHtml((techName[0] || '기').toUpperCase()) + '</div>' +
+        '<div><div class="tech-name">' + safeTechName + '</div><div class="tech-company">퓨처에너지테크</div></div>' +
         callHtml +
       '</div>' +
     '</div>' +
     '<div class="update-time" id="update-time">' + (data.currentUpdatedAt ? formatLastUpdate(data.currentUpdatedAt) : '위치 정보 없음') + '</div>' +
-    '<div class="footer">퍼치에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
+    '<div class="footer">퓨처에너지테크 고객센터 <a href="tel:031-8042-7310">031-8042-7310</a></div>';
 
   // SDK 상태 디버그 재반영
   if (sdkLoaded) {
@@ -906,7 +916,7 @@ function loadSession() {
 
       if (!res.ok) {
         return res.json().catch(function() { return {}; }).then(function(err) {
-          var icon = '⏰', title = '링크 만료 또는 오류', desc = err.error || '위치 정보를 불러올 수 없습니다.';
+          var icon = '⏰', title = '링크 만료 또는 오류', desc = escapeHtml(err.error || '위치 정보를 불러올 수 없습니다.');
           if (res.status === 404) {
             icon = '🕐'; title = '기사 출발 전입니다';
             desc = '아직 기사가 출발하지 않았습니다.<br>출발 후 이 페이지를 다시 열어주세요.';

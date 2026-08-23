@@ -27,6 +27,7 @@ import {
   estimateBase64Bytes,
   photoUploadAlert,
   resizeActionForDimensions,
+  workReportPhotoDisplayUrl,
 } from "@/lib/work-report-photo";
 
 const CHECK_ITEMS = [
@@ -85,15 +86,23 @@ function WorkReportScreen() {
       if (existingReport.usedMaterials) setUsedMaterials(existingReport.usedMaterials);
       if (existingReport.workMemo) setWorkMemo(existingReport.workMemo);
       if (existingReport.beforePhotoUrl) {
-        setBeforePhotoUrl(existingReport.beforePhotoUrl);
-        setBeforePhotoUri(existingReport.beforePhotoUrl);
+        const displayUrl = workReportPhotoDisplayUrl(existingReport.beforePhotoUrl);
+        setBeforePhotoUrl(displayUrl ? existingReport.beforePhotoUrl : undefined);
+        setBeforePhotoUri(displayUrl);
       }
       if (existingReport.afterPhotoUrl) {
-        setAfterPhotoUrl(existingReport.afterPhotoUrl);
-        setAfterPhotoUri(existingReport.afterPhotoUrl);
+        const displayUrl = workReportPhotoDisplayUrl(existingReport.afterPhotoUrl);
+        setAfterPhotoUrl(displayUrl ? existingReport.afterPhotoUrl : undefined);
+        setAfterPhotoUri(displayUrl);
       }
     }
   }, [existingReport]);
+
+  useEffect(() => {
+    if (!request) return;
+    setNeedsRevisit(Boolean(request.needsRevisit));
+    setRevisitReason(request.revisitReason ?? "");
+  }, [request?.id, request?.needsRevisit, request?.revisitReason]);
 
   const uploadPhotoMutation = trpc.workReport.uploadPhoto.useMutation();
 
@@ -231,8 +240,10 @@ function WorkReportScreen() {
 
       if (type === "before") {
         setBeforePhotoUrl(result.url);
+        setBeforePhotoUri(workReportPhotoDisplayUrl(result.url) ?? normalized.uri);
       } else {
         setAfterPhotoUrl(result.url);
+        setAfterPhotoUri(workReportPhotoDisplayUrl(result.url) ?? normalized.uri);
       }
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
@@ -246,27 +257,19 @@ function WorkReportScreen() {
   };
 
   const saveMutation = trpc.workReport.save.useMutation({
-    onSuccess: () => {
-      utils.repair.listMySchedule.invalidate();
-      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("저장 완료", "작업 보고서가 저장되었습니다.");
+    onError: (error) => {
+      utils.repair.getById.invalidate({ id: requestId });
+      utils.workReport.getByRequest.invalidate({ requestId });
+      Alert.alert("오류", error.message || "저장 중 문제가 발생했습니다.");
     },
-    onError: () => Alert.alert("오류", "저장 중 문제가 발생했습니다."),
   });
 
   const completeMutation = trpc.workReport.save.useMutation({
-    onSuccess: () => {
-      utils.repair.listMySchedule.invalidate();
-      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("완료", "작업 완료 보고가 제출되었습니다.", [
-        { text: "확인", onPress: () => router.back() }
-      ]);
+    onError: (error) => {
+      utils.repair.getById.invalidate({ id: requestId });
+      utils.workReport.getByRequest.invalidate({ requestId });
+      Alert.alert("오류", error.message || "제출 중 문제가 발생했습니다.");
     },
-    onError: () => Alert.alert("오류", "제출 중 문제가 발생했습니다."),
-  });
-
-  const revisitMutation = trpc.repair.setRevisit.useMutation({
-    onSuccess: () => utils.repair.listMySchedule.invalidate(),
   });
 
   const toggleCheck = (item: string) => {
@@ -278,39 +281,67 @@ function WorkReportScreen() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }
-    saveMutation.mutate({
-      requestId,
-      technicianId,
-      checkItems: JSON.stringify(Array.from(checkedItems)),
-      usedMaterials: usedMaterials || undefined,
-      workMemo: workMemo || undefined,
-      isCompleted: false,
-    });
+    try {
+      await saveMutation.mutateAsync({
+        requestId,
+        technicianId,
+        checkItems: JSON.stringify(Array.from(checkedItems)),
+        usedMaterials: usedMaterials || undefined,
+        workMemo: workMemo || undefined,
+        needsRevisit,
+        revisitReason: needsRevisit ? revisitReason : undefined,
+        isCompleted: false,
+      });
+      await utils.repair.listMySchedule.invalidate();
+      if (Platform.OS !== "web") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert("저장 완료", "작업 보고서가 저장되었습니다.");
+    } catch {
+      // mutation onError가 최신 정보 재조회와 오류 안내를 담당한다.
+    }
   };
 
   const handleComplete = () => {
     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }
     Alert.alert(
-      "작업 완료 보고",
-      "작업을 완료로 보고하시겠습니까? 완료 후에는 수정이 어렵습니다.",
+      needsRevisit ? "재방문 필요 보고" : "작업 완료 보고",
+      needsRevisit
+        ? "작업 보고서와 재방문 사유를 저장하시겠습니까?"
+        : "작업을 완료로 보고하시겠습니까? 완료 후에는 수정이 어렵습니다.",
       [
         { text: "취소", style: "cancel" },
         {
-          text: "완료 보고",
-          onPress: () => {
-            if (needsRevisit) {
-              revisitMutation.mutate({ id: requestId, needsRevisit: true, revisitReason });
+          text: needsRevisit ? "재방문 보고" : "완료 보고",
+          onPress: async () => {
+            try {
+              // 보고서와 재방문 상태를 서버의 단일 트랜잭션으로 한 번만 저장한다.
+              await completeMutation.mutateAsync({
+                requestId,
+                technicianId,
+                checkItems: JSON.stringify(Array.from(checkedItems)),
+                usedMaterials: usedMaterials || undefined,
+                workMemo: workMemo || undefined,
+                needsRevisit,
+                revisitReason: needsRevisit ? revisitReason : undefined,
+                isCompleted: !needsRevisit,
+              });
+              await utils.repair.listMySchedule.invalidate();
+              if (Platform.OS !== "web") {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              Alert.alert(
+                needsRevisit ? "재방문 보고 저장" : "완료",
+                needsRevisit
+                  ? "재방문 필요 사유와 작업 보고서가 저장되었습니다."
+                  : "작업 완료 보고가 제출되었습니다.",
+                [{ text: "확인", onPress: () => router.back() }],
+              );
+            } catch {
+              // 실패 시 onError만 표시하며 성공 안내/화면 이동을 실행하지 않는다.
             }
-            completeMutation.mutate({
-              requestId,
-              technicianId,
-              checkItems: JSON.stringify(Array.from(checkedItems)),
-              usedMaterials: usedMaterials || undefined,
-              workMemo: workMemo || undefined,
-              isCompleted: !needsRevisit,
-            });
           }
         }
       ]
@@ -335,7 +366,9 @@ function WorkReportScreen() {
     );
   }
 
-  const isCompleted = request.status === "작업완료";
+  const isCompleted =
+    ["작업완료", "공사완료"].includes(request.status) ||
+    ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage ?? "");
 
   return (
     <ScreenContainer>
@@ -555,7 +588,11 @@ function WorkReportScreen() {
               activeOpacity={0.8}
               disabled={completeMutation.isPending || uploadingBefore || uploadingAfter}
             >
-              <Text style={s.btnText}>{completeMutation.isPending ? "제출 중..." : "작업 완료 보고"}</Text>
+              <Text style={s.btnText}>
+                {completeMutation.isPending
+                  ? "제출 중..."
+                  : needsRevisit ? "재방문 보고" : "작업 완료 보고"}
+              </Text>
             </TouchableOpacity>
           </View>
         )}

@@ -5,6 +5,7 @@ import {
   estimateBase64Bytes,
   photoUploadAlert,
   resizeActionForDimensions,
+  workReportPhotoDisplayUrl,
 } from "../lib/work-report-photo";
 
 describe("work report photo client guard", () => {
@@ -42,5 +43,36 @@ describe("work report photo client guard", () => {
       title: "접수 정보 변경",
       message: "담당 기사 또는 접수 상태가 변경되었습니다. 목록을 새로고침한 뒤 다시 확인해 주세요.",
     });
+  });
+
+  it("resolves only internal photo paths against the native API origin", () => {
+    expect(workReportPhotoDisplayUrl("/manus-storage/work-reports/1/before_a1.jpg"))
+      .toBe("https://xn--h50b270bp0ceuddugnobx2m.kr/manus-storage/work-reports/1/before_a1.jpg");
+    expect(workReportPhotoDisplayUrl(
+      "https://xn--h50b270bp0ceuddugnobx2m.kr/manus-storage/work-reports/1/after_b2.jpg",
+    )).toBe("https://xn--h50b270bp0ceuddugnobx2m.kr/manus-storage/work-reports/1/after_b2.jpg");
+    expect(workReportPhotoDisplayUrl("https://attacker.example/photo.jpg")).toBeNull();
+    expect(workReportPhotoDisplayUrl("/manus-storage/../secret")).toBeNull();
+  });
+
+  it("accepts only the exact short-lived signed work-report proxy contract", () => {
+    const exp = Math.floor(Date.now() / 1000) + 15 * 60;
+    const version = "v".repeat(43);
+    const signature = "s".repeat(43);
+    const query = `exp=${exp}&v=${version}&tid=21&viewer=165&sig=${signature}`;
+    expect(workReportPhotoDisplayUrl(
+      `https://퓨처에너지테크.kr/api/work-report-photo/14/before?${query}`,
+    )).toBe(
+      `https://xn--h50b270bp0ceuddugnobx2m.kr/api/work-report-photo/14/before?${query}`,
+    );
+    expect(workReportPhotoDisplayUrl(
+      `/api/work-report-photo/14/after?${query}&extra=1`,
+    )).toBeNull();
+    expect(workReportPhotoDisplayUrl(
+      `/api/work-report-photo/14/after?exp=${exp}&v=${version}&tid=21&viewer=165&sig=bad`,
+    )).toBeNull();
+    expect(workReportPhotoDisplayUrl(
+      `https://attacker.example/api/work-report-photo/14/before?${query}`,
+    )).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import {
   getAllRepairRequests,
   getAllFlowRateSettings,
@@ -14,21 +15,35 @@ import {
   getRecentFlowRateLogs,
   getAppRolesByRole,
   getBranchById,
-} from "./db";
-import { sendSms, buildFlowRateAlertMessage, buildTechnicianDepartedMessage } from "./notification";
-import {
-  createLocationSession,
+  getManagedActiveBranchByUserId,
+  getAppRole,
+  getTechnicianById,
+  resolveActiveTechnicianForUser,
+  getRepairRequestById,
+  createNotificationLog,
   getLocationSessionByToken,
-  updateLocationSessionPosition,
+  getCustomerLocationSessionByToken,
   stopLocationSession,
-  markLocationSessionSmsSent,
+  updateLocationSessionPositionAuthorized,
+  stopLocationSessionAuthorized,
+  markLocationSessionArrivedAuthorized,
+  stopLocationSessionByManagerAuthorized,
+  getOrCreateActiveLocationSession,
+  claimLocationSessionSms,
+  hasAcceptedLocationSessionSms,
+  validateLocationSessionSmsClaim,
+  clearLocationSessionSmsClaim,
   getActiveLocationSessions,
   getActiveLocationSessionsByBranch,
-  getLocationSessionByRequestId,
   expireOldLocationSessions,
-  getLocationConsent,
-  createLocationConsent,
 } from "./db";
+import {
+  sendSms,
+  buildFlowRateAlertMessage,
+  buildTechnicianDepartedMessage,
+} from "./notification";
+import { deliverWorkflowNotificationClaim } from "./workflow-notification";
+import { geocodeKoreanAddress, normalizeKakaoAddress } from "./kakao-geocode";
 
 /**
  * public 디렉터리 위치 탐색.
@@ -65,6 +80,170 @@ function resolvePublicDir(): string {
 }
 
 const PUBLIC_DIR = resolvePublicDir();
+const OFFICIAL_TRACKING_ORIGIN = "https://퓨처에너지테크.kr";
+const KAKAO_GEOCODE_RATE_WINDOW_MS = 60 * 1000;
+const KAKAO_GEOCODE_RATE_MAX = 30;
+const KAKAO_GEOCODE_RATE_KEYS_MAX = 10_000;
+const kakaoGeocodeRate = new Map<string, { windowStartedAt: number; count: number }>();
+
+function setNoStore(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
+
+function claimKakaoGeocodeRate(req: Request): boolean {
+  // 원 IP 자체를 메모리에 남기지 않고 짧은 해시만 rate-limit key로 사용한다.
+  const rawIp = req.ip || req.socket.remoteAddress || "unknown";
+  const key = crypto.createHash("sha256").update(rawIp).digest("hex").slice(0, 24);
+  const now = Date.now();
+  const existing = kakaoGeocodeRate.get(key);
+  if (!existing || now - existing.windowStartedAt >= KAKAO_GEOCODE_RATE_WINDOW_MS) {
+    if (!existing && kakaoGeocodeRate.size >= KAKAO_GEOCODE_RATE_KEYS_MAX) {
+      for (const [candidateKey, candidate] of kakaoGeocodeRate) {
+        if (now - candidate.windowStartedAt >= KAKAO_GEOCODE_RATE_WINDOW_MS) {
+          kakaoGeocodeRate.delete(candidateKey);
+        }
+      }
+      if (kakaoGeocodeRate.size >= KAKAO_GEOCODE_RATE_KEYS_MAX) {
+        const oldestKey = kakaoGeocodeRate.keys().next().value as string | undefined;
+        if (oldestKey) kakaoGeocodeRate.delete(oldestKey);
+      }
+    }
+    kakaoGeocodeRate.set(key, { windowStartedAt: now, count: 1 });
+    return true;
+  }
+  if (existing.count >= KAKAO_GEOCODE_RATE_MAX) return false;
+  existing.count += 1;
+  return true;
+}
+
+function buildPublicTrackingUrl(token: string): string {
+  return `${OFFICIAL_TRACKING_ORIGIN}/track/${encodeURIComponent(token)}`;
+}
+
+class LocationRouteError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "LocationRouteError";
+  }
+}
+
+async function authenticateAppRequest(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer ")) {
+    throw new LocationRouteError(401, "로그인이 필요합니다.");
+  }
+  const raw = authHeader.slice(7).trim();
+  const tokenMatch = raw.match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+  if (!tokenMatch) throw new LocationRouteError(401, "인증 정보가 올바르지 않습니다.");
+  const userId = Number(tokenMatch[1]);
+  const signature = tokenMatch[2].toLowerCase();
+  if (!Number.isSafeInteger(userId)) {
+    throw new LocationRouteError(401, "인증 정보가 올바르지 않습니다.");
+  }
+  const role = await getAppRole(userId);
+  if (!role || !role.isActive || !role.passwordHash) {
+    throw new LocationRouteError(401, "로그인 정보가 만료되었습니다.");
+  }
+  const expected = crypto
+    .createHmac("sha256", role.passwordHash)
+    .update(String(role.userId))
+    .digest("hex");
+  const actualBuffer = Buffer.from(signature, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  if (
+    actualBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+  ) {
+    throw new LocationRouteError(401, "인증 정보가 올바르지 않습니다.");
+  }
+  if (role.appRole === "branch_manager") {
+    const managedBranch = await getManagedActiveBranchByUserId(role.userId);
+    if (!managedBranch) {
+      throw new LocationRouteError(403, "활성 소속 지사를 확인할 수 없습니다.");
+    }
+    return { ...role, branchId: managedBranch.id };
+  }
+  return role;
+}
+
+async function requireTechnicianRequest(req: Request) {
+  const role = await authenticateAppRequest(req);
+  if (role.appRole !== "technician") {
+    throw new LocationRouteError(403, "기사 계정만 처리할 수 있습니다.");
+  }
+  const technician = await resolveActiveTechnicianForUser(role.userId, role.phoneNumber);
+  if (!technician) {
+    throw new LocationRouteError(403, "활성 기사 계정을 확인할 수 없습니다.");
+  }
+  return { role, technician };
+}
+
+async function requireManagerRequest(req: Request) {
+  const role = await authenticateAppRequest(req);
+  if (role.appRole !== "hq_admin" && role.appRole !== "branch_manager") {
+    throw new LocationRouteError(403, "관리자 권한이 필요합니다.");
+  }
+  if (role.appRole === "branch_manager" && role.branchId === null) {
+    throw new LocationRouteError(403, "소속 지사를 확인할 수 없습니다.");
+  }
+  return role;
+}
+
+function assertManagerBranchAccess(
+  role: NonNullable<Awaited<ReturnType<typeof getAppRole>>>,
+  branchId: number | null,
+) {
+  if (role.appRole === "branch_manager" && role.branchId !== branchId) {
+    throw new LocationRouteError(403, "다른 지사의 위치 정보는 처리할 수 없습니다.");
+  }
+}
+
+function canonicalRepairAddress(request: NonNullable<Awaited<ReturnType<typeof getRepairRequestById>>>) {
+  const area = request.roadAddress?.trim() || [
+    request.sido,
+    request.sigungu,
+    request.eupmyeondong,
+    request.apartmentName,
+  ].filter(Boolean).join(" ");
+  return [
+    area,
+    request.dong ? (/동$/.test(request.dong) ? request.dong : `${request.dong}동`) : "",
+    request.ho ? (/호$/.test(request.ho) ? request.ho : `${request.ho}호`) : "",
+  ].filter(Boolean).join(" ").slice(0, 200);
+}
+
+function sendLocationRouteError(res: Response, error: unknown) {
+  if (error instanceof LocationRouteError) {
+    return res.status(error.statusCode).json({ error: error.message });
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (message === "LOCATION_REQUEST_NOT_FOUND" || message === "LOCATION_SESSION_NOT_FOUND") {
+    return res.status(404).json({ error: "접수를 찾을 수 없습니다." });
+  }
+  if (message === "LOCATION_MANAGER_FORBIDDEN") {
+    return res.status(403).json({ error: "위치 세션 처리 권한이 없습니다." });
+  }
+  if (
+    message === "LOCATION_ASSIGNMENT_CHANGED" ||
+    message === "LOCATION_TECHNICIAN_NOT_ACTIVE" ||
+    message === "LOCATION_SESSION_MISMATCH"
+  ) {
+    return res.status(409).json({ error: "기사 배정 정보가 변경되었습니다." });
+  }
+  if (message === "LOCATION_ALREADY_ARRIVED" || message === "LOCATION_SESSION_ENDED") {
+    return res.status(409).json({ error: "이미 도착했거나 완료된 접수입니다." });
+  }
+  if (message === "LOCATION_DELIVERY_PENDING") {
+    return res.status(409).json({ error: "앞선 출발 안내를 처리 중입니다. 잠시 후 다시 시도해 주세요." });
+  }
+  console.error("[location-route] request failed", error);
+  return res.status(500).json({ error: "위치 처리 중 오류가 발생했습니다." });
+}
 
 export function registerWebRoutes(app: Express) {
   // 정적 파일 서빙 - /web 경로로 홈페이지 HTML 파일 제공
@@ -132,6 +311,7 @@ export function registerWebRoutes(app: Express) {
     if (!htmlPath) {
       return res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
     }
+    setNoStore(res);
     try {
       let html = fs.readFileSync(htmlPath, "utf-8");
       // 네이버 지도 클라이언트 ID 주입 (없으면 지도 없이 동작)
@@ -147,15 +327,43 @@ export function registerWebRoutes(app: Express) {
     }
   });
 
+  // 카카오 REST 키를 브라우저에 노출하지 않는 same-origin 주소 변환 프록시.
+  app.post("/api/kakao/local/address", async (req: Request, res: Response) => {
+    setNoStore(res);
+    if (!claimKakaoGeocodeRate(req)) {
+      res.setHeader("Retry-After", "60");
+      return res.status(429).json({ error: "주소 변환 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." });
+    }
+    const address = normalizeKakaoAddress(req.body?.address);
+    if (!address) {
+      return res.status(400).json({ error: "주소 형식이 올바르지 않습니다." });
+    }
+    const result = await geocodeKoreanAddress(address);
+    if (result.ok) return res.json({ lat: result.lat, lng: result.lng });
+    if (result.reason === "not_configured") {
+      return res.status(503).json({ error: "주소 변환 서비스를 사용할 수 없습니다." });
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ error: "주소 좌표를 찾을 수 없습니다." });
+    }
+    return res.status(502).json({
+      error: result.reason === "timeout"
+        ? "주소 변환 요청 시간이 초과되었습니다."
+        : "주소 변환 서비스에 연결할 수 없습니다.",
+    });
+  });
+
   // 위치 세션 정보 조회 (고객용 - 토큰으로 조회)
   app.get("/api/location/session/:token", async (req: Request, res: Response) => {
     try {
-      await expireOldLocationSessions();
-      const session = await getLocationSessionByToken(req.params.token);
+      setNoStore(res);
+      const session = await getCustomerLocationSessionByToken(req.params.token);
       if (!session) {
         return res.status(404).json({ error: "세션을 찾을 수 없거나 만료되었습니다." });
       }
       // 이동중이 아니면(도착완료/업무취소/만료) 위치 정보는 더 이상 노출하지 않음 (요구사항 6,8)
+      // owner metadata가 없는 구버전 앱도 종료 세션을 영구 복구 대상으로 오인하지
+      // 않도록 Bearer 소유자 검증보다 410 판정을 먼저 반환한다.
       const isActive = session.status === "이동중";
       const isExpiredByTime = session.expiresAt && new Date(session.expiresAt) < new Date();
       if (!isActive || isExpiredByTime) {
@@ -167,9 +375,18 @@ export function registerWebRoutes(app: Express) {
           error: "종료된 위치 공유입니다.",
         });
       }
+      // 기사 앱의 활성 세션 복구 확인 요청에는 Authorization이 붙는다. 고객
+      // capability 조회는 공개하되 인증 요청은 해당 기사 소유인지 추가 검증한다.
+      const authenticatedTechnician = typeof req.headers.authorization === "string"
+        ? (await requireTechnicianRequest(req)).technician
+        : null;
+      if (authenticatedTechnician && session.technicianId !== authenticatedTechnician.id) {
+        return res.status(403).json({ error: "현재 본인의 위치 세션만 복구할 수 있습니다." });
+      }
       // 고객에게는 현재 위치와 예상 도착 정보만 노출 (출발지/과거 이동 이력 제외)
       res.json({
         status: session.status,
+        ...(authenticatedTechnician ? { authenticatedOwner: true } : {}),
         technicianName: session.technicianName,
         // technicianPhone는 개인정보 보호를 위해 고객에게 노출하지 않음 (문의는 회사 고객센터로 안내)
         customerAddress: session.customerAddress,
@@ -182,14 +399,15 @@ export function registerWebRoutes(app: Express) {
         arrivedAt: session.arrivedAt,
         expiresAt: session.expiresAt,
       });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 위치 업데이트 (기사 앱 → 서버, 3초 간격 — 차량 이동 기준)
   app.post("/api/location/update", async (req: Request, res: Response) => {
     try {
+      const { technician } = await requireTechnicianRequest(req);
       const { token, lat, lng, speed, heading, accuracy } = req.body;
       if (!token || lat === undefined || lng === undefined) {
         return res.status(400).json({ error: "token, lat, lng 필수" });
@@ -197,6 +415,15 @@ export function registerWebRoutes(app: Express) {
       const session = await getLocationSessionByToken(token);
       if (!session) {
         return res.status(404).json({ error: "세션 없음" });
+      }
+      const repair = await getRepairRequestById(session.requestId);
+      if (
+        session.technicianId !== technician.id ||
+        !repair ||
+        repair.isDeleted ||
+        repair.technicianId !== technician.id
+      ) {
+        return res.status(403).json({ error: "현재 본인의 위치 세션만 갱신할 수 있습니다." });
       }
       if (session.status !== "이동중") {
         return res.status(400).json({ error: "이미 종료된 세션입니다.", status: session.status });
@@ -218,18 +445,27 @@ export function registerWebRoutes(app: Express) {
           return res.status(400).json({ error: "좌표 범위 오류(한국 밖 또는 잘못된 값)", lat: nLat, lng: nLng });
         }
       }
-      await updateLocationSessionPosition(token, String(nLat), String(nLng));
+      const updateResult = await updateLocationSessionPositionAuthorized({
+        token,
+        technicianId: technician.id,
+        lat: String(nLat),
+        lng: String(nLng),
+      });
+      if (updateResult === "not_found") return res.status(404).json({ error: "세션 없음" });
+      if (updateResult === "forbidden") return res.status(403).json({ error: "위치 세션 권한이 없습니다." });
+      if (updateResult === "ended") return res.status(409).json({ error: "이미 종료된 세션입니다." });
       // speed(m/s), heading(도), accuracy(m) 수신 확인 (현재 DB 콼럼 없음 — 로그만)
       const speedKmh = (speed !== null && speed !== undefined) ? (Number(speed) * 3.6).toFixed(1) : null;
       res.json({ success: true, lat: nLat, lng: nLng, updatedAt: new Date().toISOString(), speedKmh, heading: heading ?? null, accuracy: accuracy ?? null });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 위치 세션 종료 (기사 앱 → 도착/취소)
   app.post("/api/location/stop", async (req: Request, res: Response) => {
     try {
+      const { technician } = await requireTechnicianRequest(req);
       const { token, reason } = req.body;
       if (!token || !reason) {
         return res.status(400).json({ error: "token, reason 필수" });
@@ -237,111 +473,196 @@ export function registerWebRoutes(app: Express) {
       if (!["도착완료", "업무취소"].includes(reason)) {
         return res.status(400).json({ error: "reason은 도착완료 또는 업무취소" });
       }
-      await stopLocationSession(token, reason as "도착완료" | "업무취소");
-      res.json({ success: true, status: reason });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      if (reason === "도착완료") {
+        const session = await getLocationSessionByToken(token);
+        if (!session) return res.status(404).json({ error: "세션 없음" });
+        let arrival: Awaited<ReturnType<typeof markLocationSessionArrivedAuthorized>>;
+        try {
+          arrival = await markLocationSessionArrivedAuthorized({
+            token,
+            requestId: session.requestId,
+            technicianId: technician.id,
+          });
+        } catch (error) {
+          return sendLocationRouteError(res, error);
+        }
+
+        const notification = await deliverWorkflowNotificationClaim(arrival.notificationClaim);
+        const smsSent = notification.accepted;
+        const smsError = notification.errorMessage;
+        return res.json({
+          success: true,
+          status: reason,
+          alreadyArrived: !arrival.firstArrival,
+          smsSent,
+          ...(smsError ? { smsError } : {}),
+        });
+      }
+
+      const stopResult = await stopLocationSessionAuthorized({
+        token,
+        technicianId: technician.id,
+        reason: "업무취소",
+      });
+      if (stopResult === "not_found") return res.status(404).json({ error: "세션 없음" });
+      if (stopResult === "forbidden") return res.status(403).json({ error: "위치 세션 권한이 없습니다." });
+      return res.json({ success: true, status: reason });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 관리자/지사장용 - 직접 위치 공유 시작 (전화 접수 고객 등, 기사 앱 미사용 케이스)
   app.post("/api/location/start-by-admin", async (req: Request, res: Response) => {
     try {
-      const {
-        requestId, technicianId, technicianName, technicianPhone,
-        customerName, customerPhone, customerAddress,
-        customerLat, customerLng, branchId, branchName, expireHours,
-      } = req.body;
-      if (!technicianName || !customerName || !customerPhone) {
-        return res.status(400).json({ error: "technicianName, customerName, customerPhone는 필수입니다." });
+      const manager = await requireManagerRequest(req);
+      const requestId = Number.parseInt(String(req.body.requestId ?? ""), 10);
+      const technicianId = Number.parseInt(String(req.body.technicianId ?? ""), 10);
+      if (!Number.isInteger(requestId) || requestId <= 0 || !Number.isInteger(technicianId) || technicianId <= 0) {
+        return res.status(400).json({ error: "requestId, technicianId는 필수입니다." });
       }
-      // 기존 이동중 세션이 있으면 종료(새 링크 발급)
-      const reqIdNum = requestId ? parseInt(String(requestId)) : 0;
-      if (reqIdNum) {
-        const existing = await getLocationSessionByRequestId(reqIdNum);
-        if (existing) {
-          await stopLocationSession(existing.trackingToken, "업무취소");
-        }
+      const repair = await getRepairRequestById(requestId);
+      const technician = await getTechnicianById(technicianId);
+      if (!repair || repair.isDeleted) return res.status(404).json({ error: "접수를 찾을 수 없습니다." });
+      if (!technician || !technician.isActive || technician.isDeleted) {
+        return res.status(404).json({ error: "활성 기사를 찾을 수 없습니다." });
       }
-      const crypto = await import("crypto");
+      if (repair.technicianId !== technician.id) {
+        return res.status(409).json({ error: "현재 배정 기사와 일치하지 않습니다." });
+      }
+      assertManagerBranchAccess(manager, repair.branchId);
+      if (manager.appRole === "branch_manager" && technician.branchId !== manager.branchId) {
+        return res.status(403).json({ error: "다른 지사 기사로 위치 공유를 시작할 수 없습니다." });
+      }
+      const branch = repair.branchId ? await getBranchById(repair.branchId) : null;
       // 추측 불가능한 긴 일회용 위치코드 (256비트 = 43자 base64url)
       const token = crypto.randomBytes(32).toString("base64url");
       const now = new Date();
-      const hours = expireHours && Number(expireHours) > 0 ? Number(expireHours) : 4;
+      const requestedHours = Number(req.body.expireHours);
+      const hours = Number.isFinite(requestedHours)
+        ? Math.min(8, Math.max(1, requestedHours))
+        : 4;
       const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
-      const session = await createLocationSession({
-        requestId: reqIdNum || 0,
-        technicianId: technicianId ? parseInt(String(technicianId)) : 0,
-        technicianName,
-        technicianPhone: technicianPhone ?? null,
-        customerName,
-        customerPhone,
-        customerAddress: customerAddress ?? "",
-        customerLat: customerLat !== undefined && customerLat !== null ? String(customerLat) : null,
-        customerLng: customerLng !== undefined && customerLng !== null ? String(customerLng) : null,
-        branchId: branchId ? parseInt(String(branchId)) : null,
-        branchName: branchName ?? null,
+      const { session, created } = await getOrCreateActiveLocationSession({
+        requestId: repair.id,
+        technicianId: technician.id,
+        technicianName: technician.name,
+        technicianPhone: technician.phoneNumber ?? null,
+        customerName: repair.customerName,
+        customerPhone: repair.phoneNumber,
+        customerAddress: canonicalRepairAddress(repair),
+        customerLat: repair.customerLat !== null ? String(repair.customerLat) : null,
+        customerLng: repair.customerLng !== null ? String(repair.customerLng) : null,
+        branchId: repair.branchId ?? null,
+        branchName: branch?.name ?? null,
         trackingToken: token,
         status: "이동중",
         departedAt: now,
         expiresAt,
-      });
-      if (!session) return res.status(500).json({ error: "세션 생성 실패" });
-      const baseUrl = process.env.SITE_URL || "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
-      const trackingUrl = `${baseUrl}/track/${token}`;
+      }, { managerUserId: manager.userId });
+      const effectiveToken = session.trackingToken;
+      const trackingUrl = buildPublicTrackingUrl(effectiveToken);
       let smsSent = false;
-      let smsError: string | undefined;
-      try {
-        const msg = buildTechnicianDepartedMessage(customerName, technicianName, trackingUrl);
-        const result = await sendSms(customerPhone, msg);
-        if (result.result === "SUCCESS") {
-          smsSent = true;
-          await markLocationSessionSmsSent(token);
+      const claim = { token: effectiveToken, requestId: repair.id, technicianId: technician.id };
+      const claimed = await claimLocationSessionSms(claim);
+      if (claimed) {
+        const claimIsCurrent = await validateLocationSessionSmsClaim(claim);
+        if (!claimIsCurrent) {
+          await clearLocationSessionSmsClaim(claim);
         } else {
-          smsError = result.errorMessage;
+        try {
+          const msg = buildTechnicianDepartedMessage(repair.customerName, technician.name, trackingUrl);
+          const result = await sendSms(repair.phoneNumber, msg);
+          try {
+            await createNotificationLog({
+              requestId: repair.id,
+              phoneNumber: repair.phoneNumber,
+              channel: "SMS",
+              messageType: "기사출발",
+              content: msg,
+              result: result.result,
+              errorMessage: result.errorMessage,
+            });
+          } catch (logError) {
+            console.error("[location-route] departure notification log failed", logError);
+          }
+          if (result.result === "SUCCESS" || result.result === "REQUESTED") {
+            smsSent = true;
+          } else {
+            await clearLocationSessionSmsClaim(claim);
+          }
+        } catch (smsError) {
+          await clearLocationSessionSmsClaim(claim);
+          console.error("[location-route] departure notification failed", smsError);
         }
-      } catch (smsErr: any) {
-        smsError = smsErr?.message ?? String(smsErr);
+        }
+      } else {
+        smsSent = await hasAcceptedLocationSessionSms(claim);
       }
-      res.json({ success: true, token, trackingUrl, smsSent, smsError });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.json({ success: true, token: effectiveToken, trackingUrl, smsSent, reused: !created });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 관리자/지사장용 - 위치 세션 강제 종료 (도착완료/업무취소)
   app.post("/api/location/stop-by-admin", async (req: Request, res: Response) => {
     try {
+      const manager = await requireManagerRequest(req);
       const { token, reason } = req.body;
       if (!token) return res.status(400).json({ error: "token 필수" });
+      const session = await getLocationSessionByToken(token);
+      if (!session) return res.status(404).json({ error: "세션을 찾을 수 없습니다." });
+      const repair = await getRepairRequestById(session.requestId);
+      if (!repair || repair.isDeleted) return res.status(404).json({ error: "접수를 찾을 수 없습니다." });
+      assertManagerBranchAccess(manager, repair.branchId);
+      if (manager.appRole === "branch_manager" && session.branchId !== manager.branchId) {
+        return res.status(403).json({ error: "다른 지사의 위치 세션은 종료할 수 없습니다." });
+      }
       const r = reason && ["도착완료", "업무취소"].includes(reason) ? reason : "업무취소";
-      await stopLocationSession(token, r as "도착완료" | "업무취소");
+      const stopResult = await stopLocationSessionByManagerAuthorized({
+        token,
+        managerUserId: manager.userId,
+        reason: r as "도착완료" | "업무취소",
+      });
+      if (stopResult === "not_found") return res.status(404).json({ error: "세션을 찾을 수 없습니다." });
+      if (stopResult === "forbidden") return res.status(403).json({ error: "위치 세션 처리 권한이 없습니다." });
       res.json({ success: true, status: r });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 관리자용 - 이동 중 기사 전체 목록
-  app.get("/api/location/active", async (_req: Request, res: Response) => {
+  app.get("/api/location/active", async (req: Request, res: Response) => {
     try {
+      const manager = await requireManagerRequest(req);
       await expireOldLocationSessions();
       const sessions = await getActiveLocationSessions();
-      res.json({ sessions });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.json({
+        sessions: manager.appRole === "hq_admin"
+          ? sessions
+          : sessions.filter((session) => session.branchId === manager.branchId),
+      });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 
   // 지사장용 - 소속 지사 이동 중 기사 목록
   app.get("/api/location/active/branch/:branchId", async (req: Request, res: Response) => {
     try {
+      const manager = await requireManagerRequest(req);
       await expireOldLocationSessions();
       const branchId = parseInt(req.params.branchId);
+      if (!Number.isInteger(branchId) || branchId <= 0) {
+        return res.status(400).json({ error: "branchId가 올바르지 않습니다." });
+      }
+      assertManagerBranchAccess(manager, branchId);
       const sessions = await getActiveLocationSessionsByBranch(branchId);
       res.json({ sessions });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (error) {
+      return sendLocationRouteError(res, error);
     }
   });
 

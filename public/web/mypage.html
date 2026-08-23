@@ -67,6 +67,40 @@
     return '';
   }
   const API = getApiBase();
+  const OFFICIAL_TRACKING_ORIGIN = 'https://퓨처에너지테크.kr';
+
+  function normalizeStoredAuthToken(authUser) {
+    if (!authUser || !Number.isSafeInteger(Number(authUser.userId)) || Number(authUser.userId) <= 0) return null;
+    const userId = String(Number(authUser.userId));
+    const raw = typeof authUser.token === 'string' ? authUser.token.trim() : '';
+    const full = raw.match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+    if (full) return full[1] === userId ? userId + ':' + full[2].toLowerCase() : null;
+    if (/^[a-f0-9]{64}$/i.test(raw)) return userId + ':' + raw.toLowerCase();
+    return null;
+  }
+
+  function authHeaders(extra) {
+    const token = normalizeStoredAuthToken(me);
+    if (!token) throw new Error('로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.');
+    const headers = Object.assign({}, extra || {});
+    delete headers.Authorization;
+    delete headers.authorization;
+    headers.Authorization = 'Bearer ' + token;
+    return headers;
+  }
+
+  function safeTrackingUrl(value) {
+    if (typeof value !== 'string') return null;
+    try {
+      const parsed = new URL(value, OFFICIAL_TRACKING_ORIGIN);
+      if (parsed.origin !== new URL(OFFICIAL_TRACKING_ORIGIN).origin || parsed.search || parsed.hash) return null;
+      const match = parsed.pathname.match(/^\/track\/([A-Za-z0-9_-]{43})$/);
+      if (!match) return null;
+      return OFFICIAL_TRACKING_ORIGIN + '/track/' + encodeURIComponent(match[1]);
+    } catch (_) {
+      return null;
+    }
+  }
 
   let me = null;
   (function() {
@@ -97,9 +131,9 @@
     let opt;
     if (isQuery) {
       url += '?input=' + encodeURIComponent(JSON.stringify({ json: payload }));
-      opt = { method: 'GET' };
+      opt = { method: 'GET', headers: authHeaders() };
     } else {
-      opt = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ json: payload }) };
+      opt = { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ json: payload }) };
     }
     const res = await fetch(url, opt);
     const data = await res.json();
@@ -132,8 +166,8 @@
         let trackBlock = '';
         try {
           const s = await callApi('location.getSessionByRequest', { requestId: r.id }, true);
-          if (s && s.status === '이동중' && (s.trackingUrl || s.trackingToken)) {
-            const link = s.trackingUrl || ('/track/' + s.trackingToken);
+          const link = s && s.status === '이동중' ? safeTrackingUrl(s.trackingUrl) : null;
+          if (link) {
             trackBlock = '<a class="track-btn" href="' + link + '" target="_blank">📍 기사님 현재 위치 확인하기</a>';
           }
         } catch (e) {}

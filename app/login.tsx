@@ -12,7 +12,7 @@ import {
   Keyboard,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useAppAuth } from "@/lib/auth-context";
+import { assertTrackingSessionOwnedForLogin, useAppAuth } from "@/lib/auth-context";
 import { trpc } from "@/lib/trpc";
 import * as Auth from "@/lib/_core/auth";
 import { useColors } from "@/hooks/use-colors";
@@ -82,10 +82,6 @@ export default function LoginScreen() {
   const finishLogin = async (data: any) => {
     // 로그인 통신 성공 후 세션 저장 오류와 화면이동 오류를 분리하여 표시
     try {
-      // 서버에서 받은 token을 SecureStore에 저장 (tRPC Authorization 헤더용)
-      if (data.token && Platform.OS !== "web") {
-        await Auth.setSessionToken(data.token);
-      }
       await login(
         {
           userId: data.userId!,
@@ -129,6 +125,13 @@ export default function LoginScreen() {
           return;
         }
         try {
+          await assertTrackingSessionOwnedForLogin({
+            userId: data.userId!,
+            appRole: data.appRole!,
+            loginId,
+            technicianId: data.technicianId ?? null,
+            token: data.token,
+          });
           await Auth.setSessionToken(data.token);
         } catch (saveErr: any) {
           setError(`세션 저장 실패: ${saveErr?.message || String(saveErr)}`);

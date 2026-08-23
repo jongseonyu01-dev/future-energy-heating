@@ -50,14 +50,14 @@ describe("SMS 자격증명 검증", () => {
   it("자격증명이 유효하면 발송 시도, 없으면 SKIPPED를 반환한다", async () => {
     const result = await sendSms("01012345678", "테스트 메시지");
     // 자격증명 미설정: SKIPPED / 설정+유효: SUCCESS / 설정+무효: FAILED
-    expect(["SUCCESS", "FAILED", "SKIPPED"]).toContain(result.result);
+    expect(["SUCCESS", "REQUESTED", "FAILED", "SKIPPED"]).toContain(result.result);
 
     if (!isSmsConfigured()) {
       // 자격증명이 없으면 반드시 SKIPPED여야 한다
       expect(result.result).toBe("SKIPPED");
     } else {
       // 자격증명이 있으면 실제 발송을 시도한다 (SUCCESS 또는 인증/번호 오류로 FAILED)
-      expect(["SUCCESS", "FAILED"]).toContain(result.result);
+      expect(["SUCCESS", "REQUESTED", "FAILED"]).toContain(result.result);
       if (result.result === "FAILED") {
         console.warn(
           "[SMS 발송 테스트] 자격증명은 설정되었으나 발송 실패:",

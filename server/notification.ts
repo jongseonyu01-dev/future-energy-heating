@@ -12,6 +12,7 @@ import crypto from "crypto";
  */
 
 const SOLAPI_BASE_URL = "https://api.solapi.com";
+export const SMS_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface SendResult {
   result: "SUCCESS" | "FAILED" | "SKIPPED" | "REQUESTED";
@@ -69,6 +70,8 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
   // 수신번호 정규화 (숫자만)
   const normalizedTo = to.replace(/[^0-9]/g, "");
   const normalizedFrom = sender.replace(/[^0-9]/g, "");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SMS_REQUEST_TIMEOUT_MS);
 
   try {
     const response = await fetch(
@@ -90,6 +93,7 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
             },
           ],
         }),
+        signal: controller.signal,
       }
     );
 
@@ -134,8 +138,12 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
   } catch (error) {
     return {
       result: "FAILED",
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: error instanceof Error && error.name === "AbortError"
+        ? `SMS 발송 요청이 ${SMS_REQUEST_TIMEOUT_MS / 1000}초 안에 완료되지 않았습니다.`
+        : error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -381,6 +389,35 @@ export function buildBranchAssignedMessage(
   return `[퓨처에너지테크]\n${customerName}님, 접수하신 건의 담당 지사가 '${branchName}'(으)로 배정되었습니다.${phonePart}\n곧 방문 일정을 안내드리겠습니다.\n문의: 031-8042-7310`;
 }
 
+function normalizeScheduleValue(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+export type ScheduleNoticeKind = "none" | "confirmed" | "changed" | "unchanged";
+
+/** 최초 확정, 실제 변경, 동일 재요청을 null/빈 문자열 정규화 후 구분한다. */
+export function getScheduleNoticeKind(
+  previousDate: string | null | undefined,
+  previousTime: string | null | undefined,
+  nextDate: string | null | undefined,
+  nextTime: string | null | undefined,
+): ScheduleNoticeKind {
+  const normalizedPreviousDate = normalizeScheduleValue(previousDate);
+  const normalizedPreviousTime = normalizeScheduleValue(previousTime);
+  const normalizedNextDate = normalizeScheduleValue(nextDate);
+  const normalizedNextTime = normalizeScheduleValue(nextTime);
+
+  if (!normalizedPreviousDate) return normalizedNextDate ? "confirmed" : "none";
+  if (
+    normalizedPreviousDate !== normalizedNextDate ||
+    normalizedPreviousTime !== normalizedNextTime
+  ) {
+    return "changed";
+  }
+  return "unchanged";
+}
+
 /** 방문 일정 확정/변경 안내 (고객용) */
 export function buildScheduleConfirmedMessage(
   customerName: string,
@@ -392,7 +429,36 @@ export function buildScheduleConfirmedMessage(
   const head = isChanged ? "방문 일정이 변경되었습니다" : "방문 일정이 확정되었습니다";
   const reasonPart =
     isChanged && changeReason ? `\n변경 사유: ${changeReason}` : "";
-  return `[퓨처에너지테크]\n${customerName}님, ${head}.\n방문 일정: ${scheduledDate} ${scheduledTime}${reasonPart}\n문의: 031-8042-7310`;
+  const schedule = [scheduledDate.trim(), scheduledTime.trim()].filter(Boolean).join(" ");
+  return `[퓨처에너지테크]\n${customerName}님, ${head}.\n방문 일정: ${schedule}${reasonPart}\n문의: 031-8042-7310`;
+}
+
+/** 견적 고객이 요청한 방문 일정을 본사/지사가 최종 확정할 때 쓰는 단일 문구. */
+export function buildEstimateScheduleConfirmedMessage(params: {
+  customerName: string;
+  confirmedDate: string;
+  confirmedTime?: string | null;
+}): string {
+  const schedule = [params.confirmedDate.trim(), params.confirmedTime?.trim()]
+    .filter(Boolean)
+    .join(" ");
+  return `[퓨처에너지테크] ${params.customerName} 고객님, 방문 일정이 확정되었습니다.\n방문일: ${schedule}\n문의: 031-8042-7310`;
+}
+
+/** 기사 재배정 안내. 일정이 함께 바뀐 경우 한 문자에서 두 변경을 명확히 알린다. */
+export function buildTechnicianReassignedMessage(
+  customerName: string,
+  technicianName: string,
+  scheduledDate?: string | null,
+  scheduledTime?: string | null,
+  scheduleChanged = false,
+): string {
+  const schedule = [scheduledDate?.trim(), scheduledTime?.trim()].filter(Boolean).join(" ");
+  const changeText = scheduleChanged
+    ? "담당 기사와 방문 일정이 변경되었습니다"
+    : "담당 기사가 재배정되었습니다";
+  const schedulePart = schedule ? `\n방문 일정: ${schedule}` : "\n방문 일정은 별도로 안내드리겠습니다.";
+  return `[퓨처에너지테크]\n${customerName}님, ${changeText}.\n담당 기사: ${technicianName}${schedulePart}\n문의: 031-8042-7310`;
 }
 
 /** 견적 안내 (고객용, 링크 포함) */

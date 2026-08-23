@@ -125,7 +125,7 @@
       <input type="checkbox" id="assignNotify" checked /> 고객에게 일정 안내 문자/알림톡 발송
     </label>
     <div class="modal-actions">
-      <button class="btn-primary" onclick="submitAssign()">배정 및 일정 확정</button>
+      <button id="assignSubmitBtn" class="btn-primary" onclick="submitAssign()">배정 및 일정 확정</button>
       <button class="btn-cancel" onclick="closeModal('assignModal')">취소</button>
     </div>
   </div>
@@ -567,8 +567,42 @@
       window.location.href = window.location.origin + '/web/login.html';
       return;
     }
+    if (!normalizeStoredAuthToken(user)) {
+      alert('로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.');
+      doLogout();
+      return;
+    }
     document.getElementById('sidebarUsername').textContent = user.name || user.username || '지사장';
     document.getElementById('sidebarBranch').textContent = user.branchName || '';
+  }
+
+  // 신규 token(userId:signature)과 레거시 token(signature)을 정확히 한 번만 정규화한다.
+  function normalizeStoredAuthToken(authUser) {
+    if (!authUser || typeof authUser !== 'object') return null;
+    const userIdText = String(authUser.userId ?? '').trim();
+    if (!/^[1-9]\d*$/.test(userIdText)) return null;
+    const numericUserId = Number(userIdText);
+    if (!Number.isSafeInteger(numericUserId) || String(numericUserId) !== userIdText) return null;
+
+    const rawToken = typeof authUser.token === 'string' ? authUser.token.trim() : '';
+    const fullToken = rawToken.match(/^([1-9]\d*):([a-f0-9]{64})$/i);
+    if (fullToken) {
+      if (fullToken[1] !== userIdText) return null;
+      return userIdText + ':' + fullToken[2].toLowerCase();
+    }
+    if (/^[a-f0-9]{64}$/i.test(rawToken)) {
+      return userIdText + ':' + rawToken.toLowerCase();
+    }
+    return null;
+  }
+
+  function authHeaders(extra) {
+    const headers = Object.assign({}, extra || {});
+    delete headers.Authorization;
+    delete headers.authorization;
+    const token = normalizeStoredAuthToken(user);
+    if (token) headers.Authorization = 'Bearer ' + token;
+    return headers;
   }
 
   function doLogout() { sessionStorage.removeItem('adminUser'); sessionStorage.removeItem('authUser'); localStorage.removeItem('authUser'); window.location.href = window.location.origin + '/web/login.html'; }
@@ -610,7 +644,7 @@
   async function trpc(proc, input) {
     try {
       let url = API + '/' + resolveProc(proc);
-      let opts = { headers: { 'Content-Type': 'application/json' } };
+      let opts = { headers: authHeaders({ 'Content-Type': 'application/json' }) };
       const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
       const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => k !== '_mutation' && k !== '_query' && k !== '_dummy')) : {};
       if (!isMutation) {
@@ -713,7 +747,7 @@
         <td>
           <button class="action-btn btn-assign" onclick="openAssign(${r.id})">${isUnassignedReq(r) ? '배정' : '재배정'}</button>
           <button class="action-btn btn-estimate" onclick="openEstimate(${r.id})">견적</button>
-          ${r.status !== '작업완료' ? `<button class="action-btn btn-complete" onclick="completeRequest(${r.id})">완료</button>` : ''}
+          ${r.status !== '작업완료' ? '<span style="display:inline-block;margin-left:6px;color:#64748B;font-size:11px">기사앱 완료보고 후 자동 반영</span>' : ''}
         </td>
       </tr>
     `).join('') : '<tr class="loading-row"><td colspan="8">접수 데이터가 없습니다</td></tr>';
@@ -840,14 +874,44 @@
     const notify = document.getElementById('assignNotify').checked;
     if (!techId) { alert('담당 기사를 선택해 주세요.'); return; }
     if (!date) { alert('방문 예정일을 선택해 주세요.'); return; }
+    const btn = document.getElementById('assignSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '처리 중...';
     try {
-      await trpc('repair.assignTechnician', { id: selectedRequestId, technicianId: techId, technicianName: techName, scheduledDate: date, scheduledTime: time, notify: false });
-      await trpc('repair.updateSchedule', { id: selectedRequestId, scheduledDate: date, scheduledTime: time, notify });
-      alert('기사 배정과 일정 확정이 완료되었습니다.' + (notify ? '\n고객에게 안내를 발송했습니다.' : ''));
+      const result = await trpc('repair.assignTechnician', {
+        id: selectedRequestId,
+        technicianId: techId,
+        technicianName: techName,
+        scheduledDate: date,
+        scheduledTime: time,
+        notify,
+      });
+      if (result === null) return;
+      let noticeMessage = '';
+      if (notify) {
+        if (result.notificationResult === 'SUCCESS' || result.notificationResult === 'REQUESTED') {
+          noticeMessage = result.notificationRetried
+            ? '\n이전 발송 실패 건을 재시도해 고객 안내 발송이 접수되었습니다.'
+            : '\n고객 안내 발송이 접수되었습니다.';
+        } else if (result.notificationResult === 'FAILED' || result.notificationResult === 'SKIPPED') {
+          noticeMessage = '\n배정은 저장되었지만 고객 안내 발송에 실패했습니다.' +
+            (result.notificationError ? '\n사유: ' + result.notificationError : '');
+        } else if (result.notificationSkipped === 'already_sent') {
+          noticeMessage = '\n이미 성공한 동일 안내가 있어 중복 발송하지 않았습니다.';
+        } else if (result.notificationSkipped === 'pending') {
+          noticeMessage = '\n동일 고객 안내가 이미 처리 중이어서 중복 발송하지 않았습니다.';
+        } else {
+          noticeMessage = '\n기존 배정·일정과 같아 고객 안내는 중복 발송하지 않았습니다.';
+        }
+      }
+      alert('기사 배정과 일정 확정이 완료되었습니다.' + noticeMessage);
       closeModal('assignModal');
       loadCurrentPanel();
     } catch (e) {
       alert('배정 실패: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '배정 및 일정 확정';
     }
   }
 
@@ -867,22 +931,6 @@
     closeModal('estimateModal');
   }
 
-  async function completeRequest(id) {
-    if (!confirm('작업을 완료 처리하시겠습니까?')) return;
-    const res = await fetch(API + '/repair.update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ json: { id, status: 'completed' } })
-    });
-    const data = await res.json();
-    if (data.result?.data?.json?.id) {
-      alert('완료 처리되었습니다.');
-      loadCurrentPanel();
-    } else {
-      alert('처리 실패: ' + (data.error?.message || '오류'));
-    }
-  }
-
   // 기사 이동 현황 (지사장용)
   let branchTrackingInterval = null;
 
@@ -890,7 +938,9 @@
     if (!user || !user.branchId) return;
     try {
       const apiBase = getApiBase();
-      const res = await fetch(apiBase + '/api/location/active/branch/' + user.branchId);
+      const res = await fetch(apiBase + '/api/location/active/branch/' + user.branchId, {
+        headers: authHeaders(),
+      });
       if (!res.ok) throw new Error('요청 실패');
       const { sessions } = await res.json();
       const list = document.getElementById('branch-tracking-list');
@@ -936,12 +986,18 @@
 
   // 전화 접수 고객 위치 공유 시작 (지사장)
   async function startBranchManualTracking() {
+    const resultEl = document.getElementById('bmanual-tracking-result');
+    const requestId = Number(document.getElementById('bmanual-request-id')?.value || 0);
+    const technicianId = Number(document.getElementById('bmanual-technician-id')?.value || 0);
+    if (!requestId || !technicianId) {
+      resultEl.innerHTML = '<div style="background:#FFF7ED;color:#9A3412;border-radius:8px;padding:10px;font-size:13px">수동 위치 공유는 보안상 지원하지 않습니다. 기사 앱의 배정된 접수에서 출발 버튼을 사용해 주세요.</div>';
+      return;
+    }
     const customerName = (document.getElementById('bmanual-customer-name').value || '').trim();
     const customerPhone = (document.getElementById('bmanual-customer-phone').value || '').trim();
     const technicianName = (document.getElementById('bmanual-tech-name').value || '').trim();
     const technicianPhone = (document.getElementById('bmanual-tech-phone').value || '').trim();
     const customerAddress = (document.getElementById('bmanual-customer-address').value || '').trim();
-    const resultEl = document.getElementById('bmanual-tracking-result');
     if (!customerName || !customerPhone || !technicianName) {
       resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">고객명, 고객 전화번호, 담당 기사명은 필수입니다.</div>';
       return;
@@ -949,10 +1005,10 @@
     resultEl.innerHTML = '<div style="color:#6B7280;font-size:13px">링크 생성 및 문자 발송 중...</div>';
     try {
       const apiBase = getApiBase();
-      const body = { customerName, customerPhone, technicianName, technicianPhone, customerAddress };
+      const body = { requestId, technicianId, customerName, customerPhone, technicianName, technicianPhone, customerAddress };
       if (user && user.branchId) { body.branchId = user.branchId; }
       const res = await fetch(apiBase + '/api/location/start-by-admin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -985,7 +1041,7 @@
     try {
       const apiBase = getApiBase();
       const res = await fetch(apiBase + '/api/location/stop-by-admin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ token, reason: '업무취소' }),
       });
       const data = await res.json();

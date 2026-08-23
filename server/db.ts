@@ -1,4 +1,4 @@
-import { eq, desc, or, and, sql, like, isNull, inArray } from "drizzle-orm";
+import { eq, desc, or, and, sql, like, isNull, inArray, gte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2";
 import {
@@ -36,8 +36,20 @@ import {
   codeSettings,
   CodeSetting,
   InsertCodeSetting,
+  estimates,
+  estimateMessageLogs,
 } from "../drizzle/schema.js";
 import { ENV } from "./_core/env.js";
+import {
+  buildTechnicianArrivedMessage,
+  buildTechnicianDepartedMessage,
+  buildWorkCompletedMessage,
+  buildEstimateScheduleConfirmedMessage,
+  buildStatusChangeMessage,
+  buildScheduleConfirmedMessage,
+  buildTechnicianReassignedMessage,
+  getScheduleNoticeKind,
+} from "./notification.js";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: ReturnType<typeof mysql.createPool> | null = null;
@@ -250,6 +262,94 @@ export async function updateRepairStatus(
     .where(eq(repairRequests.id, id));
 }
 
+export async function updateRepairStatusAuthorized(params: {
+  id: number;
+  status: RepairRequest["status"];
+  adminMemo?: string;
+  callerUserId: number;
+  notify: boolean;
+}): Promise<{
+  request: RepairRequest;
+  notificationClaim: WorkflowNotificationClaim | null;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const requestRows = await tx.select().from(repairRequests)
+      .where(eq(repairRequests.id, params.id)).limit(1).for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      request.completedAt
+    ) {
+      throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+    }
+    // 출발·도착·완료는 위치/작업보고 전용 mutation만 상태와 outbox를 함께 바꾼다.
+    if (["출발", "도착", "공사완료", "작업완료"].includes(params.status)) {
+      throw new Error("LEGACY_STATUS_DEDICATED_MUTATION_REQUIRED");
+    }
+
+    const callerRows = await tx.select().from(appRoles)
+      .where(eq(appRoles.userId, params.callerUserId)).limit(1).for("update");
+    const caller = callerRows[0];
+    if (!caller || !caller.isActive) throw new Error("LEGACY_STATUS_FORBIDDEN");
+    if (caller.appRole === "technician") {
+      const technicianRows = await tx.select().from(technicians).where(and(
+        eq(technicians.userId, params.callerUserId),
+        eq(technicians.isActive, true),
+        eq(technicians.isDeleted, false),
+      )).limit(2).for("update");
+      const technician = technicianRows.length === 1 ? technicianRows[0] : null;
+      const allowedTechnicianStatuses: RepairRequest["status"][] = [
+        "기사확인완료", "공사중", "작업진행중", "재방문필요",
+      ];
+      if (
+        !technician || request.technicianId !== technician.id ||
+        !allowedTechnicianStatuses.includes(params.status)
+      ) {
+        throw new Error("LEGACY_STATUS_FORBIDDEN");
+      }
+    } else if (caller.appRole === "branch_manager") {
+      const branchRows = await tx.select({ id: branches.id }).from(branches).where(and(
+        eq(branches.managerUserId, params.callerUserId),
+        eq(branches.isActive, true),
+        eq(branches.isDeleted, false),
+      )).limit(2).for("update");
+      if (branchRows.length !== 1 || request.branchId !== branchRows[0].id) {
+        throw new Error("LEGACY_STATUS_FORBIDDEN");
+      }
+    } else if (caller.appRole !== "hq_admin") {
+      throw new Error("LEGACY_STATUS_FORBIDDEN");
+    }
+
+    const messageType = `상태변경:${params.status}`;
+    const content = buildStatusChangeMessage(
+      request.customerName,
+      request.requestNumber,
+      params.status,
+      request.technicianName,
+      request.scheduledDate,
+      request.scheduledTime,
+    );
+    const notificationClaim = params.notify
+      ? await claimWorkflowNotificationWithTx(tx, {
+          requestId: request.id,
+          phoneNumber: request.phoneNumber,
+          eventKey: JSON.stringify({ v: 1, type: "legacy_status", requestId: request.id, status: params.status }),
+          messageType,
+          content,
+        })
+      : null;
+    await tx.update(repairRequests).set({
+      status: params.status,
+      ...(params.adminMemo !== undefined ? { adminMemo: params.adminMemo } : {}),
+    }).where(eq(repairRequests.id, params.id));
+    return { request, notificationClaim };
+  });
+}
+
 // ─── 기사 배정 ─────────────────────────────────────────────────
 export async function assignTechnician(
   id: number,
@@ -272,6 +372,284 @@ export async function assignTechnician(
       ...(scheduledTime ? { scheduledTime } : {}),
     })
     .where(eq(repairRequests.id, id));
+}
+
+export class RepairScheduleAuthorizationError extends Error {
+  constructor(public readonly reason:
+    | "not_found"
+    | "invalid_technician"
+    | "forbidden"
+    | "report_exists"
+    | "terminal"
+    | "delivery_pending"
+  ) {
+    super(`REPAIR_SCHEDULE_${reason.toUpperCase()}`);
+    this.name = "RepairScheduleAuthorizationError";
+  }
+}
+
+/** 관리자 권한, 지사 범위, 이전 일정 snapshot을 한 트랜잭션에서 확정한다. */
+export async function assignTechnicianAuthorized(params: {
+  id: number;
+  technicianId: number;
+  callerUserId: number;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  claimNotification?: boolean;
+  estimateScheduleNotification?: { estimateId: number };
+}): Promise<{
+  request: RepairRequest;
+  technicianName: string;
+  previousTechnicianId: number | null;
+  previousScheduledDate: string | null;
+  previousScheduledTime: string | null;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  unchanged: boolean;
+  notificationClaim: Awaited<ReturnType<typeof claimRepairNotificationWithTx>> | null;
+  estimateNotificationClaim: EstimateScheduleNotificationClaim | null;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    // 견적 전환 경로는 confirmSchedule과 같은 잠금 순서(estimate 우선)를
+    // 사용해 일정 상태·outbox 선택까지 한 transaction에 묶는다.
+    const estimateRows = params.estimateScheduleNotification
+      ? await tx.select().from(estimates)
+          .where(eq(estimates.id, params.estimateScheduleNotification.estimateId))
+          .limit(1).for("update")
+      : [];
+    const estimate = estimateRows[0] ?? null;
+    if (params.estimateScheduleNotification && !estimate) {
+      throw new RepairScheduleAuthorizationError("not_found");
+    }
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.id))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new RepairScheduleAuthorizationError("not_found");
+
+    const technicianRows = await tx
+      .select()
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new RepairScheduleAuthorizationError("invalid_technician");
+    }
+
+    const callerRows = await tx
+      .select()
+      .from(appRoles)
+      .where(eq(appRoles.userId, params.callerUserId))
+      .limit(1)
+      .for("update");
+    const caller = callerRows[0];
+    if (
+      !caller ||
+      !caller.isActive ||
+      (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager")
+    ) {
+      throw new RepairScheduleAuthorizationError("forbidden");
+    }
+    if (caller.appRole === "branch_manager") {
+      const branchRows = await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(
+          eq(branches.managerUserId, params.callerUserId),
+          eq(branches.isActive, true),
+          eq(branches.isDeleted, false),
+        ))
+        .limit(2)
+        .for("update");
+      const managedBranch = branchRows.length === 1 ? branchRows[0] : null;
+      if (
+        !managedBranch ||
+        request.branchId !== managedBranch.id ||
+        technician.branchId !== managedBranch.id ||
+        Boolean(estimate && estimate.branchId !== null && estimate.branchId !== managedBranch.id)
+      ) {
+        throw new RepairScheduleAuthorizationError("forbidden");
+      }
+    }
+
+    const reports = await tx
+      .select({
+        id: workReports.id,
+        technicianId: workReports.technicianId,
+        isCompleted: workReports.isCompleted,
+      })
+      .from(workReports)
+      .where(eq(workReports.requestId, params.id))
+      .limit(2)
+      .for("update");
+    const terminalRequest =
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt) ||
+      Boolean(reports[0]?.isCompleted);
+    if (terminalRequest) {
+      throw new RepairScheduleAuthorizationError("terminal");
+    }
+    if (
+      reports.length > 1 ||
+      (reports[0] && (
+        request.technicianId !== params.technicianId ||
+        reports[0].technicianId !== params.technicianId
+      ))
+    ) {
+      throw new RepairScheduleAuthorizationError("report_exists");
+    }
+
+    const normalizedDate = params.scheduledDate?.trim() || null;
+    const normalizedTime = params.scheduledTime?.trim() || null;
+    const scheduledDate = params.scheduledDate === undefined
+      ? request.scheduledDate?.trim() || null
+      : normalizedDate;
+    const scheduledTime = params.scheduledTime === undefined
+      ? request.scheduledTime?.trim() || null
+      : normalizedTime;
+    const previousScheduledDate = request.scheduledDate?.trim() || null;
+    const previousScheduledTime = request.scheduledTime?.trim() || null;
+    const unchanged =
+      request.technicianId === params.technicianId &&
+      previousScheduledDate === scheduledDate &&
+      previousScheduledTime === scheduledTime;
+    const assignmentEventKey = JSON.stringify({
+      v: 1,
+      requestId: request.id,
+      technicianId: params.technicianId,
+      scheduledDate,
+      scheduledTime,
+    });
+    const latestRepairClaims = params.claimNotification
+      ? await tx.select({ responsePayload: notificationLogs.responsePayload })
+          .from(notificationLogs)
+          .where(and(
+            eq(notificationLogs.requestId, request.id),
+            like(notificationLogs.responsePayload, `${REPAIR_NOTIFICATION_CLAIM_PREFIX}%`),
+          ))
+          .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+          .limit(1).for("update")
+      : [];
+    const hasCurrentRepairTarget = latestRepairClaims[0]?.responsePayload ===
+      `${REPAIR_NOTIFICATION_CLAIM_PREFIX}${assignmentEventKey}`;
+    const scheduleChanged =
+      previousScheduledDate !== scheduledDate || previousScheduledTime !== scheduledTime;
+    const technicianChanged =
+      request.technicianId !== null && request.technicianId !== params.technicianId;
+    const firstAssignment = request.technicianId === null;
+    const sameTechnician = request.technicianId === params.technicianId;
+    const scheduleNoticeKind = firstAssignment
+      ? (scheduledDate ? "confirmed" : "none")
+      : technicianChanged && scheduleChanged
+        ? "changed"
+        : sameTechnician
+          ? getScheduleNoticeKind(
+              previousScheduledDate,
+              previousScheduledTime,
+              scheduledDate,
+              scheduledTime,
+            )
+          : "unchanged";
+    const technicianReassigned = !firstAssignment && !sameTechnician;
+    let notificationMessageType: string;
+    let notificationContent: string;
+    if (technicianReassigned) {
+      notificationMessageType = scheduleChanged ? "일정변경" : "기사재배정";
+      notificationContent = buildTechnicianReassignedMessage(
+        request.customerName,
+        technician.name,
+        scheduledDate,
+        scheduledTime,
+        scheduleChanged,
+      );
+    } else if (scheduledDate) {
+      notificationMessageType = scheduleNoticeKind === "changed"
+        ? "일정변경"
+        : "일정확정";
+      notificationContent = buildScheduleConfirmedMessage(
+        request.customerName,
+        scheduledDate,
+        scheduledTime ?? "",
+        scheduleNoticeKind === "changed",
+      );
+    } else {
+      notificationMessageType = "기사배정";
+      notificationContent = buildStatusChangeMessage(
+        request.customerName,
+        request.requestNumber,
+        "방문예정",
+        technician.name,
+      );
+    }
+
+    // 견적 확정 outbox는 변환 직후 최초 배정/동일 payload 재시도에만 쓴다.
+    // 실제 일정·기사 변경 또는 그 실패 재시도는 repair 변경 outbox를 유지해
+    // A→B→A 회귀가 과거 estimate A 성공에 의해 suppress되지 않게 한다.
+    const usesExactEstimateSchedule = Boolean(
+      params.claimNotification &&
+      estimate &&
+      scheduledDate &&
+      !scheduleChanged &&
+      !technicianChanged &&
+      !hasCurrentRepairTarget &&
+      ["schedule_confirmed", "converted"].includes(estimate.status) &&
+      (estimate.visitDate?.trim() || null) === scheduledDate &&
+      (estimate.visitTime?.trim() || null) === scheduledTime
+    );
+    const estimateNotificationClaim = usesExactEstimateSchedule && estimate
+      ? await claimEstimateScheduleNotificationWithTx(tx, {
+          estimateId: estimate.id,
+          branchId: estimate.branchId ?? request.branchId ?? null,
+          customerName: estimate.customerName ?? request.customerName,
+          phoneNumber: estimate.customerPhone ?? request.phoneNumber,
+          confirmedDate: scheduledDate!,
+          confirmedTime: scheduledTime,
+          senderId: params.callerUserId,
+          noticeKind: "confirmed",
+        })
+      : null;
+    const notificationClaim = params.claimNotification && !usesExactEstimateSchedule
+      ? await claimRepairNotificationWithTx(tx, {
+          requestId: request.id,
+          phoneNumber: request.phoneNumber,
+          eventKey: assignmentEventKey,
+          messageType: notificationMessageType,
+          content: notificationContent,
+        })
+      : null;
+
+    if (!unchanged) {
+      await tx.update(repairRequests).set({
+        technicianId: params.technicianId,
+        technicianName: technician.name,
+        status: "기사확인대기",
+        workflowStage: scheduledDate ? "일정확정" : "기사배정",
+        ...(params.scheduledDate !== undefined ? { scheduledDate: normalizedDate } : {}),
+        ...(params.scheduledTime !== undefined ? { scheduledTime: normalizedTime } : {}),
+      }).where(eq(repairRequests.id, params.id));
+    }
+
+    return {
+      request,
+      technicianName: technician.name,
+      previousTechnicianId: request.technicianId ?? null,
+      previousScheduledDate,
+      previousScheduledTime,
+      scheduledDate,
+      scheduledTime,
+      unchanged,
+      notificationClaim,
+      estimateNotificationClaim,
+    };
+  });
 }
 
 // ─── 워크플로우 단계만 갱신 ───────────────────────────────────
@@ -302,6 +680,140 @@ export async function updateSchedule(
     .where(eq(repairRequests.id, id));
 }
 
+export async function updateScheduleAuthorized(params: {
+  id: number;
+  callerUserId: number;
+  scheduledDate: string;
+  scheduledTime: string;
+  changeReason?: string | null;
+  claimNotification?: boolean;
+}): Promise<{
+  request: RepairRequest;
+  previousScheduledDate: string | null;
+  previousScheduledTime: string | null;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  unchanged: boolean;
+  notificationClaim: Awaited<ReturnType<typeof claimRepairNotificationWithTx>> | null;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.id))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new RepairScheduleAuthorizationError("not_found");
+
+    const callerRows = await tx
+      .select()
+      .from(appRoles)
+      .where(eq(appRoles.userId, params.callerUserId))
+      .limit(1)
+      .for("update");
+    const caller = callerRows[0];
+    if (
+      !caller ||
+      !caller.isActive ||
+      (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager")
+    ) {
+      throw new RepairScheduleAuthorizationError("forbidden");
+    }
+    if (caller.appRole === "branch_manager") {
+      const branchRows = await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(
+          eq(branches.managerUserId, params.callerUserId),
+          eq(branches.isActive, true),
+          eq(branches.isDeleted, false),
+        ))
+        .limit(2)
+        .for("update");
+      const managedBranch = branchRows.length === 1 ? branchRows[0] : null;
+      if (!managedBranch || request.branchId !== managedBranch.id) {
+        throw new RepairScheduleAuthorizationError("forbidden");
+      }
+    }
+
+    const reports = await tx
+      .select({ id: workReports.id, isCompleted: workReports.isCompleted })
+      .from(workReports)
+      .where(eq(workReports.requestId, params.id))
+      .limit(2)
+      .for("update");
+    const terminalRequest =
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt) ||
+      Boolean(reports[0]?.isCompleted);
+    if (reports.length > 1 || terminalRequest) {
+      throw new RepairScheduleAuthorizationError("terminal");
+    }
+
+    const previousScheduledDate = request.scheduledDate?.trim() || null;
+    const previousScheduledTime = request.scheduledTime?.trim() || null;
+    const scheduledDate = params.scheduledDate.trim() || null;
+    const scheduledTime = params.scheduledTime.trim() || null;
+    const unchanged =
+      previousScheduledDate === scheduledDate &&
+      previousScheduledTime === scheduledTime;
+    const noticeKind = getScheduleNoticeKind(
+      previousScheduledDate,
+      previousScheduledTime,
+      scheduledDate,
+      scheduledTime,
+    );
+    const notificationMessageType = noticeKind === "changed"
+      ? "일정변경"
+      : "일정확정";
+    const notificationContent = buildScheduleConfirmedMessage(
+      request.customerName,
+      scheduledDate ?? "",
+      scheduledTime ?? "",
+      noticeKind === "changed",
+      params.changeReason,
+    );
+    const notificationClaim = params.claimNotification
+      ? await claimRepairNotificationWithTx(tx, {
+          requestId: request.id,
+          phoneNumber: request.phoneNumber,
+          eventKey: JSON.stringify({
+            v: 1,
+            requestId: request.id,
+            technicianId: request.technicianId ?? null,
+            scheduledDate,
+            scheduledTime,
+          }),
+          messageType: notificationMessageType,
+          content: notificationContent,
+        })
+      : null;
+    if (!unchanged || params.changeReason !== undefined) {
+      await tx.update(repairRequests).set({
+        scheduledDate,
+        scheduledTime,
+        workflowStage: scheduledDate ? "일정확정" : "기사배정",
+        ...(params.changeReason !== undefined
+          ? { scheduleChangeReason: params.changeReason?.trim() || null }
+          : {}),
+      }).where(eq(repairRequests.id, params.id));
+    }
+    return {
+      request,
+      previousScheduledDate,
+      previousScheduledTime,
+      scheduledDate,
+      scheduledTime,
+      unchanged,
+      notificationClaim,
+    };
+  });
+}
+
 // ─── 일정 변경 (사유 기록) ────────────────────────────────────
 export async function updateScheduleWithReason(
   id: number,
@@ -318,17 +830,101 @@ export async function updateScheduleWithReason(
 }
 
 // ─── 점검 결과 등록 ────────────────────────────────────────────
-export async function updateInspectionResult(
-  id: number,
-  inspectionResult: string
-): Promise<void> {
+// 이 레거시 입력은 결과 본문만 저장한다. 작업 완료 상태 전환은
+// upsertWorkReport(workReport.save) 한 경로에서만 수행한다.
+export async function updateInspectionResultAuthorized(params: {
+  id: number;
+  technicianId: number;
+  inspectionResult: string;
+}): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db
-    .update(repairRequests)
-    .set({ inspectionResult, status: "작업완료" })
-    .where(eq(repairRequests.id, id));
+  await db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.id))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (request.technicianId !== params.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const technicianRows = await tx
+      .select({ isActive: technicians.isActive, isDeleted: technicians.isDeleted })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const terminal =
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt);
+    if (terminal) throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+
+    await tx.update(repairRequests).set({
+      inspectionResult: params.inspectionResult,
+    }).where(and(
+      eq(repairRequests.id, params.id),
+      eq(repairRequests.technicianId, params.technicianId),
+    ));
+  });
+}
+
+/** 구버전 앱의 별도 재방문 API. 최신 앱은 workReport.save에 함께 저장한다. */
+export async function setRepairRevisitAuthorized(params: {
+  id: number;
+  technicianId: number;
+  needsRevisit: boolean;
+  revisitReason?: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.id))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (request.technicianId !== params.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const technicianRows = await tx
+      .select({ isActive: technicians.isActive, isDeleted: technicians.isDeleted })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const terminal =
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt);
+    if (terminal) throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+
+    await tx.update(repairRequests).set({
+      needsRevisit: params.needsRevisit,
+      revisitReason: params.needsRevisit
+        ? params.revisitReason?.trim() || null
+        : null,
+    }).where(and(
+      eq(repairRequests.id, params.id),
+      eq(repairRequests.technicianId, params.technicianId),
+    ));
+  });
 }
 
 // ─── 기사 관리 ─────────────────────────────────────────────────
@@ -528,6 +1124,297 @@ export async function getNotificationLogs(
     .from(notificationLogs)
     .orderBy(desc(notificationLogs.createdAt))
     .limit(100);
+}
+
+export async function getLatestNotificationLogByTypes(
+  requestId: number,
+  messageTypes: string[],
+): Promise<(typeof notificationLogs.$inferSelect) | null> {
+  const db = await getDb();
+  if (!db || messageTypes.length === 0) return null;
+  const rows = await db
+    .select()
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, requestId),
+      inArray(notificationLogs.messageType, messageTypes),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+const REPAIR_NOTIFICATION_CLAIM_PREFIX = "REPAIR_NOTIFICATION_CLAIM:";
+const REPAIR_NOTIFICATION_PENDING = "DELIVERY_CLAIM_PENDING";
+type RepairNotificationClaim =
+  | {
+      claimed: true;
+      claimId: number;
+      retried: boolean;
+      retryMessageType?: string;
+      retryContent?: string;
+    }
+  | { claimed: false; reason: "pending" | "already_sent" };
+
+async function claimRepairNotificationWithTx(
+  tx: any,
+  params: {
+    requestId: number;
+    phoneNumber: string;
+    eventKey: string;
+    messageType: string;
+    content: string;
+  },
+): Promise<RepairNotificationClaim> {
+  const fingerprint = `${REPAIR_NOTIFICATION_CLAIM_PREFIX}${params.eventKey}`;
+  const requests = await tx
+    .select({ id: repairRequests.id, isDeleted: repairRequests.isDeleted })
+    .from(repairRequests)
+    .where(eq(repairRequests.id, params.requestId))
+    .limit(1)
+    .for("update");
+  if (!requests[0] || requests[0].isDeleted) {
+    throw new Error("REPAIR_NOTIFICATION_REQUEST_NOT_FOUND");
+  }
+  const rows = await tx
+    .select()
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, params.requestId),
+      like(notificationLogs.responsePayload, `${REPAIR_NOTIFICATION_CLAIM_PREFIX}%`),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(1)
+    .for("update");
+  // 왕복 변경(A→B→A)은 새 이벤트다. 오직 가장 최근 목표가 현재 fingerprint와
+  // 같을 때만 성공/진행중/실패 상태를 재사용한다.
+  const latestClaim = rows[0];
+  const existing = latestClaim?.responsePayload === fingerprint ? latestClaim : null;
+  const now = new Date();
+  if (
+    latestClaim && !existing &&
+    latestClaim.errorMessage === REPAIR_NOTIFICATION_PENDING
+  ) {
+    const leaseStartedAt = latestClaim.sentAt ?? latestClaim.createdAt;
+    const leaseAgeMs = Date.now() - new Date(leaseStartedAt).getTime();
+    if (Number.isFinite(leaseAgeMs) && leaseAgeMs < 2 * 60 * 1000) {
+      // 이전 날짜/기사 안내가 transaction 밖에서 발송 중인 동안 새 상태를
+      // 커밋하면 두 문자가 역순 도착할 수 있으므로 호출 transaction을 중단한다.
+      throw new RepairScheduleAuthorizationError("delivery_pending");
+    }
+    await tx.update(notificationLogs).set({
+      result: "FAILED",
+      errorMessage: "DELIVERY_LEASE_EXPIRED",
+      sentAt: now,
+    }).where(eq(notificationLogs.id, latestClaim.id));
+  }
+  if (existing?.result === "SUCCESS" || existing?.result === "REQUESTED") {
+    return { claimed: false, reason: "already_sent" };
+  }
+  if (existing?.errorMessage === REPAIR_NOTIFICATION_PENDING) {
+    const leaseStartedAt = existing.sentAt ?? existing.createdAt;
+    const leaseAgeMs = Date.now() - new Date(leaseStartedAt).getTime();
+    if (Number.isFinite(leaseAgeMs) && leaseAgeMs < 2 * 60 * 1000) {
+      return { claimed: false, reason: "pending" };
+    }
+  }
+  if (existing) {
+    const retryMessageType = existing.content
+      ? existing.messageType
+      : params.messageType;
+    const retryContent = existing.content ?? params.content;
+    await tx.update(notificationLogs).set({
+      messageType: retryMessageType,
+      content: retryContent,
+      result: "SKIPPED",
+      errorMessage: REPAIR_NOTIFICATION_PENDING,
+      sentAt: now,
+    }).where(eq(notificationLogs.id, existing.id));
+    return {
+      claimed: true,
+      claimId: existing.id,
+      retried: true,
+      // 재배정 실패 직후 같은 요청을 다시 누르면 DB의 현재 snapshot에는
+      // "이전 기사"가 이미 사라진다. 최초 실패 때 저장한 정확한 문구를 다시
+      // 사용해 일정확정 문자 등 다른 의미로 바뀌지 않게 한다.
+      retryMessageType,
+      retryContent,
+    };
+  }
+  const result = await tx.insert(notificationLogs).values({
+    requestId: params.requestId,
+    phoneNumber: params.phoneNumber,
+    channel: "SMS",
+    // claim과 상태 변경은 같은 transaction에서 커밋된다. 네트워크 발송 전에
+    // 프로세스가 종료돼도 재시도가 당시의 정확한 변경 문구를 복구할 수 있다.
+    messageType: params.messageType,
+    content: params.content,
+    result: "SKIPPED",
+    errorMessage: REPAIR_NOTIFICATION_PENDING,
+    responsePayload: fingerprint,
+    sentAt: now,
+  });
+  return {
+    claimed: true,
+    claimId: (result as any)[0].insertId,
+    retried: false,
+    retryMessageType: params.messageType,
+    retryContent: params.content,
+  };
+}
+
+/**
+ * 동일한 배정/일정 결과에 대한 발송권을 접수 행 잠금 아래 선점한다.
+ * 별도 스키마 없이 notification_logs.responsePayload를 결과 fingerprint로 사용한다.
+ */
+export async function claimRepairNotification(params: {
+  requestId: number;
+  phoneNumber: string;
+  eventKey: string;
+  messageType: string;
+  content: string;
+}): Promise<RepairNotificationClaim> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => claimRepairNotificationWithTx(tx, params));
+}
+
+export async function completeRepairNotificationClaim(params: {
+  claimId: number;
+  messageType: string;
+  content: string;
+  channel: "SMS" | "ALIMTALK";
+  result: "SUCCESS" | "FAILED" | "SKIPPED" | "REQUESTED";
+  errorMessage?: string;
+  fallbackUsed: boolean;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(notificationLogs).set({
+    messageType: params.messageType,
+    content: params.content,
+    channel: params.channel,
+    result: params.result,
+    errorMessage: params.errorMessage ?? null,
+    fallbackUsed: params.fallbackUsed,
+    sentAt: new Date(),
+  }).where(eq(notificationLogs.id, params.claimId));
+}
+
+const WORKFLOW_NOTIFICATION_CLAIM_PREFIX = "WORKFLOW_NOTIFICATION_CLAIM:";
+const WORKFLOW_NOTIFICATION_PENDING = "DELIVERY_CLAIM_PENDING";
+const WORKFLOW_NOTIFICATION_LEASE_MS = 2 * 60 * 1000;
+
+export type WorkflowNotificationClaim =
+  | {
+      claimed: true;
+      claimId: number;
+      retried: boolean;
+      phoneNumber: string;
+      messageType: string;
+      content: string;
+    }
+  | { claimed: false; reason: "pending" | "already_sent" | "cooldown" };
+
+/**
+ * 도착/완료 상태 변경과 같은 트랜잭션에서 durable outbox 행을 선점한다.
+ * 이전 버전이 이미 남긴 성공/접수 로그도 확인하며, 실패했거나 2분 lease가
+ * 만료된 행은 같은 claim을 다시 선점해 프로세스 중단 뒤에도 복구한다.
+ */
+async function claimWorkflowNotificationWithTx(
+  tx: any,
+  params: {
+    requestId: number;
+    phoneNumber: string;
+    eventKey: string;
+    messageType: string;
+    content: string;
+  },
+): Promise<WorkflowNotificationClaim> {
+  const fingerprint = `${WORKFLOW_NOTIFICATION_CLAIM_PREFIX}${params.eventKey}`;
+
+  // 배포 전 즉시 발송 경로가 남긴 성공 로그가 있으면 새 outbox를 만들지 않는다.
+  const successfulRows = await tx
+    .select({ id: notificationLogs.id })
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, params.requestId),
+      eq(notificationLogs.messageType, params.messageType),
+      inArray(notificationLogs.result, ["SUCCESS", "REQUESTED"]),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(1)
+    .for("update");
+  if (successfulRows[0]) {
+    return { claimed: false, reason: "already_sent" };
+  }
+
+  const rows = await tx
+    .select()
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, params.requestId),
+      eq(notificationLogs.responsePayload, fingerprint),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(2)
+    .for("update");
+  if (rows.length > 1) throw new Error("WORKFLOW_NOTIFICATION_DUPLICATE_CLAIM");
+  const existing = rows[0];
+
+  if (existing?.result === "SUCCESS" || existing?.result === "REQUESTED") {
+    return { claimed: false, reason: "already_sent" };
+  }
+  if (existing?.errorMessage === WORKFLOW_NOTIFICATION_PENDING) {
+    const leaseStartedAt = existing.sentAt ?? existing.createdAt;
+    const leaseAgeMs = Date.now() - new Date(leaseStartedAt).getTime();
+    if (Number.isFinite(leaseAgeMs) && leaseAgeMs < WORKFLOW_NOTIFICATION_LEASE_MS) {
+      return { claimed: false, reason: "pending" };
+    }
+  }
+
+  const now = new Date();
+  if (existing) {
+    const phoneNumber = existing.phoneNumber || params.phoneNumber;
+    const messageType = existing.messageType || params.messageType;
+    const content = existing.content || params.content;
+    await tx.update(notificationLogs).set({
+      phoneNumber,
+      messageType,
+      content,
+      result: "SKIPPED",
+      errorMessage: WORKFLOW_NOTIFICATION_PENDING,
+      sentAt: now,
+    }).where(eq(notificationLogs.id, existing.id));
+    return {
+      claimed: true,
+      claimId: existing.id,
+      retried: true,
+      phoneNumber,
+      messageType,
+      content,
+    };
+  }
+
+  const result = await tx.insert(notificationLogs).values({
+    requestId: params.requestId,
+    phoneNumber: params.phoneNumber,
+    channel: "SMS",
+    messageType: params.messageType,
+    content: params.content,
+    result: "SKIPPED",
+    errorMessage: WORKFLOW_NOTIFICATION_PENDING,
+    responsePayload: fingerprint,
+    sentAt: now,
+  });
+  return {
+    claimed: true,
+    claimId: (result as any)[0].insertId,
+    retried: false,
+    phoneNumber: params.phoneNumber,
+    messageType: params.messageType,
+    content: params.content,
+  };
 }
 
 // ─── 누수센서 ─────────────────────────────────────────────────
@@ -794,6 +1681,26 @@ export async function getBranchById(id: number): Promise<Branch | null> {
   return rows[0] ?? null;
 }
 
+/**
+ * 지사장 권한의 기준 소속을 app_roles.branchId가 아닌 현재 branches.managerUserId에서 찾는다.
+ * 활성·미삭제 지사가 정확히 하나일 때만 권한을 부여하여 전임자/stale branchId와
+ * 한 계정의 중복 지사 연결을 모두 fail-closed 한다.
+ */
+export async function getManagedActiveBranchByUserId(userId: number): Promise<Branch | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(branches)
+    .where(and(
+      eq(branches.managerUserId, userId),
+      eq(branches.isActive, true),
+      eq(branches.isDeleted, false),
+    ))
+    .limit(2);
+  return rows.length === 1 ? rows[0] : null;
+}
+
 export async function createBranch(data: InsertBranch): Promise<{ id: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -935,11 +1842,214 @@ export async function getTechniciansByBranch(branchId: number) {
 }
 
 // userId로 기사 조회
+export async function getTechnicianById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(technicians).where(eq(technicians.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getTechnicianByUserId(userId: number) {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(technicians).where(eq(technicians.userId, userId)).limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * 아주 초기 버전이 repair_requests.technicianId에 technicians.id 대신
+ * app_roles.id를 저장한 자료를 canonical 기사 ID로 이관한다. 두 숫자가 다른
+ * 실제 기사와 충돌하면 아무 것도 바꾸지 않아 타인 배정을 가져오지 않는다.
+ */
+async function migrateLegacyTechnicianAssignmentsWithTx(
+  tx: any,
+  userId: number,
+  technician: Technician,
+): Promise<void> {
+  const roleRows = await tx
+    .select()
+    .from(appRoles)
+    .where(eq(appRoles.userId, userId))
+    .limit(2)
+    .for("update");
+  const role = roleRows.length === 1 ? roleRows[0] : null;
+  if (!role || role.appRole !== "technician" || !role.isActive || role.id === technician.id) {
+    return;
+  }
+
+  // 같은 숫자의 technicians 행이 하나라도 있으면 그 기사 배정일 수 있으므로
+  // fail-closed 한다. 전체 기사 테이블을 잠그지 않고 PK 후보 한 행만 확인한다.
+  const collisionRows = await tx
+    .select({ id: technicians.id })
+    .from(technicians)
+    .where(eq(technicians.id, role.id))
+    .limit(1)
+    .for("update");
+  if (collisionRows[0]) return;
+
+  const legacyRequests = await tx
+    .select({ id: repairRequests.id })
+    .from(repairRequests)
+    .where(eq(repairRequests.technicianId, role.id))
+    .for("update");
+  // 과거 부분 이관으로 request만 canonical이고 하위 자료가 legacy ID인 경우도
+  // 복구한다. collision 부재를 확인했으므로 이 ID는 실제 다른 기사일 수 없다.
+  await tx.update(workReports).set({ technicianId: technician.id })
+    .where(eq(workReports.technicianId, role.id));
+  await tx.update(locationSessions).set({ technicianId: technician.id })
+    .where(eq(locationSessions.technicianId, role.id));
+  if (legacyRequests.length > 0) {
+    const requestIds = legacyRequests.map((row: { id: number }) => row.id);
+    await tx.update(repairRequests).set({ technicianId: technician.id }).where(and(
+      inArray(repairRequests.id, requestIds),
+      eq(repairRequests.technicianId, role.id),
+    ));
+  }
+  await tx.update(locationConsents).set({ technicianId: technician.id })
+    .where(eq(locationConsents.technicianId, role.id));
+}
+
+/**
+ * 관리자 화면에서 먼저 만든 userId-null 기사행과 앱 가입 때 생성된 canonical
+ * 기사행이 따로 존재하는 구버전 자료를 수선한다. 전화번호·지사·이름이 모두
+ * 같고 후보가 정확히 하나일 때만 현재 진행 자료를 옮긴다.
+ */
+async function migrateUniqueManualTechnicianAssignmentsWithTx(
+  tx: any,
+  technician: Technician,
+): Promise<void> {
+  const normalizedPhone = technician.phoneNumber?.replace(/[^0-9]/g, "") ?? "";
+  if (normalizedPhone.length < 10) return;
+
+  const sameBranch = technician.branchId === null
+    ? isNull(technicians.branchId)
+    : eq(technicians.branchId, technician.branchId);
+  const legacyRows = await tx
+    .select()
+    .from(technicians)
+    .where(and(
+      isNull(technicians.userId),
+      eq(technicians.isActive, true),
+      eq(technicians.isDeleted, false),
+      eq(technicians.name, technician.name),
+      sameBranch,
+      sql`${technicians.id} <> ${technician.id}`,
+      sql`REGEXP_REPLACE(${technicians.phoneNumber}, '[^0-9]', '') = ${normalizedPhone}`,
+    ))
+    .limit(2)
+    .for("update");
+  // 이름·전화·지사가 같은 수기 행이 둘 이상이면 어느 행인지 추측하지 않는다.
+  if (legacyRows.length !== 1) return;
+  const legacy = legacyRows[0];
+
+  const openRequests = await tx
+    .select({ id: repairRequests.id })
+    .from(repairRequests)
+    .where(and(
+      eq(repairRequests.isDeleted, false),
+      isNull(repairRequests.completedAt),
+      inArray(repairRequests.technicianId, [legacy.id, technician.id]),
+      or(
+        isNull(repairRequests.status),
+        sql`${repairRequests.status} NOT IN ('작업완료', '공사완료')`,
+      ),
+      or(
+        isNull(repairRequests.workflowStage),
+        sql`${repairRequests.workflowStage} NOT IN ('작업완료', '결제완료', '후기요청')`,
+      ),
+    ))
+    .for("update");
+  const openRequestIds = openRequests.map((row: { id: number }) => row.id);
+
+  if (openRequestIds.length > 0) {
+    await tx.update(repairRequests).set({
+      technicianId: technician.id,
+      technicianName: technician.name,
+    }).where(and(
+      inArray(repairRequests.id, openRequestIds),
+      eq(repairRequests.technicianId, legacy.id),
+    ));
+    await tx.update(workReports).set({ technicianId: technician.id }).where(and(
+      inArray(workReports.requestId, openRequestIds),
+      eq(workReports.technicianId, legacy.id),
+      eq(workReports.isCompleted, false),
+    ));
+    await tx.update(locationSessions).set({ technicianId: technician.id }).where(and(
+      inArray(locationSessions.requestId, openRequestIds),
+      eq(locationSessions.technicianId, legacy.id),
+      eq(locationSessions.status, "이동중"),
+    ));
+  }
+  await tx.update(locationConsents).set({ technicianId: technician.id }).where(and(
+    eq(locationConsents.technicianId, legacy.id),
+    eq(locationConsents.isActive, true),
+  ));
+}
+
+/**
+ * 기사 앱 계정과 technicians 행의 명시적 연결을 확인한다.
+ * 레거시 행에 userId가 없을 때만 정규화 전화번호가 유일하게 일치하는 활성 행을
+ * 잠근 뒤 1회 연결하며, 중복 전화번호나 다른 계정에 연결된 행은 추측하지 않는다.
+ */
+export async function resolveActiveTechnicianForUser(
+  userId: number,
+  phoneNumber?: string | null,
+): Promise<Technician | null> {
+  const db = await getDb();
+  if (!db) return null;
+  return db.transaction(async (tx) => {
+    const linkedRows = await tx
+      .select()
+      .from(technicians)
+      .where(and(
+        eq(technicians.userId, userId),
+        eq(technicians.isActive, true),
+        eq(technicians.isDeleted, false),
+      ))
+      .limit(2)
+      .for("update");
+    if (linkedRows.length === 1) {
+      await migrateLegacyTechnicianAssignmentsWithTx(tx, userId, linkedRows[0]);
+      await migrateUniqueManualTechnicianAssignmentsWithTx(tx, linkedRows[0]);
+      return linkedRows[0];
+    }
+    if (linkedRows.length > 1) return null;
+
+    const normalizedPhone = phoneNumber?.replace(/[^0-9]/g, "") ?? "";
+    if (normalizedPhone.length < 10) return null;
+
+    // userId 없는 레거시 행의 최초 연결에서만 실행되는 희소 경로다. 활성 기사 행을
+    // 같은 transaction에서 잠가 동시 로그인이나 중복 전화번호 생성을 추측 연결하지 않는다.
+    const activeRows = await tx
+      .select()
+      .from(technicians)
+      .where(and(eq(technicians.isActive, true), eq(technicians.isDeleted, false)))
+      .for("update");
+    const phoneMatches = activeRows.filter(
+      (row) => row.phoneNumber?.replace(/[^0-9]/g, "") === normalizedPhone,
+    );
+    if (phoneMatches.length !== 1) return null;
+
+    const candidate = phoneMatches[0];
+    if (candidate.userId !== null && candidate.userId !== userId) return null;
+    if (candidate.userId === userId) return candidate;
+
+    const updateResult = await tx
+      .update(technicians)
+      .set({ userId })
+      .where(and(
+        eq(technicians.id, candidate.id),
+        isNull(technicians.userId),
+        eq(technicians.isActive, true),
+        eq(technicians.isDeleted, false),
+      ));
+    const affectedRows = Number((updateResult as any)?.[0]?.affectedRows ?? 0);
+    if (affectedRows !== 1) return null;
+    const linked = { ...candidate, userId };
+    await migrateLegacyTechnicianAssignmentsWithTx(tx, userId, linked);
+    await migrateUniqueManualTechnicianAssignmentsWithTx(tx, linked);
+    return linked;
+  });
 }
 
 // phoneNumber로 기사 조회 (앱 가입 기사 매칭용 - userId 있는 것 우선)
@@ -983,6 +2093,13 @@ export async function updateTechnicianUserId(id: number, userId: number) {
 }
 
 // ─── 작업 보고서 ───────────────────────────────────────────────
+function isDuplicateKeyError(error: unknown, depth = 0): boolean {
+  if (!error || typeof error !== "object" || depth > 2) return false;
+  const candidate = error as { code?: unknown; errno?: unknown; cause?: unknown };
+  if (candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062) return true;
+  return candidate.cause !== error && isDuplicateKeyError(candidate.cause, depth + 1);
+}
+
 export async function getWorkReportByRequestId(requestId: number): Promise<WorkReport | null> {
   const db = await getDb();
   if (!db) return null;
@@ -990,16 +2107,372 @@ export async function getWorkReportByRequestId(requestId: number): Promise<WorkR
   return rows[0] ?? null;
 }
 
-export async function upsertWorkReport(data: InsertWorkReport): Promise<{ id: number }> {
+export async function upsertWorkReport(
+  data: InsertWorkReport,
+  options: {
+    needsRevisit?: boolean;
+    revisitReason?: string | null;
+  } = {},
+): Promise<{
+  id: number | null;
+  alreadyCompletedConflict: boolean;
+  completion?: {
+    request: RepairRequest;
+    firstCompletion: boolean;
+    notificationClaim: WorkflowNotificationClaim;
+  };
+}> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const existing = await getWorkReportByRequestId(data.requestId);
-  if (existing) {
-    await db.update(workReports).set(data).where(eq(workReports.id, existing.id));
-    return { id: existing.id };
+  if (data.isCompleted && options.needsRevisit) {
+    throw new Error("WORK_REPORT_REVISIT_COMPLETION_CONFLICT");
   }
-  const result = await db.insert(workReports).values(data);
-  return { id: (result as any)[0].insertId };
+  return db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, data.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (request.technicianId !== data.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const technicianRows = await tx
+      .select({ isActive: technicians.isActive, isDeleted: technicians.isDeleted })
+      .from(technicians)
+      .where(eq(technicians.id, data.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const rows = await tx
+      .select()
+      .from(workReports)
+      .where(eq(workReports.requestId, data.requestId))
+      .limit(2)
+      .for("update");
+    if (rows.length > 1) throw new Error("WORK_REPORT_DUPLICATE_REQUEST_ID");
+    let existing = rows[0];
+    if (existing && existing.technicianId !== data.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    const requestAlreadyCompleted =
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt);
+    // 완료 뒤 일반 저장 payload는 성공처럼 버리지 않는다. 다만 완료 요청의
+    // 재호출은 같은 트랜잭션에서 미발송 outbox를 복구한 뒤 라우터가 conflict로
+    // 응답할 수 있도록 claim을 반환한다.
+    if (existing?.isCompleted || requestAlreadyCompleted) {
+      if (!data.isCompleted) throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+      const notificationClaim = await claimWorkflowNotificationWithTx(tx, {
+        requestId: request.id,
+        phoneNumber: request.phoneNumber,
+        eventKey: JSON.stringify({
+          v: 1,
+          type: "work_completed",
+          requestId: request.id,
+          technicianId: data.technicianId,
+        }),
+        messageType: "작업완료",
+        content: buildWorkCompletedMessage(request.customerName),
+      });
+      return {
+        id: existing?.id ?? null,
+        alreadyCompletedConflict: true,
+        completion: { request, firstCompletion: false, notificationClaim },
+      };
+    }
+
+    let reportId: number;
+    if (existing) {
+      await tx.update(workReports).set(data).where(eq(workReports.id, existing.id));
+      reportId = existing.id;
+    } else {
+      try {
+        const result = await tx.insert(workReports).values(data);
+        reportId = (result as any)[0].insertId;
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+        const recoveredRows = await tx
+          .select()
+          .from(workReports)
+          .where(eq(workReports.requestId, data.requestId))
+          .limit(2)
+          .for("update");
+        if (recoveredRows.length !== 1) {
+          throw new Error("WORK_REPORT_DUPLICATE_REQUEST_ID");
+        }
+        existing = recoveredRows[0];
+        if (existing.technicianId !== data.technicianId) {
+          throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+        }
+        if (existing.isCompleted) throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+        await tx.update(workReports).set(data).where(eq(workReports.id, existing.id));
+        reportId = existing.id;
+      }
+    }
+
+    if (!data.isCompleted) {
+      if (options.needsRevisit !== undefined) {
+        await tx.update(repairRequests).set({
+          needsRevisit: options.needsRevisit,
+          revisitReason: options.needsRevisit
+            ? options.revisitReason?.trim() || null
+            : null,
+        }).where(and(
+          eq(repairRequests.id, data.requestId),
+          eq(repairRequests.technicianId, data.technicianId),
+        ));
+      }
+      return { id: reportId, alreadyCompletedConflict: false };
+    }
+
+    await lockAndAssertLocationDeparturesSettledWithTx(
+      tx,
+      data.requestId,
+      data.technicianId,
+    );
+    const completedAt = data.completedAt ?? new Date();
+    await tx.update(repairRequests).set({
+      status: "작업완료",
+      workflowStage: "작업완료",
+      completedAt,
+      needsRevisit: false,
+      revisitReason: null,
+    }).where(and(
+      eq(repairRequests.id, data.requestId),
+      eq(repairRequests.technicianId, data.technicianId),
+    ));
+    await tx.update(locationSessions).set({
+      status: "도착완료",
+      arrivedAt: completedAt,
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.requestId, data.requestId),
+      eq(locationSessions.technicianId, data.technicianId),
+      eq(locationSessions.status, "이동중"),
+    ));
+    const notificationClaim = await claimWorkflowNotificationWithTx(tx, {
+      requestId: request.id,
+      phoneNumber: request.phoneNumber,
+      eventKey: JSON.stringify({
+        v: 1,
+        type: "work_completed",
+        requestId: request.id,
+        technicianId: data.technicianId,
+      }),
+      messageType: "작업완료",
+      content: buildWorkCompletedMessage(request.customerName),
+    });
+    return {
+      id: reportId,
+      alreadyCompletedConflict: false,
+      completion: { request, firstCompletion: true, notificationClaim },
+    };
+  });
+}
+
+/**
+ * 작업 완료 버튼의 최종 전환. 접수·기사·보고서를 잠근 뒤 현재 배정을 재검증하고,
+ * 첫 완료 요청 하나만 firstCompletion=true를 받도록 한다.
+ */
+export async function markRepairWorkCompletedAuthorized(params: {
+  requestId: number;
+  technicianId: number;
+  reviewUrl?: string | null;
+}): Promise<{
+  request: RepairRequest;
+  firstCompletion: boolean;
+  notificationClaim: WorkflowNotificationClaim;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (request.technicianId !== params.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+
+    const technicianRows = await tx
+      .select({ isActive: technicians.isActive, isDeleted: technicians.isDeleted })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+
+    const reports = await tx
+      .select()
+      .from(workReports)
+      .where(eq(workReports.requestId, params.requestId))
+      .limit(2)
+      .for("update");
+    if (reports.length > 1) throw new Error("WORK_REPORT_DUPLICATE_REQUEST_ID");
+    const report = reports[0];
+    if (report && report.technicianId !== params.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+
+    const firstCompletion = !(
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt) ||
+      Boolean(report?.isCompleted)
+    );
+    await lockAndAssertLocationDeparturesSettledWithTx(
+      tx,
+      params.requestId,
+      params.technicianId,
+    );
+    const now = new Date();
+    if (firstCompletion) {
+      if (report) {
+        await tx.update(workReports).set({
+          isCompleted: true,
+          completedAt: report.completedAt ?? now,
+        }).where(eq(workReports.id, report.id));
+      }
+      await tx.update(repairRequests).set({
+        status: "작업완료",
+        workflowStage: "작업완료",
+        completedAt: request.completedAt ?? now,
+        needsRevisit: false,
+        revisitReason: null,
+      }).where(and(
+        eq(repairRequests.id, params.requestId),
+        eq(repairRequests.technicianId, params.technicianId),
+      ));
+    }
+    await tx.update(locationSessions).set({
+      status: "도착완료",
+      arrivedAt: now,
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.requestId, params.requestId),
+      eq(locationSessions.technicianId, params.technicianId),
+      eq(locationSessions.status, "이동중"),
+    ));
+    const notificationClaim = await claimWorkflowNotificationWithTx(tx, {
+      requestId: request.id,
+      phoneNumber: request.phoneNumber,
+      eventKey: JSON.stringify({
+        v: 1,
+        type: "work_completed",
+        requestId: request.id,
+        technicianId: params.technicianId,
+      }),
+      messageType: "작업완료",
+      content: buildWorkCompletedMessage(request.customerName, params.reviewUrl),
+    });
+    return { request, firstCompletion, notificationClaim };
+  });
+}
+
+/**
+ * 사진이 보고서 본문보다 먼저 올라와도 URL을 잃지 않도록 접수 행 잠금 안에서
+ * 보고서 행을 만들거나 해당 사진 열만 갱신한다.
+ */
+export async function setWorkReportPhotoUrl(params: {
+  requestId: number;
+  technicianId: number;
+  photoType: "before" | "after";
+  url: string;
+}): Promise<{ id: number; previousUrl: string | null }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select({
+        id: repairRequests.id,
+        technicianId: repairRequests.technicianId,
+        branchId: repairRequests.branchId,
+        isDeleted: repairRequests.isDeleted,
+        status: repairRequests.status,
+        workflowStage: repairRequests.workflowStage,
+        completedAt: repairRequests.completedAt,
+      })
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("WORK_REPORT_REQUEST_NOT_FOUND");
+    if (request.technicianId !== params.technicianId) {
+      throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+    }
+    if (
+      ["공사완료", "작업완료"].includes(request.status) ||
+      ["작업완료", "결제완료", "후기요청"].includes(request.workflowStage) ||
+      Boolean(request.completedAt)
+    ) {
+      throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+    }
+
+    const rows = await tx
+      .select()
+      .from(workReports)
+      .where(eq(workReports.requestId, params.requestId))
+      .limit(2)
+      .for("update");
+    if (rows.length > 1) throw new Error("WORK_REPORT_DUPLICATE_REQUEST_ID");
+
+    const existing = rows[0];
+    const field = params.photoType === "before" ? "beforePhotoUrl" : "afterPhotoUrl";
+    const previousUrl = existing?.[field] ?? null;
+    if (existing) {
+      if (existing.technicianId !== params.technicianId) {
+        throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+      }
+      await tx
+        .update(workReports)
+        .set({ [field]: params.url })
+        .where(eq(workReports.id, existing.id));
+      return { id: existing.id, previousUrl };
+    }
+
+    try {
+      const result = await tx.insert(workReports).values({
+        requestId: params.requestId,
+        technicianId: params.technicianId,
+        [field]: params.url,
+      });
+      return { id: (result as any)[0].insertId, previousUrl };
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) throw error;
+      const recoveredRows = await tx
+        .select()
+        .from(workReports)
+        .where(eq(workReports.requestId, params.requestId))
+        .limit(2)
+        .for("update");
+      if (recoveredRows.length !== 1) {
+        throw new Error("WORK_REPORT_DUPLICATE_REQUEST_ID");
+      }
+      const recovered = recoveredRows[0];
+      if (recovered.technicianId !== params.technicianId) {
+        throw new Error("WORK_REPORT_ASSIGNMENT_CHANGED");
+      }
+      if (recovered.isCompleted) throw new Error("WORK_REPORT_ALREADY_COMPLETED");
+      const recoveredPreviousUrl = recovered[field] ?? null;
+      await tx.update(workReports).set({ [field]: params.url })
+        .where(eq(workReports.id, recovered.id));
+      return { id: recovered.id, previousUrl: recoveredPreviousUrl };
+    }
+  });
 }
 
 // ─── 공지사항 ──────────────────────────────────────────────────
@@ -1184,6 +2657,70 @@ export async function getAppRolesByRole(role: "hq_admin" | "branch_manager" | "t
 // ─── 위치 추적 세션 ────────────────────────────────────────────────────────
 import { locationSessions, locationConsents, LocationSession, InsertLocationSession } from "../drizzle/schema.js";
 
+const LOCATION_SMS_CLAIM_LEASE_MS = 2 * 60 * 1000;
+
+export function isLocationDepartureDeliveryPending(params: {
+  smsSentAt: Date | string | null;
+  accepted: boolean;
+  nowMs?: number;
+}): boolean {
+  if (!params.smsSentAt || params.accepted) return false;
+  const claimAgeMs = (params.nowMs ?? Date.now()) - new Date(params.smsSentAt).getTime();
+  return Number.isFinite(claimAgeMs) && claimAgeMs < LOCATION_SMS_CLAIM_LEASE_MS;
+}
+
+function locationTrackingLogPattern(token: string): string {
+  // trackingToken은 base64url이지만 LIKE의 '_'도 wildcard이므로 함께 escape한다.
+  const escaped = token.replace(/[\\%_]/g, "\\$&");
+  return `%/track/${escaped}%`;
+}
+
+async function assertLocationDepartureDeliverySettledWithTx(
+  tx: any,
+  session: Pick<LocationSession, "id" | "requestId" | "trackingToken" | "smsSentAt" | "createdAt">,
+): Promise<void> {
+  if (!session.smsSentAt) return;
+  const acceptedRows = await tx
+    .select({ id: notificationLogs.id })
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, session.requestId),
+      eq(notificationLogs.messageType, "기사출발"),
+      inArray(notificationLogs.result, ["SUCCESS", "REQUESTED"]),
+      like(notificationLogs.content, locationTrackingLogPattern(session.trackingToken)),
+      gte(notificationLogs.createdAt, session.createdAt),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(1);
+  if (acceptedRows[0]) return;
+  if (isLocationDepartureDeliveryPending({
+    smsSentAt: session.smsSentAt,
+    accepted: false,
+  })) {
+    throw new Error("LOCATION_DELIVERY_PENDING");
+  }
+}
+
+async function lockAndAssertLocationDeparturesSettledWithTx(
+  tx: any,
+  requestId: number,
+  technicianId: number,
+): Promise<void> {
+  const sessions = await tx
+    .select()
+    .from(locationSessions)
+    .where(and(
+      eq(locationSessions.requestId, requestId),
+      eq(locationSessions.technicianId, technicianId),
+      eq(locationSessions.status, "이동중"),
+    ))
+    .orderBy(desc(locationSessions.createdAt), desc(locationSessions.id))
+    .for("update");
+  for (const session of sessions) {
+    await assertLocationDepartureDeliverySettledWithTx(tx, session);
+  }
+}
+
 export async function createLocationSession(data: InsertLocationSession): Promise<LocationSession | null> {
   const db = await getDb();
   if (!db) return null;
@@ -1194,6 +2731,196 @@ export async function createLocationSession(data: InsertLocationSession): Promis
   return rows[0] ?? null;
 }
 
+/**
+ * 접수 행을 잠근 상태에서 유효한 이동 세션을 재사용하거나 정확히 하나만 만든다.
+ * 서버 인스턴스가 동시에 출발 요청을 받아도 고객 링크와 문자가 중복되지 않는다.
+ */
+export async function getOrCreateActiveLocationSession(
+  data: InsertLocationSession,
+  authorization?: { managerUserId: number },
+): Promise<{ session: LocationSession; created: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async (tx) => {
+    // 같은 접수 또는 같은 기사로 들어오는 동시 출발을 모두 직렬화한다.
+    // 잠금 순서는 항상 접수 -> 기사로 고정해 교착 가능성을 줄인다.
+    const requestRows = await tx
+      .select({
+        id: repairRequests.id,
+        technicianId: repairRequests.technicianId,
+        branchId: repairRequests.branchId,
+        status: repairRequests.status,
+        workflowStage: repairRequests.workflowStage,
+        isDeleted: repairRequests.isDeleted,
+      })
+      .from(repairRequests)
+      .where(eq(repairRequests.id, data.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("LOCATION_REQUEST_NOT_FOUND");
+
+    const technicianRows = await tx
+      .select({
+        id: technicians.id,
+        branchId: technicians.branchId,
+        isActive: technicians.isActive,
+        isDeleted: technicians.isDeleted,
+      })
+      .from(technicians)
+      .where(eq(technicians.id, data.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("LOCATION_TECHNICIAN_NOT_ACTIVE");
+    }
+    if (request.technicianId !== data.technicianId) {
+      throw new Error("LOCATION_ASSIGNMENT_CHANGED");
+    }
+    if (authorization) {
+      const callerRows = await tx
+        .select()
+        .from(appRoles)
+        .where(eq(appRoles.userId, authorization.managerUserId))
+        .limit(1)
+        .for("update");
+      const caller = callerRows[0];
+      if (
+        !caller ||
+        !caller.isActive ||
+        (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager")
+      ) {
+        throw new Error("LOCATION_MANAGER_FORBIDDEN");
+      }
+      if (caller.appRole === "branch_manager") {
+        const branchRows = await tx
+          .select({ id: branches.id })
+          .from(branches)
+          .where(and(
+            eq(branches.managerUserId, authorization.managerUserId),
+            eq(branches.isActive, true),
+            eq(branches.isDeleted, false),
+          ))
+          .limit(2)
+          .for("update");
+        const managedBranch = branchRows.length === 1 ? branchRows[0] : null;
+        if (
+          !managedBranch ||
+          request.branchId !== managedBranch.id ||
+          technician.branchId !== managedBranch.id
+        ) {
+          throw new Error("LOCATION_MANAGER_FORBIDDEN");
+        }
+      }
+    }
+    const arrivedOrCompleted = [
+      "도착",
+      "공사중",
+      "작업진행중",
+      "공사완료",
+      "작업완료",
+    ].includes(request.status) || [
+      "기사도착",
+      "작업진행",
+      "작업완료",
+      "결제완료",
+      "후기요청",
+    ].includes(request.workflowStage);
+    if (arrivedOrCompleted) throw new Error("LOCATION_ALREADY_ARRIVED");
+
+    const activeRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(and(
+        or(
+          eq(locationSessions.requestId, data.requestId),
+          eq(locationSessions.technicianId, data.technicianId),
+        ),
+        eq(locationSessions.status, "이동중"),
+      ))
+      .orderBy(desc(locationSessions.createdAt))
+      .for("update");
+
+    const now = Date.now();
+    let reusable: LocationSession | null = null;
+    for (const row of activeRows) {
+      const expiresAt = row.expiresAt ? new Date(row.expiresAt).getTime() : 0;
+      const isExpired = Boolean(expiresAt && expiresAt <= now);
+      if (
+        !reusable &&
+        !isExpired &&
+        row.requestId === data.requestId &&
+        row.technicianId === data.technicianId
+      ) {
+        reusable = row;
+        continue;
+      }
+      // A 출발 claim 직후 B 출발이 A를 취소하면, A의 네트워크 발송이 끝나며
+      // 이미 취소된 링크가 고객에게 늦게 도착할 수 있다. 아직 lease 안의 claim은
+      // 정확한 token 성공 로그가 생기기 전까지 다른 세션으로 전환하지 않는다.
+      if (!isExpired && row.smsSentAt) {
+        const acceptedRows = await tx
+          .select({ id: notificationLogs.id })
+          .from(notificationLogs)
+          .where(and(
+            eq(notificationLogs.requestId, row.requestId),
+            eq(notificationLogs.messageType, "기사출발"),
+            inArray(notificationLogs.result, ["SUCCESS", "REQUESTED"]),
+            like(notificationLogs.content, locationTrackingLogPattern(row.trackingToken)),
+            gte(notificationLogs.createdAt, row.createdAt),
+          ))
+          .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+          .limit(1);
+        const claimAgeMs = now - new Date(row.smsSentAt).getTime();
+        if (
+          !acceptedRows[0] &&
+          Number.isFinite(claimAgeMs) &&
+          claimAgeMs < LOCATION_SMS_CLAIM_LEASE_MS
+        ) {
+          throw new Error("LOCATION_DELIVERY_PENDING");
+        }
+      }
+      await tx
+        .update(locationSessions)
+        .set({
+          status: isExpired ? "만료" : "업무취소",
+          ...(isExpired ? {} : { cancelledAt: new Date() }),
+        } as Record<string, unknown>)
+        .where(eq(locationSessions.id, row.id));
+    }
+
+    if (reusable) {
+      await tx.update(repairRequests).set({
+        status: "출발",
+        workflowStage: "기사출발",
+      }).where(and(
+        eq(repairRequests.id, data.requestId),
+        eq(repairRequests.technicianId, data.technicianId),
+      ));
+      return { session: reusable, created: false };
+    }
+
+    await tx.insert(locationSessions).values(data);
+    await tx.update(repairRequests).set({
+      status: "출발",
+      workflowStage: "기사출발",
+    }).where(and(
+      eq(repairRequests.id, data.requestId),
+      eq(repairRequests.technicianId, data.technicianId),
+    ));
+    const rows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, data.trackingToken))
+      .limit(1);
+    const session = rows[0];
+    if (!session) throw new Error("LOCATION_SESSION_CREATE_FAILED");
+    return { session, created: true };
+  });
+}
+
 export async function getLocationSessionByToken(token: string): Promise<LocationSession | null> {
   const db = await getDb();
   if (!db) return null;
@@ -1201,6 +2928,100 @@ export async function getLocationSessionByToken(token: string): Promise<Location
     .where(eq(locationSessions.trackingToken, token))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * 고객 capability 링크를 열 때 세션만 믿지 않고 현재 접수 배정과 기사 계정을 다시 확인한다.
+ * 기사가 비활성화/삭제되었거나 접수가 재배정·종료된 경우 이동 세션도 즉시 종료해
+ * 앱의 마지막 stop 요청이 인증 만료로 실패했더라도 위치가 계속 공개되지 않게 한다.
+ */
+export async function getCustomerLocationSessionByToken(
+  token: string,
+): Promise<LocationSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  return db.transaction(async (tx) => {
+    const snapshots = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, token))
+      .limit(1);
+    const snapshot = snapshots[0];
+    if (!snapshot) return null;
+
+    // 다른 위치 mutation과 같은 접수 -> 기사 -> 세션 잠금 순서를 유지한다.
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, snapshot.requestId))
+      .limit(1)
+      .for("update");
+    const technicianRows = await tx
+      .select()
+      .from(technicians)
+      .where(eq(technicians.id, snapshot.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    const roleRows = technician?.userId
+      ? await tx
+          .select({ appRole: appRoles.appRole, isActive: appRoles.isActive })
+          .from(appRoles)
+          .where(eq(appRoles.userId, technician.userId))
+          .limit(1)
+          .for("update")
+      : [];
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) return null;
+    if (session.status !== "이동중") return session;
+
+    const request = requestRows[0];
+    const linkedRole = roleRows[0];
+    const expired = Boolean(
+      session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now(),
+    );
+    const terminalRequest = Boolean(request && (
+      ["도착", "공사중", "작업진행중", "공사완료", "작업완료"].includes(request.status) ||
+      ["기사도착", "작업진행", "작업완료", "결제완료", "후기요청"].includes(request.workflowStage)
+    ));
+    const invalidAssignment = Boolean(
+      !request || request.isDeleted || request.technicianId !== session.technicianId,
+    );
+    const inactiveTechnician = Boolean(
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted ||
+      (technician.userId && (!linkedRole || !linkedRole.isActive || linkedRole.appRole !== "technician")),
+    );
+
+    let endedStatus: LocationSession["status"] | null = null;
+    if (expired) endedStatus = "만료";
+    else if (terminalRequest) endedStatus = "도착완료";
+    else if (invalidAssignment || inactiveTechnician) endedStatus = "업무취소";
+    if (!endedStatus) return session;
+
+    const now = new Date();
+    await tx.update(locationSessions).set({
+      status: endedStatus,
+      ...(endedStatus === "도착완료" ? { arrivedAt: session.arrivedAt ?? now } : {}),
+      ...(endedStatus === "업무취소" ? { cancelledAt: session.cancelledAt ?? now } : {}),
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.id, session.id),
+      eq(locationSessions.status, "이동중"),
+    ));
+    return {
+      ...session,
+      status: endedStatus,
+      ...(endedStatus === "도착완료" ? { arrivedAt: session.arrivedAt ?? now } : {}),
+      ...(endedStatus === "업무취소" ? { cancelledAt: session.cancelledAt ?? now } : {}),
+    };
+  });
 }
 
 export async function getLocationSessionByRequestId(requestId: number): Promise<LocationSession | null> {
@@ -1243,6 +3064,89 @@ export async function updateLocationSessionPosition(
   } as Record<string, unknown>).where(eq(locationSessions.trackingToken, token));
 }
 
+/**
+ * 기사 REST 위치 전송을 세션과 현재 배정이 유지되는 동안에만 반영한다.
+ */
+export async function updateLocationSessionPositionAuthorized(params: {
+  token: string;
+  technicianId: number;
+  lat: string;
+  lng: string;
+}): Promise<"updated" | "not_found" | "forbidden" | "ended"> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const sessionSnapshotRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1);
+    const snapshot = sessionSnapshotRows[0];
+    if (!snapshot) return "not_found";
+    if (snapshot.technicianId !== params.technicianId) return "forbidden";
+
+    const requestRows = await tx
+      .select({
+        technicianId: repairRequests.technicianId,
+        isDeleted: repairRequests.isDeleted,
+      })
+      .from(repairRequests)
+      .where(eq(repairRequests.id, snapshot.requestId))
+      .limit(1)
+      .for("update");
+    const technicianRows = await tx
+      .select({
+        name: technicians.name,
+        isActive: technicians.isActive,
+        isDeleted: technicians.isDeleted,
+      })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) return "not_found";
+    const request = requestRows[0];
+    const technician = technicianRows[0];
+    if (
+      session.requestId !== snapshot.requestId ||
+      session.technicianId !== params.technicianId ||
+      !request ||
+      request.isDeleted ||
+      request.technicianId !== params.technicianId ||
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted
+    ) {
+      await tx.update(locationSessions).set({
+        status: "업무취소",
+        cancelledAt: new Date(),
+      } as Record<string, unknown>).where(and(
+        eq(locationSessions.id, session.id),
+        eq(locationSessions.status, "이동중"),
+      ));
+      return "forbidden";
+    }
+    if (session.status !== "이동중") return "ended";
+
+    await tx.update(locationSessions).set({
+      currentLat: params.lat,
+      currentLng: params.lng,
+      currentUpdatedAt: new Date(),
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.id, session.id),
+      eq(locationSessions.status, "이동중"),
+    ));
+    return "updated";
+  });
+}
+
 export async function stopLocationSession(
   token: string,
   reason: "도착완료" | "업무취소" | "만료"
@@ -1256,6 +3160,179 @@ export async function stopLocationSession(
   await db.update(locationSessions).set(updateData).where(eq(locationSessions.trackingToken, token));
 }
 
+/** 기사 REST 종료 요청의 세션/현재 배정을 한 트랜잭션에서 검증한다. */
+export async function stopLocationSessionAuthorized(params: {
+  token: string;
+  technicianId: number;
+  reason: "도착완료" | "업무취소";
+}): Promise<"stopped" | "not_found" | "forbidden" | "already_ended"> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const sessionSnapshotRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1);
+    const snapshot = sessionSnapshotRows[0];
+    if (!snapshot) return "not_found";
+    if (snapshot.technicianId !== params.technicianId) return "forbidden";
+
+    const requestRows = await tx
+      .select({
+        technicianId: repairRequests.technicianId,
+        isDeleted: repairRequests.isDeleted,
+      })
+      .from(repairRequests)
+      .where(eq(repairRequests.id, snapshot.requestId))
+      .limit(1)
+      .for("update");
+    const technicianRows = await tx
+      .select({
+        isActive: technicians.isActive,
+        isDeleted: technicians.isDeleted,
+      })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) return "not_found";
+    const request = requestRows[0];
+    const technician = technicianRows[0];
+    if (
+      session.requestId !== snapshot.requestId ||
+      session.technicianId !== params.technicianId ||
+      !request ||
+      request.isDeleted ||
+      request.technicianId !== params.technicianId ||
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted
+    ) {
+      await tx.update(locationSessions).set({
+        status: "업무취소",
+        cancelledAt: new Date(),
+      } as Record<string, unknown>).where(and(
+        eq(locationSessions.id, session.id),
+        eq(locationSessions.status, "이동중"),
+      ));
+      return "forbidden";
+    }
+    if (session.status !== "이동중") return "already_ended";
+
+    await assertLocationDepartureDeliverySettledWithTx(tx, session);
+    const now = new Date();
+    await tx.update(locationSessions).set({
+      status: params.reason,
+      ...(params.reason === "도착완료" ? { arrivedAt: now } : { cancelledAt: now }),
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.id, session.id),
+      eq(locationSessions.status, "이동중"),
+    ));
+    return "stopped";
+  });
+}
+
+/** 관리자 종료도 세션과 현재 지사 범위를 같은 트랜잭션 안에서 다시 검증한다. */
+export async function stopLocationSessionByManagerAuthorized(params: {
+  token: string;
+  managerUserId: number;
+  reason: "도착완료" | "업무취소";
+}): Promise<"stopped" | "not_found" | "forbidden" | "already_ended"> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const snapshotRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1);
+    const snapshot = snapshotRows[0];
+    if (!snapshot) return "not_found";
+
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, snapshot.requestId))
+      .limit(1)
+      .for("update");
+    await tx
+      .select({ id: technicians.id })
+      .from(technicians)
+      .where(eq(technicians.id, snapshot.technicianId))
+      .limit(1)
+      .for("update");
+    const callerRows = await tx
+      .select()
+      .from(appRoles)
+      .where(eq(appRoles.userId, params.managerUserId))
+      .limit(1)
+      .for("update");
+    const caller = callerRows[0];
+    let branchIsManaged = true;
+    if (caller?.appRole === "branch_manager") {
+      const branchRows = await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(
+          eq(branches.managerUserId, params.managerUserId),
+          eq(branches.isActive, true),
+          eq(branches.isDeleted, false),
+        ))
+        .limit(2)
+        .for("update");
+      const managedBranch = branchRows.length === 1 ? branchRows[0] : null;
+      branchIsManaged = Boolean(
+        managedBranch &&
+        requestRows[0]?.branchId === managedBranch.id &&
+        snapshot.branchId === managedBranch.id
+      );
+    }
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) return "not_found";
+    const request = requestRows[0];
+    if (
+      session.requestId !== snapshot.requestId ||
+      session.technicianId !== snapshot.technicianId ||
+      !request ||
+      request.isDeleted ||
+      !caller ||
+      !caller.isActive ||
+      (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager") ||
+      (caller.appRole === "branch_manager" && (
+        !branchIsManaged
+      ))
+    ) {
+      return "forbidden";
+    }
+    if (session.status !== "이동중") return "already_ended";
+
+    await assertLocationDepartureDeliverySettledWithTx(tx, session);
+    const now = new Date();
+    await tx.update(locationSessions).set({
+      status: params.reason,
+      ...(params.reason === "도착완료" ? { arrivedAt: now } : { cancelledAt: now }),
+    } as Record<string, unknown>).where(and(
+      eq(locationSessions.id, session.id),
+      eq(locationSessions.status, "이동중"),
+    ));
+    return "stopped";
+  });
+}
+
 export async function markLocationSessionSmsSent(token: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -1263,19 +3340,483 @@ export async function markLocationSessionSmsSent(token: string): Promise<void> {
     .where(eq(locationSessions.trackingToken, token));
 }
 
+/**
+ * 출발 문자 발송권을 세션 행 잠금 안에서 선점한다. 성공이면 smsSentAt을 유지하고,
+ * 실패면 clearLocationSessionSmsClaim으로 비워 다음 출발 재시도가 다시 선점한다.
+ */
+export async function claimLocationSessionSms(params: {
+  token: string;
+  requestId: number;
+  technicianId: number;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: locationSessions.id,
+        requestId: locationSessions.requestId,
+        technicianId: locationSessions.technicianId,
+        status: locationSessions.status,
+        smsSentAt: locationSessions.smsSentAt,
+        createdAt: locationSessions.createdAt,
+      })
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = rows[0];
+    if (
+      !session ||
+      session.status !== "이동중" ||
+      session.requestId !== params.requestId ||
+      session.technicianId !== params.technicianId
+    ) {
+      return false;
+    }
+    if (session.smsSentAt) {
+      const successfulLogs = await tx
+        .select({ id: notificationLogs.id })
+        .from(notificationLogs)
+        .where(and(
+          eq(notificationLogs.requestId, params.requestId),
+          eq(notificationLogs.messageType, "기사출발"),
+          inArray(notificationLogs.result, ["SUCCESS", "REQUESTED"]),
+          like(notificationLogs.content, locationTrackingLogPattern(params.token)),
+          gte(notificationLogs.createdAt, session.createdAt),
+        ))
+        .orderBy(desc(notificationLogs.createdAt))
+        .limit(1);
+      if (successfulLogs[0]) return false;
+
+      // 전송 프로세스가 claim 직후 죽으면 영구 잠금되지 않도록 2분 lease로 재선점한다.
+      const claimAgeMs = Date.now() - new Date(session.smsSentAt).getTime();
+      if (Number.isFinite(claimAgeMs) && claimAgeMs < LOCATION_SMS_CLAIM_LEASE_MS) return false;
+    }
+    await tx
+      .update(locationSessions)
+      .set({ smsSentAt: new Date() } as Record<string, unknown>)
+      .where(eq(locationSessions.id, session.id));
+    return true;
+  });
+}
+
+/** SMS 네트워크 호출 직전에 출발 claim이 아직 현재 배정/활성 세션인지 재검증한다. */
+export async function validateLocationSessionSmsClaim(params: {
+  token: string;
+  requestId: number;
+  technicianId: number;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const requestRows = await tx.select().from(repairRequests)
+      .where(eq(repairRequests.id, params.requestId)).limit(1).for("update");
+    const request = requestRows[0];
+    // getOrCreateActiveLocationSession과 동일한 request -> technician -> session 잠금 순서.
+    const technicianRows = await tx.select().from(technicians)
+      .where(eq(technicians.id, params.technicianId)).limit(1).for("update");
+    const technician = technicianRows[0];
+    const sessionRows = await tx.select().from(locationSessions).where(and(
+      eq(locationSessions.trackingToken, params.token),
+      eq(locationSessions.requestId, params.requestId),
+      eq(locationSessions.technicianId, params.technicianId),
+    )).limit(1).for("update");
+    const session = sessionRows[0];
+    return Boolean(
+      request && !request.isDeleted && request.technicianId === params.technicianId &&
+      !["도착", "공사중", "작업진행중", "공사완료", "작업완료"].includes(request.status) &&
+      session && session.status === "이동중" && session.smsSentAt &&
+      technician && technician.isActive && !technician.isDeleted
+    );
+  });
+}
+
+/** 반환 DTO의 smsSent는 pending marker가 아닌 이 token의 실제 accepted 로그만 사용한다. */
+export async function hasAcceptedLocationSessionSms(params: {
+  token: string;
+  requestId: number;
+  technicianId: number;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const sessions = await db.select({ createdAt: locationSessions.createdAt })
+    .from(locationSessions)
+    .where(and(
+      eq(locationSessions.trackingToken, params.token),
+      eq(locationSessions.requestId, params.requestId),
+      eq(locationSessions.technicianId, params.technicianId),
+    ))
+    .limit(1);
+  const session = sessions[0];
+  if (!session) return false;
+  const acceptedRows = await db.select({ id: notificationLogs.id })
+    .from(notificationLogs)
+    .where(and(
+      eq(notificationLogs.requestId, params.requestId),
+      eq(notificationLogs.messageType, "기사출발"),
+      inArray(notificationLogs.result, ["SUCCESS", "REQUESTED"]),
+      like(notificationLogs.content, locationTrackingLogPattern(params.token)),
+      gte(notificationLogs.createdAt, session.createdAt),
+    ))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id))
+    .limit(1);
+  return Boolean(acceptedRows[0]);
+}
+
+const LOCATION_RESEND_MESSAGE_TYPE = "기사출발재발송";
+const LOCATION_RESEND_COOLDOWN_MS = 5 * 60 * 1000;
+
+/**
+ * 위치 링크 재발송은 현재 배정/기사/관리자 지사 범위를 DB에서 다시 검증하고,
+ * notification_logs에 durable claim을 만든다. 동시 요청은 2분 lease로 합쳐지고
+ * 성공한 재발송(또는 직전 최초 발송) 뒤 5분 동안 추가 비용 발생을 막는다.
+ */
+export async function claimLocationSessionResendSms(params: {
+  token: string;
+  callerUserId: number;
+}): Promise<WorkflowNotificationClaim> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const snapshotRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1);
+    const snapshot = snapshotRows[0];
+    if (!snapshot) throw new Error("LOCATION_SESSION_NOT_FOUND");
+
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, snapshot.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    const technicianRows = await tx
+      .select({
+        id: technicians.id,
+        userId: technicians.userId,
+        name: technicians.name,
+        branchId: technicians.branchId,
+        isActive: technicians.isActive,
+        isDeleted: technicians.isDeleted,
+      })
+      .from(technicians)
+      .where(eq(technicians.id, snapshot.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    const callerRows = await tx
+      .select()
+      .from(appRoles)
+      .where(eq(appRoles.userId, params.callerUserId))
+      .limit(1)
+      .for("update");
+    const caller = callerRows[0];
+    if (
+      !request ||
+      request.isDeleted ||
+      request.technicianId !== snapshot.technicianId ||
+      !technician ||
+      !technician.isActive ||
+      technician.isDeleted
+    ) {
+      throw new Error("LOCATION_ASSIGNMENT_CHANGED");
+    }
+    if (
+      !caller ||
+      !caller.isActive ||
+      !["technician", "branch_manager", "hq_admin"].includes(caller.appRole)
+    ) {
+      throw new Error("LOCATION_MANAGER_FORBIDDEN");
+    }
+    if (caller.appRole === "technician" && technician.userId !== caller.userId) {
+      throw new Error("LOCATION_ASSIGNMENT_CHANGED");
+    }
+    if (caller.appRole === "branch_manager") {
+      const branchRows = await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(
+          eq(branches.managerUserId, caller.userId),
+          eq(branches.isActive, true),
+          eq(branches.isDeleted, false),
+        ))
+        .limit(2)
+        .for("update");
+      const branch = branchRows.length === 1 ? branchRows[0] : null;
+      if (
+        !branch ||
+        request.branchId !== branch.id ||
+        technician.branchId !== branch.id ||
+        snapshot.branchId !== branch.id
+      ) {
+        throw new Error("LOCATION_MANAGER_FORBIDDEN");
+      }
+    }
+
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) throw new Error("LOCATION_SESSION_NOT_FOUND");
+    if (
+      session.requestId !== request.id ||
+      session.technicianId !== technician.id
+    ) {
+      throw new Error("LOCATION_SESSION_MISMATCH");
+    }
+    if (session.status !== "이동중") throw new Error("LOCATION_SESSION_ENDED");
+
+    const logs = await tx
+      .select()
+      .from(notificationLogs)
+      .where(and(
+        eq(notificationLogs.requestId, request.id),
+        gte(notificationLogs.createdAt, session.createdAt),
+        or(
+          and(
+            eq(notificationLogs.messageType, "기사출발"),
+            like(
+              notificationLogs.content,
+              locationTrackingLogPattern(session.trackingToken),
+            ),
+          ),
+          and(
+            eq(notificationLogs.messageType, LOCATION_RESEND_MESSAGE_TYPE),
+            eq(
+              notificationLogs.responsePayload,
+              `LOCATION_RESEND_CLAIM:${session.trackingToken}`,
+            ),
+          ),
+        ),
+      ))
+      .orderBy(desc(notificationLogs.sentAt), desc(notificationLogs.createdAt), desc(notificationLogs.id))
+      .limit(1)
+      .for("update");
+    const latest = logs[0];
+    const latestAt = latest?.sentAt ?? latest?.createdAt;
+    const latestAgeMs = latestAt ? Date.now() - new Date(latestAt).getTime() : Number.POSITIVE_INFINITY;
+    if (
+      latest?.messageType === LOCATION_RESEND_MESSAGE_TYPE &&
+      latest.errorMessage === WORKFLOW_NOTIFICATION_PENDING &&
+      Number.isFinite(latestAgeMs) &&
+      latestAgeMs < WORKFLOW_NOTIFICATION_LEASE_MS
+    ) {
+      return { claimed: false, reason: "pending" };
+    }
+    if (
+      (latest?.result === "SUCCESS" || latest?.result === "REQUESTED") &&
+      Number.isFinite(latestAgeMs) &&
+      latestAgeMs < LOCATION_RESEND_COOLDOWN_MS
+    ) {
+      return { claimed: false, reason: "cooldown" };
+    }
+    if (!latest && session.smsSentAt) {
+      const initialClaimAgeMs = Date.now() - new Date(session.smsSentAt).getTime();
+      if (Number.isFinite(initialClaimAgeMs) && initialClaimAgeMs < WORKFLOW_NOTIFICATION_LEASE_MS) {
+        return { claimed: false, reason: "pending" };
+      }
+    }
+
+    const content = buildTechnicianDepartedMessage(
+      request.customerName,
+      technician.name,
+      `https://퓨처에너지테크.kr/track/${encodeURIComponent(session.trackingToken)}`,
+    );
+    const now = new Date();
+    if (
+      latest?.messageType === LOCATION_RESEND_MESSAGE_TYPE &&
+      latest.result !== "SUCCESS" &&
+      latest.result !== "REQUESTED"
+    ) {
+      const preservedContent = latest.content || content;
+      const preservedPhone = latest.phoneNumber || request.phoneNumber;
+      await tx.update(notificationLogs).set({
+        phoneNumber: preservedPhone,
+        content: preservedContent,
+        result: "SKIPPED",
+        errorMessage: WORKFLOW_NOTIFICATION_PENDING,
+        sentAt: now,
+      }).where(eq(notificationLogs.id, latest.id));
+      return {
+        claimed: true,
+        claimId: latest.id,
+        retried: true,
+        phoneNumber: preservedPhone,
+        messageType: LOCATION_RESEND_MESSAGE_TYPE,
+        content: preservedContent,
+      };
+    }
+
+    const result = await tx.insert(notificationLogs).values({
+      requestId: request.id,
+      phoneNumber: request.phoneNumber,
+      channel: "SMS",
+      messageType: LOCATION_RESEND_MESSAGE_TYPE,
+      content,
+      result: "SKIPPED",
+      errorMessage: WORKFLOW_NOTIFICATION_PENDING,
+      responsePayload: `LOCATION_RESEND_CLAIM:${session.trackingToken}`,
+      sentAt: now,
+    });
+    return {
+      claimed: true,
+      claimId: (result as any)[0].insertId,
+      retried: false,
+      phoneNumber: request.phoneNumber,
+      messageType: LOCATION_RESEND_MESSAGE_TYPE,
+      content,
+    };
+  });
+}
+
+export async function clearLocationSessionSmsClaim(params: {
+  token: string;
+  requestId: number;
+  technicianId: number;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(locationSessions)
+    .set({ smsSentAt: null } as Record<string, unknown>)
+    .where(and(
+      eq(locationSessions.trackingToken, params.token),
+      eq(locationSessions.requestId, params.requestId),
+      eq(locationSessions.technicianId, params.technicianId),
+      eq(locationSessions.status, "이동중"),
+    ));
+}
+
+/**
+ * 토큰·접수·현재 배정을 잠금 안에서 검증하고 최초 도착 전환 여부를 반환한다.
+ * 동시 도착 요청 중 정확히 하나만 firstArrival=true를 받는다.
+ */
+export async function markLocationSessionArrivedAuthorized(params: {
+  token: string;
+  requestId: number;
+  technicianId: number;
+}): Promise<{
+  request: RepairRequest;
+  firstArrival: boolean;
+  notificationClaim: WorkflowNotificationClaim;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const requestRows = await tx
+      .select()
+      .from(repairRequests)
+      .where(eq(repairRequests.id, params.requestId))
+      .limit(1)
+      .for("update");
+    const request = requestRows[0];
+    if (!request || request.isDeleted) throw new Error("LOCATION_REQUEST_NOT_FOUND");
+    if (request.technicianId !== params.technicianId) {
+      throw new Error("LOCATION_ASSIGNMENT_CHANGED");
+    }
+
+    const technicianRows = await tx
+      .select({
+        name: technicians.name,
+        isActive: technicians.isActive,
+        isDeleted: technicians.isDeleted,
+      })
+      .from(technicians)
+      .where(eq(technicians.id, params.technicianId))
+      .limit(1)
+      .for("update");
+    const technician = technicianRows[0];
+    if (!technician || !technician.isActive || technician.isDeleted) {
+      throw new Error("LOCATION_TECHNICIAN_NOT_ACTIVE");
+    }
+
+    const sessionRows = await tx
+      .select()
+      .from(locationSessions)
+      .where(eq(locationSessions.trackingToken, params.token))
+      .limit(1)
+      .for("update");
+    const session = sessionRows[0];
+    if (!session) throw new Error("LOCATION_SESSION_NOT_FOUND");
+    if (
+      session.requestId !== params.requestId ||
+      session.technicianId !== params.technicianId
+    ) {
+      throw new Error("LOCATION_SESSION_MISMATCH");
+    }
+    if (session.status !== "이동중" && session.status !== "도착완료") {
+      throw new Error("LOCATION_SESSION_ENDED");
+    }
+
+    if (session.status === "이동중") {
+      await assertLocationDepartureDeliverySettledWithTx(tx, session);
+    }
+
+    const statusArrived = [
+      "도착",
+      "공사중",
+      "작업진행중",
+      "공사완료",
+      "작업완료",
+    ].includes(request.status);
+    const stageArrived = [
+      "기사도착",
+      "작업진행",
+      "작업완료",
+      "결제완료",
+      "후기요청",
+    ].includes(request.workflowStage);
+    const firstArrival = !statusArrived && !stageArrived;
+
+    if (session.status === "이동중") {
+      await tx.update(locationSessions).set({
+        status: "도착완료",
+        arrivedAt: new Date(),
+      } as Record<string, unknown>).where(and(
+        eq(locationSessions.id, session.id),
+        eq(locationSessions.status, "이동중"),
+      ));
+    }
+    if (firstArrival) {
+      await tx.update(repairRequests).set({
+        status: "도착",
+        workflowStage: "기사도착",
+      }).where(and(
+        eq(repairRequests.id, params.requestId),
+        eq(repairRequests.technicianId, params.technicianId),
+      ));
+    }
+    const notificationClaim = await claimWorkflowNotificationWithTx(tx, {
+      requestId: request.id,
+      phoneNumber: request.phoneNumber,
+      eventKey: JSON.stringify({
+        v: 1,
+        type: "technician_arrived",
+        requestId: request.id,
+        technicianId: params.technicianId,
+      }),
+      messageType: "기사도착",
+      content: buildTechnicianArrivedMessage(request.customerName, technician.name),
+    });
+    return { request, firstArrival, notificationClaim };
+  });
+}
+
 // 만료된 세션 자동 처리 (4시간 초과)
 export async function expireOldLocationSessions(): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const now = new Date();
-  // 이동중 상태이면서 expiresAt이 지난 세션
+  // 시간 만료뿐 아니라 재배정/기사 비활성/접수 종료도 고객 조회 전에 함께 정리한다.
   const expiredRows = await db.select().from(locationSessions)
     .where(eq(locationSessions.status, "이동중"));
   for (const row of expiredRows) {
-    if (row.expiresAt && new Date(row.expiresAt) < now) {
-      await db.update(locationSessions).set({ status: "만료" } as Record<string, unknown>)
-        .where(eq(locationSessions.id, row.id));
-    }
+    await getCustomerLocationSessionByToken(row.trackingToken);
   }
 }
 
@@ -1367,6 +3908,286 @@ export async function updateEstimateById(id: number, data: Record<string, any>):
   const { estimates } = await import("../drizzle/schema.js");
   const { eq } = await import("drizzle-orm");
   await db2.update(estimates).set(data as any).where(eq(estimates.id, id));
+}
+
+const ESTIMATE_SCHEDULE_CONFIRMED_TYPE = "schedule_confirmed_customer";
+const ESTIMATE_SCHEDULE_CHANGED_TYPE = "schedule_changed_customer";
+const ESTIMATE_SCHEDULE_CLAIM_PREFIX = "ESTIMATE_SCHEDULE_CLAIM:";
+const ESTIMATE_SCHEDULE_PENDING = "DELIVERY_CLAIM_PENDING";
+const ESTIMATE_SCHEDULE_LEASE_MS = 2 * 60 * 1000;
+
+export type EstimateScheduleNotificationClaim =
+  | {
+      claimed: true;
+      claimId: number;
+      estimateId: number;
+      phoneNumber: string;
+      content: string;
+      retried: boolean;
+    }
+  | { claimed: false; reason: "pending" | "already_sent" };
+
+export class EstimateScheduleAuthorizationError extends Error {
+  constructor(public readonly reason:
+    | "not_found"
+    | "forbidden"
+    | "invalid_status"
+    | "delivery_pending"
+  ) {
+    super(`ESTIMATE_SCHEDULE_${reason.toUpperCase()}`);
+    this.name = "EstimateScheduleAuthorizationError";
+  }
+}
+
+async function authorizeEstimateManagerWithTx(tx: any, estimate: any, callerUserId: number) {
+  const callerRows = await tx.select().from(appRoles)
+    .where(eq(appRoles.userId, callerUserId)).limit(1).for("update");
+  const caller = callerRows[0];
+  if (
+    !caller || !caller.isActive ||
+    (caller.appRole !== "hq_admin" && caller.appRole !== "branch_manager")
+  ) {
+    throw new EstimateScheduleAuthorizationError("forbidden");
+  }
+  if (caller.appRole === "branch_manager") {
+    const managed = await tx.select({ id: branches.id }).from(branches).where(and(
+      eq(branches.managerUserId, callerUserId),
+      eq(branches.isActive, true),
+      eq(branches.isDeleted, false),
+    )).limit(2).for("update");
+    if (managed.length !== 1 || estimate.branchId !== managed[0].id) {
+      throw new EstimateScheduleAuthorizationError("forbidden");
+    }
+  }
+  return caller;
+}
+
+async function claimEstimateScheduleNotificationWithTx(
+  tx: any,
+  params: {
+    estimateId: number;
+    branchId: number | null;
+    customerName: string;
+    phoneNumber: string;
+    confirmedDate: string;
+    confirmedTime: string | null;
+    senderId: number;
+    noticeKind: "confirmed" | "changed";
+  },
+): Promise<EstimateScheduleNotificationClaim> {
+  const confirmedContent = buildEstimateScheduleConfirmedMessage({
+    customerName: params.customerName,
+    confirmedDate: params.confirmedDate,
+    confirmedTime: params.confirmedTime,
+  });
+  const changedContent = buildScheduleConfirmedMessage(
+    params.customerName,
+    params.confirmedDate,
+    params.confirmedTime ?? "",
+    true,
+  );
+  const buildFingerprint = (noticeKind: "confirmed" | "changed", content: string) =>
+    `${ESTIMATE_SCHEDULE_CLAIM_PREFIX}${JSON.stringify({
+      v: 1,
+      estimateId: params.estimateId,
+      phoneNumber: params.phoneNumber,
+      confirmedDate: params.confirmedDate,
+      confirmedTime: params.confirmedTime,
+      noticeKind,
+      content,
+    })}`;
+  const confirmedFingerprint = buildFingerprint("confirmed", confirmedContent);
+  const changedFingerprint = buildFingerprint("changed", changedContent);
+  const rows = await tx.select().from(estimateMessageLogs).where(and(
+    eq(estimateMessageLogs.estimateId, params.estimateId),
+    inArray(estimateMessageLogs.messageType, [
+      ESTIMATE_SCHEDULE_CONFIRMED_TYPE,
+      ESTIMATE_SCHEDULE_CHANGED_TYPE,
+    ]),
+  )).orderBy(desc(estimateMessageLogs.sentAt), desc(estimateMessageLogs.id))
+    .limit(20).for("update");
+  const now = new Date();
+  const latest = rows[0];
+  const latestKind = latest?.linkUrl === confirmedFingerprint
+    ? "confirmed"
+    : latest?.linkUrl === changedFingerprint
+      ? "changed"
+      : null;
+  // 동일 목표 재호출은 최초/변경 당시의 정확한 종류와 본문을 보존한다.
+  const noticeKind = latestKind ?? params.noticeKind;
+  const content = noticeKind === "changed" ? changedContent : confirmedContent;
+  const messageType = noticeKind === "changed"
+    ? ESTIMATE_SCHEDULE_CHANGED_TYPE
+    : ESTIMATE_SCHEDULE_CONFIRMED_TYPE;
+  const fingerprint = noticeKind === "changed" ? changedFingerprint : confirmedFingerprint;
+  const latestIsExactTarget = Boolean(
+    latest &&
+    latest.linkUrl === fingerprint &&
+    latest.customerPhone === params.phoneNumber &&
+    latest.messageType === messageType &&
+    latest.messageBody === content
+  );
+
+  // 앞선 날짜의 발송자가 transaction 밖에서 전송 중이면 새 날짜를 먼저
+  // 커밋하지 않는다. sendNotification timeout(10초)보다 긴 lease가 끝난 뒤에만 회수한다.
+  if (
+    latest && !latestIsExactTarget &&
+    latest.senderRole === ESTIMATE_SCHEDULE_PENDING
+  ) {
+    const leaseAgeMs = Date.now() - new Date(latest.sentAt).getTime();
+    if (Number.isFinite(leaseAgeMs) && leaseAgeMs < ESTIMATE_SCHEDULE_LEASE_MS) {
+      throw new EstimateScheduleAuthorizationError("delivery_pending");
+    }
+    await tx.update(estimateMessageLogs).set({
+      sendStatus: "FAILED",
+      senderRole: "DELIVERY_LEASE_EXPIRED",
+    }).where(eq(estimateMessageLogs.id, latest.id));
+  }
+
+  // 과거 A 성공이 있어도 latest target이 B라면 B→A는 새 변경 이벤트다.
+  // 오직 최신 target fingerprint와 수신번호/본문이 모두 같은 경우만 재사용한다.
+  const exact = latestIsExactTarget ? latest : null;
+  if (exact && (exact.sendStatus === "SUCCESS" || exact.sendStatus === "REQUESTED")) {
+    return { claimed: false, reason: "already_sent" };
+  }
+  if (exact?.senderRole === ESTIMATE_SCHEDULE_PENDING) {
+    const leaseAgeMs = Date.now() - new Date(exact.sentAt).getTime();
+    if (Number.isFinite(leaseAgeMs) && leaseAgeMs < ESTIMATE_SCHEDULE_LEASE_MS) {
+      return { claimed: false, reason: "pending" };
+    }
+  }
+  if (exact) {
+    await tx.update(estimateMessageLogs).set({
+      sendStatus: "SKIPPED",
+      senderRole: ESTIMATE_SCHEDULE_PENDING,
+      senderId: params.senderId,
+      sentAt: now,
+    }).where(eq(estimateMessageLogs.id, exact.id));
+    return {
+      claimed: true,
+      claimId: exact.id,
+      estimateId: params.estimateId,
+      phoneNumber: params.phoneNumber,
+      content,
+      retried: true,
+    };
+  }
+
+  const inserted = await tx.insert(estimateMessageLogs).values({
+    estimateId: params.estimateId,
+    customerName: params.customerName,
+    customerPhone: params.phoneNumber,
+    branchId: params.branchId,
+    senderRole: ESTIMATE_SCHEDULE_PENDING,
+    senderId: params.senderId,
+    messageType,
+    messageBody: content,
+    linkUrl: fingerprint,
+    sendStatus: "SKIPPED",
+    sentAt: now,
+  });
+  return {
+    claimed: true,
+    claimId: (inserted as any)[0].insertId,
+    estimateId: params.estimateId,
+    phoneNumber: params.phoneNumber,
+    content,
+    retried: false,
+  };
+}
+
+export async function confirmEstimateScheduleAuthorizedAndClaim(params: {
+  estimateId: number;
+  callerUserId: number;
+  confirmedDate: string;
+  confirmedTime?: string | null;
+}): Promise<{
+  estimateId: number;
+  confirmedDate: string;
+  confirmedTime: string | null;
+  notificationClaim: EstimateScheduleNotificationClaim;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(estimates)
+      .where(eq(estimates.id, params.estimateId)).limit(1).for("update");
+    const estimate = rows[0];
+    if (!estimate) throw new EstimateScheduleAuthorizationError("not_found");
+    await authorizeEstimateManagerWithTx(tx, estimate, params.callerUserId);
+    if (!["schedule_requested", "schedule_confirmed", "converted"].includes(estimate.status)) {
+      throw new EstimateScheduleAuthorizationError("invalid_status");
+    }
+    const confirmedDate = params.confirmedDate.trim();
+    const confirmedTime = params.confirmedTime?.trim() || null;
+    const noticeKind = estimate.status === "schedule_confirmed" && (
+      (estimate.visitDate?.trim() || null) !== confirmedDate ||
+      (estimate.visitTime?.trim() || null) !== confirmedTime
+    ) ? "changed" : "confirmed";
+    if (estimate.status === "converted" && (
+      estimate.visitDate !== confirmedDate || (estimate.visitTime?.trim() || null) !== confirmedTime
+    )) {
+      throw new EstimateScheduleAuthorizationError("invalid_status");
+    }
+    const notificationClaim = await claimEstimateScheduleNotificationWithTx(tx, {
+      estimateId: estimate.id,
+      branchId: estimate.branchId ?? null,
+      customerName: estimate.customerName ?? "고객",
+      phoneNumber: estimate.customerPhone ?? "",
+      confirmedDate,
+      confirmedTime,
+      senderId: params.callerUserId,
+      noticeKind,
+    });
+    await tx.update(estimates).set({
+      ...(estimate.status === "converted" ? {} : { status: "schedule_confirmed" as const }),
+      visitDate: confirmedDate,
+      visitTime: confirmedTime,
+    }).where(eq(estimates.id, estimate.id));
+    return { estimateId: estimate.id, confirmedDate, confirmedTime, notificationClaim };
+  });
+}
+
+export async function claimConfirmedEstimateScheduleNotification(params: {
+  estimateId: number;
+  callerUserId: number;
+}): Promise<EstimateScheduleNotificationClaim | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(estimates)
+      .where(eq(estimates.id, params.estimateId)).limit(1).for("update");
+    const estimate = rows[0];
+    if (!estimate) throw new EstimateScheduleAuthorizationError("not_found");
+    await authorizeEstimateManagerWithTx(tx, estimate, params.callerUserId);
+    const confirmedDate = estimate.visitDate?.trim() || "";
+    if (!confirmedDate || !["schedule_confirmed", "converted"].includes(estimate.status)) return null;
+    return claimEstimateScheduleNotificationWithTx(tx, {
+      estimateId: estimate.id,
+      branchId: estimate.branchId ?? null,
+      customerName: estimate.customerName ?? "고객",
+      phoneNumber: estimate.customerPhone ?? "",
+      confirmedDate,
+      confirmedTime: estimate.visitTime?.trim() || null,
+      senderId: params.callerUserId,
+      noticeKind: "confirmed",
+    });
+  });
+}
+
+export async function completeEstimateScheduleNotificationClaim(params: {
+  claimId: number;
+  result: "SUCCESS" | "FAILED" | "SKIPPED" | "REQUESTED";
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(estimateMessageLogs).set({
+    sendStatus: params.result,
+    senderRole: params.result === "SUCCESS" || params.result === "REQUESTED"
+      ? "DELIVERY_ACCEPTED"
+      : "DELIVERY_FAILED",
+    sentAt: new Date(),
+  }).where(eq(estimateMessageLogs.id, params.claimId));
 }
 
 // 고객 열람 표시 (pending -> viewed)
