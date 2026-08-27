@@ -33,6 +33,34 @@ import {
 } from "@/lib/location-tracking";
 
 const INTERVAL_MS = 10_000; // 10초
+const TRACKING_SESSION_KEY = "location_tracking_session_v1";
+
+type PersistedTrackingSession = {
+  token: string;
+  requestId: number;
+  trackingUrl: string | null;
+};
+
+function parsePersistedSession(raw: string | null): PersistedTrackingSession | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<PersistedTrackingSession>;
+    if (
+      typeof value.token !== "string" || !value.token ||
+      !Number.isInteger(value.requestId) || (value.requestId ?? 0) <= 0 ||
+      (value.trackingUrl !== null && value.trackingUrl !== undefined && typeof value.trackingUrl !== "string")
+    ) {
+      return null;
+    }
+    return {
+      token: value.token,
+      requestId: value.requestId!,
+      trackingUrl: value.trackingUrl ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ─── 컨텍스트 타입 ─────────────────────────────────────────────────────────
 export interface LocationTrackingContextValue {
@@ -159,10 +187,19 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     (async () => {
       try {
         const active = await isTrackingActive();
-        const token = await getActiveTrackingToken();
+        const [legacyToken, persistedRaw] = await Promise.all([
+          getActiveTrackingToken(),
+          AsyncStorage.getItem(TRACKING_SESSION_KEY),
+        ]);
+        const persisted = parsePersistedSession(persistedRaw);
+        const token = legacyToken ?? persisted?.token ?? null;
         if (!cancelled && active && token) {
           setIsTracking(true);
           setTrackingToken(token);
+          if (persisted?.token === token) {
+            setTrackingRequestId(persisted.requestId);
+            setTrackingUrl(persisted.trackingUrl);
+          }
           startFgInterval(token);
           await checkPermissions();
         }
@@ -182,6 +219,17 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
           await startLocationTracking(token);
         } catch (e) {
           console.warn("[LocationTrackingContext] Foreground Service 시작 실패 (포그라운드 폴백):", e);
+        }
+
+        try {
+          const session: PersistedTrackingSession = {
+            token,
+            requestId,
+            trackingUrl: url ?? null,
+          };
+          await AsyncStorage.setItem(TRACKING_SESSION_KEY, JSON.stringify(session));
+        } catch (e) {
+          console.warn("[LocationTrackingContext] 위치 세션 저장 실패:", e);
         }
 
         // 포그라운드 인터벌 시작 (화면 켜진 상태 백업)
@@ -219,6 +267,9 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
           await stopLocationTracking();
         } catch {}
       }
+      try {
+        await AsyncStorage.removeItem(TRACKING_SESSION_KEY);
+      } catch {}
       stopFgInterval();
       setIsTracking(false);
       setTrackingToken(null);

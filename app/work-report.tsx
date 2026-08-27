@@ -4,13 +4,14 @@
  * - 사용 자재 입력
  * - 작업 전/후 사진 촬영
  * - 작업 메모
+ * - 결제 방법 및 금액 기록
  * - 재방문 필요 여부
  * - 작업 완료 보고
  */
 import React, { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Platform, Image,
+  TextInput, Alert, ActivityIndicator, Platform, Image, KeyboardAvoidingView,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -40,6 +41,8 @@ const CHECK_ITEMS = [
   "전기 배선 안전 확인",
 ];
 
+const PAYMENT_METHODS = ["현금", "카드", "계좌이체", "미수·후불", "기타"];
+
 function WorkReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const requestId = parseInt(id ?? "0");
@@ -53,6 +56,8 @@ function WorkReportScreen() {
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [usedMaterials, setUsedMaterials] = useState("");
   const [workMemo, setWorkMemo] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [needsRevisit, setNeedsRevisit] = useState(false);
   const [revisitReason, setRevisitReason] = useState("");
 
@@ -84,6 +89,12 @@ function WorkReportScreen() {
       }
       if (existingReport.usedMaterials) setUsedMaterials(existingReport.usedMaterials);
       if (existingReport.workMemo) setWorkMemo(existingReport.workMemo);
+      const reportPaymentMethod = (existingReport as any).paymentMethod;
+      const reportPaymentAmount = (existingReport as any).paymentAmount;
+      if (reportPaymentMethod) setPaymentMethod(String(reportPaymentMethod));
+      if (reportPaymentAmount !== null && reportPaymentAmount !== undefined) {
+        setPaymentAmount(String(reportPaymentAmount));
+      }
       if (existingReport.beforePhotoUrl) {
         setBeforePhotoUrl(existingReport.beforePhotoUrl);
         setBeforePhotoUri(existingReport.beforePhotoUrl);
@@ -278,20 +289,37 @@ function WorkReportScreen() {
     });
   };
 
+  const normalizedPaymentAmount = () => {
+    const value = paymentAmount.trim();
+    if (!value) return undefined;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 9_999_999_999.99) {
+      Alert.alert("결제 금액 확인", "결제 금액을 올바르게 입력해 주세요.");
+      return null;
+    }
+    return amount;
+  };
+
   const handleSave = () => {
     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }
+    const amount = normalizedPaymentAmount();
+    if (amount === null) return;
     saveMutation.mutate({
       requestId,
       technicianId,
       checkItems: JSON.stringify(Array.from(checkedItems)),
       usedMaterials: usedMaterials || undefined,
       workMemo: workMemo || undefined,
+      paymentMethod: paymentMethod || null,
+      paymentAmount: amount ?? null,
       isCompleted: false,
     });
   };
 
   const handleComplete = () => {
     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }
+    const amount = normalizedPaymentAmount();
+    if (amount === null) return;
     Alert.alert(
       "작업 완료 보고",
       "작업을 완료로 보고하시겠습니까? 완료 후에는 수정이 어렵습니다.",
@@ -309,6 +337,8 @@ function WorkReportScreen() {
               checkItems: JSON.stringify(Array.from(checkedItems)),
               usedMaterials: usedMaterials || undefined,
               workMemo: workMemo || undefined,
+              paymentMethod: paymentMethod || null,
+              paymentAmount: amount ?? null,
               isCompleted: !needsRevisit,
             });
           }
@@ -335,7 +365,10 @@ function WorkReportScreen() {
     );
   }
 
-  const isCompleted = request.status === "작업완료";
+  const isCompleted =
+    request.status === "작업완료" ||
+    request.status === "공사완료" ||
+    Boolean(existingReport?.isCompleted);
 
   return (
     <ScreenContainer>
@@ -346,14 +379,22 @@ function WorkReportScreen() {
         <Text style={s.headerTitle}>현장 점검표</Text>
         <TouchableOpacity
           style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}
-          onPress={() => router.push(`/tech-estimate?requestId=${request.id}&customerName=${encodeURIComponent(request.customerName)}&customerPhone=${encodeURIComponent(request.phoneNumber)}` as any)}
+          onPress={() => router.replace(`/job-workspace?requestId=${request.id}` as any)}
           activeOpacity={0.8}
         >
-          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>현장견적</Text>
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>업무메뉴</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll}>
+      <KeyboardAvoidingView
+        style={s.keyboardAvoidingView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+      >
         {/* 고객 정보 */}
         <View style={[s.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[s.infoTitle, { color: colors.foreground }]}>{request.customerName}</Text>
@@ -501,6 +542,45 @@ function WorkReportScreen() {
           />
         </View>
 
+        {/* 결제 정보 */}
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.foreground }]}>💳 결제 방법</Text>
+          <Text style={[s.sectionSub, { color: colors.muted }]}>현장에서 확인한 결제 방법을 선택하세요.</Text>
+          <View style={s.paymentMethodRow}>
+            {PAYMENT_METHODS.map((method) => {
+              const isSelected = paymentMethod === method;
+              return (
+                <TouchableOpacity
+                  key={method}
+                  style={[
+                    s.paymentMethodChip,
+                    {
+                      backgroundColor: isSelected ? "#FFF1EB" : colors.surface,
+                      borderColor: isSelected ? "#FF6B35" : colors.border,
+                    },
+                  ]}
+                  onPress={() => !isCompleted && setPaymentMethod(isSelected ? "" : method)}
+                  activeOpacity={isCompleted ? 1 : 0.7}
+                >
+                  <Text style={{ color: isSelected ? "#FF6B35" : colors.foreground, fontWeight: isSelected ? "700" : "500" }}>
+                    {method}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TextInput
+            style={[s.paymentAmountInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+            value={paymentAmount}
+            onChangeText={(value) => setPaymentAmount(value.replace(/[^0-9]/g, ""))}
+            placeholder="결제 금액 (선택)"
+            placeholderTextColor={colors.muted}
+            keyboardType="number-pad"
+            returnKeyType="done"
+            editable={!isCompleted}
+          />
+        </View>
+
         {/* 재방문 필요 여부 */}
         {!isCompleted && (
           <View style={s.section}>
@@ -560,6 +640,7 @@ function WorkReportScreen() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
@@ -569,6 +650,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   backBtn: { padding: 4 },
   backBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  keyboardAvoidingView: { flex: 1 },
   scroll: { padding: 16, gap: 16, paddingBottom: 32 },
   infoCard: { borderRadius: 14, padding: 14, borderWidth: 1, gap: 4 },
   infoTitle: { fontSize: 18, fontWeight: "700" },
@@ -582,6 +664,9 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   checkmark: { color: "#fff", fontSize: 13, fontWeight: "800" },
   checkItemText: { fontSize: 14, flex: 1 },
   textArea: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, minHeight: 80 },
+  paymentMethodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  paymentMethodChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
+  paymentAmountInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14 },
   revisitToggle: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 10, padding: 12, borderWidth: 1 },
   completedBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, padding: 16, borderWidth: 1 },
   btnRow: { flexDirection: "row", gap: 10 },
