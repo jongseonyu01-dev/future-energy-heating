@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Linking, Platform, ActivityIndicator, Alert, RefreshControl,
@@ -23,11 +23,24 @@ const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280",
   "기사배정대기": "#F59E0B",
   "방문예정": "#3B82F6",
+  "출발": "#F97316",
+  "도착": "#0F766E",
+  "공사중": "#FF6B35",
   "작업진행중": "#FF6B35",
   "견적승인대기": "#8B5CF6",
+  "공사완료": "#22C55E",
   "작업완료": "#22C55E",
   "재방문필요": "#EF4444",
 };
+
+const WORKSPACE_STATUSES = new Set([
+  "기사도착", "도착", "작업진행중", "공사중", "작업완료", "공사완료", "결제완료", "후기요청", "재방문필요",
+]);
+
+const canOpenWorkspace = (work: any) =>
+  Boolean(work?.arrivedAt) ||
+  WORKSPACE_STATUSES.has(work?.status) ||
+  WORKSPACE_STATUSES.has(work?.workflowStage);
 
 export default function TechScheduleScreen() {
   const colors = useColors();
@@ -54,6 +67,8 @@ export default function TechScheduleScreen() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
+  const [arrivingRequestId, setArrivingRequestId] = useState<number | null>(null);
+  const arrivingRequestIdRef = useRef<number | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">(
     (params.tab as any) || "today"
@@ -101,6 +116,7 @@ export default function TechScheduleScreen() {
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
+  const markArrivedMutation = trpc.location.markArrived.useMutation();
   const saveConsentMutation = trpc.location.saveConsent.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
@@ -197,25 +213,52 @@ export default function TechScheduleScreen() {
 
   // 도착 버튼 처리
   const handleArrive = async (work: any) => {
+    if (arrivingRequestIdRef.current !== null) return;
     if (!trackingToken || trackingRequestId !== work.id) {
       Alert.alert("알림", "이 방문 건의 위치 공유가 시작되지 않았습니다.");
       return;
     }
+    arrivingRequestIdRef.current = work.id;
+    setArrivingRequestId(work.id);
     Alert.alert(
       "도착 확인",
       `${work.customerName} 고객님 댁에 도착하셨나요?`,
       [
-        { text: "취소", style: "cancel" },
+        {
+          text: "취소",
+          style: "cancel",
+          onPress: () => {
+            arrivingRequestIdRef.current = null;
+            setArrivingRequestId(null);
+          },
+        },
         {
           text: "도착 완료",
           onPress: async () => {
-            if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            await stopTracking("도착완료");
-            refetch();
-            Alert.alert("도착 완료", "위치 공유가 종료되었습니다.\n고객용 링크가 만료됩니다.");
+            try {
+              await markArrivedMutation.mutateAsync({
+                requestId: work.id,
+                token: trackingToken,
+              });
+              await stopTracking("도착완료");
+              void refetch();
+              if (Platform.OS !== "web") {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              router.push(`/job-workspace?requestId=${work.id}` as any);
+            } catch (e: any) {
+              Alert.alert(
+                "도착 처리 오류",
+                e?.message || "도착 처리를 완료하지 못했습니다. 위치 공유는 유지됩니다.",
+              );
+            } finally {
+              arrivingRequestIdRef.current = null;
+              setArrivingRequestId(null);
+            }
           },
         },
-      ]
+      ],
+      { cancelable: false },
     );
   };
 
@@ -311,11 +354,14 @@ export default function TechScheduleScreen() {
   // 오더 카드 렌더링 함수
   const renderWorkCard = (work: any) => {
     const isThisTracking = trackingRequestId === work.id && !!trackingToken;
+    const workspaceAvailable = canOpenWorkspace(work);
+    const isArriving = arrivingRequestId === work.id;
+    const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
     return (
       <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
         <View style={s.cardHeader}>
-          <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
-            <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
+          <View style={[s.statusBadge, { backgroundColor: statusColor + "20" }]}>
+            <Text style={[s.statusText, { color: statusColor }]}>{work.status}</Text>
           </View>
           <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
         </View>
@@ -418,30 +464,40 @@ export default function TechScheduleScreen() {
         <View style={s.locationBtns}>
           {!isThisTracking ? (
             <TouchableOpacity
-              style={[s.departBtn, isStartingTracking && s.btnDisabled]}
-              onPress={() => handleDepart(work)}
+              style={[workspaceAvailable ? s.workspaceBtn : s.departBtn, isStartingTracking && s.btnDisabled]}
+              onPress={() => workspaceAvailable
+                ? router.push(`/job-workspace?requestId=${work.id}` as any)
+                : handleDepart(work)}
               activeOpacity={0.8}
               disabled={isStartingTracking}
             >
               {isStartingTracking ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={s.departBtnText}>🚗 고객 집으로 출발</Text>
+                <Text style={s.departBtnText}>
+                  {workspaceAvailable ? "🧰 업무공간 열기" : "🚗 고객 집으로 출발"}
+                </Text>
               )}
             </TouchableOpacity>
           ) : (
             <View style={s.trackingActions}>
               <TouchableOpacity
-                style={s.arriveBtn}
+                style={[s.arriveBtn, isArriving && s.btnDisabled]}
                 onPress={() => handleArrive(work)}
                 activeOpacity={0.8}
+                disabled={isArriving}
               >
-                <Text style={s.arriveBtnText}>✅ 도착</Text>
+                {isArriving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.arriveBtnText}>✅ 도착</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={s.cancelBtn}
+                style={[s.cancelBtn, isArriving && s.btnDisabled]}
                 onPress={() => handleCancel(work)}
                 activeOpacity={0.8}
+                disabled={isArriving}
               >
                 <Text style={s.cancelBtnText}>❌ 업무 취소</Text>
               </TouchableOpacity>
@@ -449,7 +505,7 @@ export default function TechScheduleScreen() {
           )}
         </View>
 
-        {/* 기존 액션 버튼 */}
+        {/* 전화/내비게이션은 기존 동작 유지 */}
         <View style={s.actions}>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: "#3B82F6" }]}
@@ -464,13 +520,6 @@ export default function TechScheduleScreen() {
             activeOpacity={0.8}
           >
             <Text style={s.actionBtnText}>🗺 내비게이션</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.actionBtn, { backgroundColor: "#FF6B35" }]}
-            onPress={() => router.push(`/work-report?id=${work.id}` as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={s.actionBtnText}>📋 점검표</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -717,6 +766,12 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   locationBtns: { marginTop: 10 },
   departBtn: {
     backgroundColor: "#FF6B35",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  workspaceBtn: {
+    backgroundColor: "#0F766E",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",

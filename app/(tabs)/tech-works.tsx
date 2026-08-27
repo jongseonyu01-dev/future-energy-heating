@@ -16,10 +16,20 @@ import { useLocationTracking } from "@/lib/location-tracking-context";
 
 const STATUS_COLOR: Record<string, string> = {
   "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
+  "출발": "#F97316", "도착": "#0F766E", "공사중": "#FF6B35", "공사완료": "#22C55E",
   "작업진행중": "#FF6B35", "견적승인대기": "#8B5CF6", "작업완료": "#22C55E", "재방문필요": "#EF4444",
 };
 
 const FILTER_TABS = ["전체", "방문예정", "작업진행중", "작업완료", "재방문필요"];
+
+const WORKSPACE_STATUSES = new Set([
+  "기사도착", "도착", "작업진행중", "공사중", "작업완료", "공사완료", "결제완료", "후기요청", "재방문필요",
+]);
+
+const canOpenWorkspace = (work: any) =>
+  Boolean(work?.arrivedAt) ||
+  WORKSPACE_STATUSES.has(work?.status) ||
+  WORKSPACE_STATUSES.has(work?.workflowStage);
 
 export default function TechWorksScreen() {
   const colors = useColors();
@@ -148,6 +158,17 @@ export default function TechWorksScreen() {
     await doDepart(work);
   };
 
+  const handleOpenWork = (work: any) => {
+    if (!canOpenWorkspace(work)) {
+      Alert.alert(
+        "도착 완료 후 이용 가능",
+        "작업 일정에서 ‘고객 집으로 출발’을 누른 뒤 현장에 도착하면 ‘도착’을 눌러주세요. 그 다음 점검표와 견적 메뉴가 열립니다.",
+      );
+      return;
+    }
+    router.push(`/job-workspace?requestId=${work.id}` as any);
+  };
+
   const s = styles(colors);
 
   if (!userId) {
@@ -233,16 +254,18 @@ export default function TechWorksScreen() {
           {filtered.map((work) => {
             const isCompleted = ["공사완료", "작업완료"].includes(work.status);
             const isThisTracking = trackingRequestId === work.id;
+            const workspaceAvailable = canOpenWorkspace(work);
+            const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
             return (
             <TouchableOpacity
               key={work.id}
               style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}
-              onPress={() => router.push(`/work-report?id=${work.id}` as any)}
+              onPress={() => handleOpenWork(work)}
               activeOpacity={0.8}
             >
               <View style={s.cardTop}>
-                <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>
-                  <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>
+                <View style={[s.statusBadge, { backgroundColor: statusColor + "20" }]}>
+                  <Text style={[s.statusText, { color: statusColor }]}>{work.status}</Text>
                 </View>
                 <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>
               </View>
@@ -260,7 +283,7 @@ export default function TechWorksScreen() {
                 </Text>
               </View>
 
-              {!isCompleted && (
+              {!isCompleted && !workspaceAvailable && (
                 <TouchableOpacity
                   style={[s.departBtn, (startingTrackingRequestId !== null || isThisTracking) && s.departBtnDisabled]}
                   onPress={(event) => {
@@ -278,6 +301,11 @@ export default function TechWorksScreen() {
                     </Text>
                   )}
                 </TouchableOpacity>
+              )}
+              {workspaceAvailable && (
+                <View style={s.workspaceHint}>
+                  <Text style={s.workspaceHintText}>🧰 눌러서 업무공간 열기</Text>
+                </View>
               )}
             </TouchableOpacity>
           );})}
@@ -348,4 +376,14 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   departBtnDisabled: { backgroundColor: "#9CA3AF" },
   departBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  workspaceHint: {
+    backgroundColor: "#ECFDF5",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  workspaceHintText: { color: "#047857", fontSize: 13, fontWeight: "800" },
 });

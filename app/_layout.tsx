@@ -114,6 +114,9 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="hq-admin" options={{ headerShown: true, title: "본사 관리자" }} />
             <Stack.Screen name="branch-estimates" options={{ headerShown: true, title: "견적서 전송 · 관리" }} />
+            <Stack.Screen name="job-workspace" options={{ headerShown: false }} />
+            <Stack.Screen name="work-report" options={{ headerShown: false }} />
+            <Stack.Screen name="tech-estimate" options={{ headerShown: false }} />
             <Stack.Screen name="login" options={{ presentation: "fullScreenModal" }} />
             <Stack.Screen name="oauth/callback" />
           </Stack>

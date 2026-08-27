@@ -1,10 +1,11 @@
 /**
  * 기사 현장 견적서 작성 화면
  * - 단가표에서 항목 선택 → 수량 입력 → 합계 자동 계산
- * - 고객 정보 입력 후 본사/지사로 견적 보고 (SMS 알림 발송)
+ * - 고객 정보 입력 후 본사/지사로 견적 검토 요청 (고객에게 직접 발송하지 않음)
+ * - 작업별 로컬 임시저장 지원
  * - 보고 후 내 견적 목록 조회 가능
  */
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,7 +17,10 @@ import {
   StyleSheet,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -39,6 +43,15 @@ type EstimateLineItem = {
   unitPrice: number;
   qty: number;
   subtotal: number;
+};
+
+type EstimateDraft = {
+  requestId: number | null;
+  customerName: string;
+  customerPhone: string;
+  memo: string;
+  lineItems: EstimateLineItem[];
+  savedAt: string;
 };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -68,8 +81,18 @@ function fmtDate(d: any): string {
 export default function TechEstimateScreen() {
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ customerName?: string; customerPhone?: string }>();
+  const params = useLocalSearchParams<{
+    customerName?: string;
+    customerPhone?: string;
+    requestId?: string;
+    mode?: "draft" | "send";
+  }>();
   const { user } = useAppAuth();
+
+  const parsedRequestId = Number.parseInt(params.requestId ?? "", 10);
+  const requestId = Number.isFinite(parsedRequestId) && parsedRequestId > 0 ? parsedRequestId : null;
+  const screenMode: "draft" | "send" = params.mode === "draft" ? "draft" : "send";
+  const draftStorageKey = `fe_estimate_draft_${requestId ?? "new"}`;
 
   const [tab, setTab] = useState<"write" | "history">("write");
 
@@ -81,6 +104,66 @@ export default function TechEstimateScreen() {
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("전체");
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(true);
+
+  const { data: linkedRequest, isLoading: linkedRequestLoading } = trpc.repair.getById.useQuery(
+    { id: requestId ?? 0 },
+    { enabled: requestId !== null },
+  );
+
+  // 작업별 임시견적은 서버나 고객에게 보내지 않고 이 기기에만 보관한다.
+  useEffect(() => {
+    let cancelled = false;
+    setDraftLoading(true);
+    setCustomerName(params.customerName ?? "");
+    setCustomerPhone(params.customerPhone ?? "");
+    setMemo("");
+    setLineItems([]);
+
+    const loadDraft = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftStorageKey);
+        if (!raw || cancelled) return;
+
+        const draft = JSON.parse(raw) as Partial<EstimateDraft>;
+        const restoredItems = Array.isArray(draft.lineItems)
+          ? draft.lineItems.filter((item): item is EstimateLineItem => (
+              !!item
+              && Number.isFinite(item.priceItemId)
+              && typeof item.name === "string"
+              && typeof item.category === "string"
+              && Number.isFinite(item.unitPrice) && item.unitPrice >= 0
+              && Number.isInteger(item.qty) && item.qty > 0
+            )).map((item) => ({
+              ...item,
+              subtotal: item.unitPrice * item.qty,
+            }))
+          : [];
+
+        if (requestId === null && typeof draft.customerName === "string") setCustomerName(draft.customerName);
+        if (requestId === null && typeof draft.customerPhone === "string") setCustomerPhone(draft.customerPhone);
+        if (typeof draft.memo === "string") setMemo(draft.memo);
+        setLineItems(restoredItems);
+      } catch {
+        // 손상된 로컬 임시저장은 무시하고 전달받은 고객 정보로 계속 작성한다.
+      } finally {
+        if (!cancelled) setDraftLoading(false);
+      }
+    };
+
+    loadDraft();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftStorageKey, params.customerName, params.customerPhone, requestId]);
+
+  // 접수 연결 견적은 고객 원본정보를 서버 조회값으로 고정해 제목/수신자 불일치를 막는다.
+  useEffect(() => {
+    if (!linkedRequest) return;
+    setCustomerName(linkedRequest.customerName ?? "");
+    setCustomerPhone(linkedRequest.phoneNumber ?? "");
+  }, [linkedRequest]);
 
   // ── 단가표 조회 ──
   const { data: priceItems = [], isLoading: priceLoading } = trpc.prices.listActive.useQuery();
@@ -152,21 +235,50 @@ export default function TechEstimateScreen() {
     setLineItems(lineItems.filter((_, i) => i !== idx));
   };
 
-  // ── 견적 보고 제출 ──
+  // ── 작업별 로컬 임시저장 (서버 전송 없음) ──
+  const saveLocalDraft = async () => {
+    try {
+      setSavingDraft(true);
+      const draft: EstimateDraft = {
+        requestId,
+        customerName: linkedRequest?.customerName ?? customerName,
+        customerPhone: linkedRequest?.phoneNumber ?? customerPhone,
+        memo,
+        lineItems,
+        savedAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      Alert.alert(
+        "임시저장 완료",
+        "견적 초안을 이 기기에만 저장했습니다. 본사·지사나 고객에게는 전송되지 않았습니다.",
+      );
+    } catch {
+      Alert.alert("저장 실패", "견적 초안을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  // ── 본사/지사 검토 요청 (고객 직접 발송 아님) ──
   const handleSubmit = async () => {
-    if (!customerName.trim()) return Alert.alert("입력 오류", "고객 이름을 입력하세요.");
-    const phone = customerPhone.replace(/[^0-9]/g, "");
+    if (requestId !== null && !linkedRequest) {
+      return Alert.alert("접수 정보 확인 중", "접수 원본정보를 불러온 뒤 다시 시도해주세요.");
+    }
+    const canonicalCustomerName = linkedRequest?.customerName ?? customerName;
+    const canonicalCustomerPhone = linkedRequest?.phoneNumber ?? customerPhone;
+    if (!canonicalCustomerName.trim()) return Alert.alert("입력 오류", "고객 이름을 입력하세요.");
+    const phone = canonicalCustomerPhone.replace(/[^0-9]/g, "");
     if (phone.length < 9) return Alert.alert("입력 오류", "올바른 고객 연락처를 입력하세요.");
     if (lineItems.length === 0) return Alert.alert("입력 오류", "견적 항목을 1개 이상 추가하세요.");
     if (!user?.technicianId) return Alert.alert("오류", "기사 계정으로 로그인해주세요.");
 
     Alert.alert(
-      "견적 보고",
-      `총 ${fmtMoney(totalAmount)}원 견적을 본사/지사에 보고하시겠습니까?\n검토 후 고객에게 발송됩니다.`,
+      "본사/지사 검토 요청",
+      `총 ${fmtMoney(totalAmount)}원 견적을 본사/지사에 송출하시겠습니까?\n고객에게 직접 발송되지 않으며, 담당자 검토 후 별도로 발송됩니다.`,
       [
         { text: "취소", style: "cancel" },
         {
-          text: "보고하기",
+          text: "검토 요청",
           onPress: async () => {
             try {
               setSubmitting(true);
@@ -180,24 +292,31 @@ export default function TechEstimateScreen() {
                 })),
               );
               await techRequestMutation.mutateAsync({
-                customerName: customerName.trim(),
+                requestId: requestId ?? undefined,
+                customerName: canonicalCustomerName.trim(),
                 phoneNumber: phone,
-                title: `현장견적 - ${customerName.trim()}`,
+                title: `현장견적 - ${canonicalCustomerName.trim()}`,
                 amount: totalAmount,
                 autoEstimateItems,
                 techRequestNote: memo.trim() || undefined,
               });
+              await AsyncStorage.removeItem(draftStorageKey).catch(() => undefined);
               setSubmitting(false);
               Alert.alert(
-                "✅ 보고 완료",
-                "견적이 본사/지사에 보고되었습니다.\n검토 후 고객에게 발송됩니다.",
+                "✅ 검토 요청 완료",
+                "견적이 본사/지사 검토대기로 송출되었습니다. 고객에게 직접 발송된 것은 아닙니다.",
                 [
                   {
                     text: "확인",
                     onPress: () => {
                       // 폼 초기화
-                      if (!params.customerName) setCustomerName("");
-                      if (!params.customerPhone) setCustomerPhone("");
+                      if (requestId === null) {
+                        setCustomerName("");
+                        setCustomerPhone("");
+                      } else {
+                        setCustomerName(linkedRequest?.customerName ?? "");
+                        setCustomerPhone(linkedRequest?.phoneNumber ?? "");
+                      }
                       setMemo("");
                       setLineItems([]);
                       setTab("history");
@@ -208,7 +327,7 @@ export default function TechEstimateScreen() {
               );
             } catch (e: any) {
               setSubmitting(false);
-              Alert.alert("보고 실패", e?.message || "견적 보고 중 오류가 발생했습니다.");
+              Alert.alert("송출 실패", e?.message || "견적 검토 요청 중 오류가 발생했습니다.");
             }
           },
         },
@@ -236,7 +355,18 @@ export default function TechEstimateScreen() {
 
   return (
     <ScreenContainer edges={["left", "right"]}>
-      <Stack.Screen options={{ headerShown: true, title: "현장 견적서 작성" }} />
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: screenMode === "draft" ? "견적서 만들기" : "견적서 송출하기",
+        }}
+      />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+      >
 
       {/* 탭 */}
       <View style={s.tabRow}>
@@ -256,14 +386,27 @@ export default function TechEstimateScreen() {
       </View>
 
       {tab === "write" ? (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        >
           {/* 안내 배너 */}
           <View style={s.infoBanner}>
             <Text style={s.infoBannerText}>
-              📌 단가표에서 항목을 선택해 견적을 작성하고, 본사/지사에 보고하세요.{"\n"}
-              검토 후 고객에게 견적서 링크가 발송됩니다.
+              {screenMode === "draft"
+                ? "📌 단가표에서 항목을 선택해 초안을 만드세요. 임시저장은 이 기기에만 보관되며 어디에도 전송되지 않습니다."
+                : "📌 저장된 초안을 확인한 뒤 본사/지사에 검토를 요청하세요. 고객에게 직접 발송되지 않습니다."}
             </Text>
           </View>
+
+          {draftLoading && (
+            <View style={s.draftLoadingRow}>
+              <ActivityIndicator size="small" color="#FF6B35" />
+              <Text style={s.draftLoadingText}>저장된 견적 초안을 불러오는 중...</Text>
+            </View>
+          )}
 
           {/* 고객 정보 */}
           <Text style={s.sectionTitle}>고객 정보</Text>
@@ -273,6 +416,7 @@ export default function TechEstimateScreen() {
               style={s.input}
               value={customerName}
               onChangeText={setCustomerName}
+              editable={requestId === null}
               placeholder="예: 홍길동"
               placeholderTextColor={colors.muted}
             />
@@ -281,10 +425,14 @@ export default function TechEstimateScreen() {
               style={s.input}
               value={customerPhone}
               onChangeText={setCustomerPhone}
+              editable={requestId === null}
               placeholder="예: 01012345678"
               keyboardType="phone-pad"
               placeholderTextColor={colors.muted}
             />
+            {requestId !== null && (
+              <Text style={[s.linkedCustomerNote, { color: colors.muted }]}>접수에 등록된 고객 정보로 고정됩니다.</Text>
+            )}
           </View>
 
           {/* 견적 항목 */}
@@ -370,21 +518,47 @@ export default function TechEstimateScreen() {
             />
           </View>
 
-          {/* 제출 버튼 */}
+          {/* 임시저장 / 검토 요청 버튼 */}
+          {screenMode === "send" && (
+            <TouchableOpacity
+              style={[s.localDraftBtn, (savingDraft || submitting || draftLoading || linkedRequestLoading) && { opacity: 0.6 }]}
+              onPress={saveLocalDraft}
+              disabled={savingDraft || submitting || draftLoading || linkedRequestLoading}
+              activeOpacity={0.85}
+            >
+              {savingDraft ? (
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                  <ActivityIndicator color="#FF6B35" size="small" />
+                  <Text style={s.localDraftBtnText}>임시저장 중...</Text>
+                </View>
+              ) : (
+                <Text style={s.localDraftBtnText}>기기에 임시저장</Text>
+              )}
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
-            style={[s.submitBtn, submitting && { opacity: 0.6 }]}
-            onPress={handleSubmit}
-            disabled={submitting}
+            style={[
+              s.submitBtn,
+              screenMode === "send" && { marginTop: 12 },
+              (submitting || savingDraft || draftLoading || linkedRequestLoading) && { opacity: 0.6 },
+            ]}
+            onPress={screenMode === "draft" ? saveLocalDraft : handleSubmit}
+            disabled={submitting || savingDraft || draftLoading || linkedRequestLoading}
             activeOpacity={0.85}
           >
-            {submitting ? (
+            {submitting || (screenMode === "draft" && savingDraft) ? (
               <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                 <ActivityIndicator color="#fff" size="small" />
-                <Text style={s.submitBtnText}>보고 중...</Text>
+                <Text style={s.submitBtnText}>
+                  {screenMode === "draft" ? "임시저장 중..." : "검토 요청 중..."}
+                </Text>
               </View>
             ) : (
               <Text style={s.submitBtnText}>
-                {totalAmount > 0 ? `${fmtMoney(totalAmount)}원 · ` : ""}본사/지사에 견적 보고하기 →
+                {screenMode === "draft"
+                  ? "견적 초안 임시저장"
+                  : `${totalAmount > 0 ? `${fmtMoney(totalAmount)}원 · ` : ""}본사/지사에 송출 요청하기 →`}
               </Text>
             )}
           </TouchableOpacity>
@@ -461,6 +635,7 @@ export default function TechEstimateScreen() {
           )}
         </View>
       )}
+      </KeyboardAvoidingView>
 
       {/* 단가표 선택 모달 */}
       <Modal visible={showPriceModal} animationType="slide" presentationStyle="pageSheet">
@@ -565,6 +740,17 @@ function styles(colors: any) {
       borderLeftColor: "#FF6B35",
     },
     infoBannerText: { fontSize: 12, color: "#92400E", lineHeight: 18 },
+    draftLoadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 14,
+      borderRadius: 10,
+      backgroundColor: "#FFF7ED",
+    },
+    draftLoadingText: { fontSize: 12, color: "#9A3412", fontWeight: "600" },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: colors.foreground, marginBottom: 8 },
     card: {
       backgroundColor: colors.surface,
@@ -574,6 +760,7 @@ function styles(colors: any) {
       borderColor: colors.border,
     },
     fieldLabel: { fontSize: 13, color: colors.muted, marginBottom: 6, fontWeight: "600" },
+    linkedCustomerNote: { fontSize: 11, marginTop: 8 },
     input: {
       backgroundColor: colors.background,
       borderWidth: 1,
@@ -650,6 +837,16 @@ function styles(colors: any) {
       marginTop: 24,
     },
     submitBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+    localDraftBtn: {
+      borderWidth: 1.5,
+      borderColor: "#FF6B35",
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 15,
+      alignItems: "center",
+      marginTop: 24,
+    },
+    localDraftBtnText: { color: "#FF6B35", fontWeight: "800", fontSize: 15 },
     center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 40 },
     histCard: {
       backgroundColor: colors.surface,
