@@ -1,0 +1,110 @@
+name: EAS iOS Local TestFlight Fallback
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/eas-build-ios-local-fallback.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-local-testflight-fallback
+  cancel-in-progress: false
+
+jobs:
+  build-submit:
+    name: Build iOS locally and submit to TestFlight
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 180
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Xcode 26 선택
+        shell: bash
+        run: |
+          set -euo pipefail
+          selected=""
+          for candidate in \
+            /Applications/Xcode_26.3.app/Contents/Developer \
+            /Applications/Xcode_26.2.app/Contents/Developer \
+            /Applications/Xcode_26.1.1.app/Contents/Developer \
+            /Applications/Xcode_26.0.1.app/Contents/Developer; do
+            if [[ -d "$candidate" ]]; then
+              selected="$candidate"
+              break
+            fi
+          done
+          test -n "$selected"
+          echo "DEVELOPER_DIR=$selected" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$selected" xcodebuild -version | grep -E '^Xcode 26\.'
+
+      - name: Node.js 22 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.12.0"
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: EAS CLI 설치
+        run: npm install -g eas-cli@22.6.0
+
+      - name: Expo 인증 확인
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: test -n "${EXPO_TOKEN:-}"
+
+      - name: 앱 버전 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx expo config --json > "$RUNNER_TEMP/expo-config.json"
+          test "$(jq -r '.version' "$RUNNER_TEMP/expo-config.json")" = "1.1.20"
+          test "$(jq -r '.ios.buildNumber' "$RUNNER_TEMP/expo-config.json")" = "20"
+          test "$(jq -r '.ios.bundleIdentifier' "$RUNNER_TEMP/expo-config.json")" = "com.futureenergy.heatingcare"
+
+      - name: 기존 Apple 서명으로 로컬 IPA 빌드
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build \
+            --platform ios \
+            --profile testflight \
+            --local \
+            --non-interactive \
+            --freeze-credentials \
+            --output "$RUNNER_TEMP/future-energy-heating.ipa"
+          test -s "$RUNNER_TEMP/future-energy-heating.ipa"
+
+      - name: TestFlight 제출
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas submit \
+            --platform ios \
+            --profile testflight \
+            --path "$RUNNER_TEMP/future-energy-heating.ipa" \
+            --non-interactive \
+            --wait
+
+      - name: 임시 IPA 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/future-energy-heating.ipa"
