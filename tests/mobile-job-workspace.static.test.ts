@@ -17,6 +17,28 @@ describe("technician arrival workspace flow", () => {
     expect(schedule).toContain("/job-workspace?requestId=");
   });
 
+  it("isolates departure loading by request and blocks rapid or overlapping departures", () => {
+    const schedule = source("app/(tabs)/tech-schedule.tsx");
+    const works = source("app/(tabs)/tech-works.tsx");
+
+    for (const screen of [schedule, works]) {
+      expect(screen).toContain("startingTrackingRequestIdRef");
+      expect(screen).toContain("startingTrackingRequestIdRef.current !== null");
+      expect(screen).toContain("startingTrackingRequestIdRef.current = work.id");
+      expect(screen).toContain("trackingRequestId !== null && trackingRequestId !== work.id");
+      expect(screen).toContain("현재 이동 중인 방문을 먼저 도착 또는 취소 처리해 주세요.");
+      expect(screen).toContain("friendlyDepartError(e)");
+      expect(screen).toContain("requestId: work.id");
+    }
+
+    expect(schedule).not.toContain("isStartingTracking");
+    expect(schedule).toContain("const isStartingThis = startingTrackingRequestId === work.id");
+    expect(schedule).toContain("isStartingThis && s.btnDisabled");
+    expect(schedule).toContain("{isStartingThis ? (");
+    expect(works).toContain("startingTrackingRequestId === work.id || isThisTracking");
+    expect(works).toContain("{startingTrackingRequestId === work.id ? (");
+  });
+
   it("restores the complete tracking session after an iPhone app restart", () => {
     const tracking = source("lib/location-tracking-context.tsx");
 
@@ -83,8 +105,8 @@ describe("technician arrival workspace flow", () => {
   it("ships distinct iOS and Android build numbers for the new workflow", () => {
     const config = source("app.config.ts");
 
-    expect(config).toContain('version: "1.1.19"');
-    expect(config).toContain('buildNumber: "19"');
-    expect(config).toContain("versionCode: 30");
+    expect(config).toContain('version: "1.1.20"');
+    expect(config).toContain('buildNumber: "20"');
+    expect(config).toContain("versionCode: 31");
   });
 });
