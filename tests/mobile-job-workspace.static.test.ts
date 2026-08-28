@@ -33,10 +33,25 @@ describe("technician arrival workspace flow", () => {
 
     expect(schedule).not.toContain("isStartingTracking");
     expect(schedule).toContain("const isStartingThis = startingTrackingRequestId === work.id");
-    expect(schedule).toContain("isStartingThis && s.btnDisabled");
+    expect(schedule).toContain("(isStartingThis || needsLocationRecovery) && s.btnDisabled");
     expect(schedule).toContain("{isStartingThis ? (");
     expect(works).toContain("startingTrackingRequestId === work.id || isThisTracking");
     expect(works).toContain("{startingTrackingRequestId === work.id ? (");
+  });
+
+  it("treats a server departure as complete when only local tracking startup fails", () => {
+    const schedule = source("app/(tabs)/tech-schedule.tsx");
+
+    expect(schedule).toContain("if (!trackResult.ok)");
+    expect(schedule).toContain("departedWithoutLocalTrackingRequestIdRef.current = work.id");
+    expect(schedule).toContain("departedWithoutLocalTrackingRequestIdRef.current !== null");
+    expect(schedule).toContain("출발 완료 · 위치 확인 필요");
+    expect(schedule).toContain("출발 버튼을 다시 누르지 마세요");
+    expect(schedule).toContain("앱을 완전히 종료했다가 다시 실행하고 위치 권한을 확인해 주세요");
+    expect(schedule).toContain("needsLocationRecovery");
+    expect(schedule).toContain("startingTrackingRequestId !== null || departedWithoutLocalTrackingRequestId !== null");
+    expect(schedule).toContain("disabled={isDepartBusy}");
+    expect(schedule).not.toContain("throw new Error(trackResult.error");
   });
 
   it("restores the complete tracking session after an iPhone app restart", () => {
