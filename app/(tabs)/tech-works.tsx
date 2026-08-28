@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, RefreshControl, Platform, Alert, Linking,
@@ -31,6 +31,25 @@ const canOpenWorkspace = (work: any) =>
   WORKSPACE_STATUSES.has(work?.status) ||
   WORKSPACE_STATUSES.has(work?.workflowStage);
 
+const friendlyDepartError = (error: unknown) => {
+  const raw = error instanceof Error ? error.message : "";
+  const knownMessages = [
+    "고객이 견적을 아직 승인하지 않았습니다. 견적 승인 후 출발 처리할 수 있습니다.",
+    "접수 배정 정보가 변경되었습니다.",
+    "본인에게 배정된 접수만 출발 처리할 수 있습니다.",
+    "현재 진행 중인 방문을 먼저 도착 또는 취소 처리해 주세요.",
+    "이미 도착 또는 완료 처리된 방문입니다. 일정을 새로고침해 주세요.",
+    "다른 방문 건의 위치 공유가 진행 중입니다. 먼저 도착 또는 업무 취소 처리해 주세요.",
+    "위치 공유 세션을 시작하지 못했습니다.",
+    "위치 전송을 시작하지 못했습니다.",
+  ];
+  return knownMessages.find((message) => raw.includes(message))
+    ?? "출발 처리를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요. 계속되면 본사에 문의해 주세요.";
+};
+
+const LOCAL_TRACKING_RECOVERY_MESSAGE =
+  "서버의 출발 처리는 완료됐지만 이 휴대폰의 위치 전송이 시작되지 않았습니다. 출발 버튼을 다시 누르지 마세요. 앱을 완전히 종료했다가 다시 실행하고 위치 권한을 확인해 주세요.";
+
 export default function TechWorksScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -41,14 +60,21 @@ export default function TechWorksScreen() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [startingTrackingRequestId, setStartingTrackingRequestId] = useState<number | null>(null);
+  const startingTrackingRequestIdRef = useRef<number | null>(null);
 
   const userId = user?.userId;
   const technicianId = user?.technicianId;
 
   const {
     trackingRequestId,
+    trackingRecoveryRequestId,
+    departureLockRequestId,
+    isTrackingHydrated,
     startTracking,
     checkPermissions,
+    isTrackingRecoveryLocked,
+    tryBeginDeparture,
+    releaseDeparture,
   } = useLocationTracking();
 
   // 세션 기반 보안 조회 - 서버에서 기사 ID를 확인하므로 클라이언트에서 technicianId를 전달하지 않음
@@ -82,12 +108,33 @@ export default function TechWorksScreen() {
     return matchFilter && matchSearch;
   });
 
-  const doDepart = async (work: any) => {
+  const doDepart = async (work: any, lockAlreadyHeld = false) => {
     if (!resolvedTechnicianId) {
+      if (lockAlreadyHeld && startingTrackingRequestIdRef.current === work.id) {
+        startingTrackingRequestIdRef.current = null;
+        setStartingTrackingRequestId(null);
+      }
       Alert.alert("기사 정보 오류", "기사 계정 연결 정보를 찾을 수 없습니다. 본사에 문의해주세요.");
       return;
     }
-    setStartingTrackingRequestId(work.id);
+    if (!lockAlreadyHeld) {
+      if (trackingRequestId !== null && trackingRequestId !== work.id) {
+        Alert.alert("다른 방문 이동 중", "현재 이동 중인 방문을 먼저 도착 또는 취소 처리해 주세요.");
+        return;
+      }
+      if (trackingRequestId === work.id || startingTrackingRequestIdRef.current !== null) return;
+      startingTrackingRequestIdRef.current = work.id;
+      setStartingTrackingRequestId(work.id);
+    } else if (startingTrackingRequestIdRef.current !== work.id) {
+      return;
+    }
+    if (isTrackingRecoveryLocked()) {
+      startingTrackingRequestIdRef.current = null;
+      setStartingTrackingRequestId(null);
+      Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
+      return;
+    }
+    let sharedDepartureAcquired = false;
     try {
       const { granted, backgroundGranted } = await requestLocationPermissions();
       await checkPermissions();
@@ -106,6 +153,18 @@ export default function TechWorksScreen() {
         );
       }
 
+      if (!tryBeginDeparture(work.id)) {
+        Alert.alert(
+          isTrackingRecoveryLocked() ? "출발 완료 · 위치 확인 필요" : "출발 처리 중",
+          isTrackingRecoveryLocked()
+            ? LOCAL_TRACKING_RECOVERY_MESSAGE
+            : isTrackingHydrated
+              ? "다른 방문의 출발 처리가 진행 중입니다. 잠시 후 다시 확인해 주세요."
+              : "기존 위치 세션을 확인하고 있습니다. 잠시 후 다시 시도해 주세요.",
+        );
+        return;
+      }
+      sharedDepartureAcquired = true;
       const result = await startTrackingMutation.mutateAsync({
         requestId: work.id,
         technicianId: resolvedTechnicianId,
@@ -127,7 +186,16 @@ export default function TechWorksScreen() {
         requestId: work.id,
         trackingUrl: result.trackingUrl,
       });
-      if (!trackingResult.ok) throw new Error(trackingResult.error || "위치 전송을 시작하지 못했습니다.");
+      sharedDepartureAcquired = false;
+      if (!trackingResult.ok) {
+        console.warn("[TechWorks] 서버 출발 완료 후 기기 위치 추적 시작 실패:", trackingResult.error);
+        await refetch();
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
+        return;
+      }
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -140,8 +208,10 @@ export default function TechWorksScreen() {
           : "실시간 위치 공유를 시작했습니다."
       );
     } catch (e: any) {
-      Alert.alert("출발 처리 오류", e?.message || "출발 처리 중 오류가 발생했습니다.");
+      Alert.alert("출발 처리 오류", friendlyDepartError(e));
     } finally {
+      if (sharedDepartureAcquired) releaseDeparture(work.id);
+      startingTrackingRequestIdRef.current = null;
       setStartingTrackingRequestId(null);
     }
   };
@@ -150,12 +220,28 @@ export default function TechWorksScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    if (!resolvedTechnicianId) {
+      Alert.alert("기사 정보 오류", "기사 계정 연결 정보를 찾을 수 없습니다. 본사에 문의해주세요.");
+      return;
+    }
+    if (isTrackingRecoveryLocked()) {
+      Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
+      return;
+    }
+    if (trackingRequestId !== null && trackingRequestId !== work.id) {
+      Alert.alert("다른 방문 이동 중", "현재 이동 중인 방문을 먼저 도착 또는 취소 처리해 주세요.");
+      return;
+    }
+    if (trackingRequestId === work.id || startingTrackingRequestIdRef.current !== null) return;
+
+    startingTrackingRequestIdRef.current = work.id;
+    setStartingTrackingRequestId(work.id);
     if (!consentQuery.data?.hasConsented) {
       setPendingDepartRequestId(work.id);
       setShowConsentModal(true);
       return;
     }
-    await doDepart(work);
+    await doDepart(work, true);
   };
 
   const handleOpenWork = (work: any) => {
@@ -255,6 +341,12 @@ export default function TechWorksScreen() {
             const isCompleted = ["공사완료", "작업완료"].includes(work.status);
             const isThisTracking = trackingRequestId === work.id;
             const workspaceAvailable = canOpenWorkspace(work);
+            const isStartingThis = startingTrackingRequestId === work.id;
+            const needsLocationRecovery = trackingRecoveryRequestId === work.id;
+            const isDepartBusy = startingTrackingRequestId !== null
+              || departureLockRequestId !== null
+              || !isTrackingHydrated
+              || isThisTracking;
             const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
             return (
             <TouchableOpacity
@@ -285,19 +377,23 @@ export default function TechWorksScreen() {
 
               {!isCompleted && !workspaceAvailable && (
                 <TouchableOpacity
-                  style={[s.departBtn, (startingTrackingRequestId !== null || isThisTracking) && s.departBtnDisabled]}
+                  style={[s.departBtn, (isStartingThis || needsLocationRecovery || isThisTracking) && s.departBtnDisabled]}
                   onPress={(event) => {
                     event.stopPropagation();
                     if (!isThisTracking) handleDepart(work);
                   }}
-                  disabled={startingTrackingRequestId !== null || isThisTracking}
+                  disabled={isDepartBusy}
                   activeOpacity={0.8}
                 >
-                  {startingTrackingRequestId === work.id ? (
+                  {isStartingThis ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <Text style={s.departBtnText}>
-                      {isThisTracking ? "📍 실시간 위치 공유 중" : "🚗 고객 집으로 출발"}
+                      {isThisTracking
+                        ? "📍 실시간 위치 공유 중"
+                        : needsLocationRecovery
+                          ? "⚠️ 앱 재실행·위치 권한 확인"
+                          : "🚗 고객 집으로 출발"}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -321,20 +417,28 @@ export default function TechWorksScreen() {
               await saveConsentMutation.mutateAsync({ technicianId: resolvedTechnicianId });
               await consentQuery.refetch();
             } catch (e: any) {
-              Alert.alert("동의 저장 오류", e?.message || "위치정보 이용 동의를 저장하지 못했습니다.");
+              Alert.alert("동의 저장 오류", "위치정보 이용 동의를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
               setPendingDepartRequestId(null);
+              startingTrackingRequestIdRef.current = null;
+              setStartingTrackingRequestId(null);
               return;
             }
           }
           if (pendingDepartRequestId !== null) {
             const work = works.find((item) => item.id === pendingDepartRequestId);
             setPendingDepartRequestId(null);
-            if (work) await doDepart(work);
+            if (work) await doDepart(work, true);
+            else {
+              startingTrackingRequestIdRef.current = null;
+              setStartingTrackingRequestId(null);
+            }
           }
         }}
         onDecline={() => {
           setShowConsentModal(false);
           setPendingDepartRequestId(null);
+          startingTrackingRequestIdRef.current = null;
+          setStartingTrackingRequestId(null);
         }}
       />
     </ScreenContainer>
