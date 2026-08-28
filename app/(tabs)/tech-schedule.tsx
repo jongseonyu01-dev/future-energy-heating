@@ -57,6 +57,9 @@ const friendlyDepartError = (error: unknown) => {
     ?? "출발 처리를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요. 계속되면 본사에 문의해 주세요.";
 };
 
+const LOCAL_TRACKING_RECOVERY_MESSAGE =
+  "서버의 출발 처리는 완료됐지만 이 휴대폰의 위치 전송이 시작되지 않았습니다. 출발 버튼을 다시 누르지 마세요. 앱을 완전히 종료했다가 다시 실행하고 위치 권한을 확인해 주세요.";
+
 export default function TechScheduleScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -83,6 +86,8 @@ export default function TechScheduleScreen() {
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [startingTrackingRequestId, setStartingTrackingRequestId] = useState<number | null>(null);
   const startingTrackingRequestIdRef = useRef<number | null>(null);
+  const [departedWithoutLocalTrackingRequestId, setDepartedWithoutLocalTrackingRequestId] = useState<number | null>(null);
+  const departedWithoutLocalTrackingRequestIdRef = useRef<number | null>(null);
   const [arrivingRequestId, setArrivingRequestId] = useState<number | null>(null);
   const arrivingRequestIdRef = useRef<number | null>(null);
   const [showDebug, setShowDebug] = useState(false);
@@ -149,6 +154,11 @@ export default function TechScheduleScreen() {
 
     if (!(resolvedTechnicianId ?? technicianId)) {
       Alert.alert("기사 정보 오류", "기사 계정 연결 정보를 찾을 수 없습니다. 본사에 문의해 주세요.");
+      return;
+    }
+
+    if (departedWithoutLocalTrackingRequestIdRef.current !== null) {
+      Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
       return;
     }
 
@@ -240,7 +250,15 @@ export default function TechScheduleScreen() {
         trackingUrl: result.trackingUrl,
       });
       if (!trackResult.ok) {
-        console.warn('[TechSchedule] 전역 추적 시작 실패:', trackResult.error);
+        departedWithoutLocalTrackingRequestIdRef.current = work.id;
+        setDepartedWithoutLocalTrackingRequestId(work.id);
+        console.warn('[TechSchedule] 서버 출발 완료 후 기기 위치 추적 시작 실패:', trackResult.error);
+        await refetch();
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
+        return;
       }
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -406,7 +424,10 @@ export default function TechScheduleScreen() {
     const workspaceAvailable = canOpenWorkspace(work);
     const isArriving = arrivingRequestId === work.id;
     const isStartingThis = startingTrackingRequestId === work.id;
-    const isDepartBusy = !workspaceAvailable && startingTrackingRequestId !== null;
+    const needsLocationRecovery = departedWithoutLocalTrackingRequestId === work.id;
+    const isDepartBusy = !workspaceAvailable && (
+      startingTrackingRequestId !== null || departedWithoutLocalTrackingRequestId !== null
+    );
     const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
     return (
       <View key={work.id} style={[s.card, { backgroundColor: colors.surface, borderColor: isThisTracking ? "#FF6B35" : colors.border }, isThisTracking && s.cardTracking]}>
@@ -515,7 +536,10 @@ export default function TechScheduleScreen() {
         <View style={s.locationBtns}>
           {!isThisTracking ? (
             <TouchableOpacity
-              style={[workspaceAvailable ? s.workspaceBtn : s.departBtn, isStartingThis && s.btnDisabled]}
+              style={[
+                workspaceAvailable ? s.workspaceBtn : s.departBtn,
+                (isStartingThis || needsLocationRecovery) && s.btnDisabled,
+              ]}
               onPress={() => workspaceAvailable
                 ? router.push(`/job-workspace?requestId=${work.id}` as any)
                 : handleDepart(work)}
@@ -526,7 +550,11 @@ export default function TechScheduleScreen() {
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={s.departBtnText}>
-                  {workspaceAvailable ? "🧰 업무공간 열기" : "🚗 고객 집으로 출발"}
+                  {workspaceAvailable
+                    ? "🧰 업무공간 열기"
+                    : needsLocationRecovery
+                      ? "⚠️ 앱 재실행·위치 권한 확인"
+                      : "🚗 고객 집으로 출발"}
                 </Text>
               )}
             </TouchableOpacity>
