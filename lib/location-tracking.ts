@@ -12,6 +12,11 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSessionToken } from "@/lib/_core/auth";
 import { API_BASE_URL } from "@/constants/oauth";
+import {
+  createSingleRetryLoop,
+  requestLocationUpdate,
+  startNativeTrackingWithRetry,
+} from "@/lib/location-tracking-startup";
 
 const TRACKING_TOKEN_KEY = "location_tracking_token";
 const TRACKING_ACTIVE_KEY = "location_tracking_active";
@@ -63,11 +68,13 @@ function emitDebug(patch: Partial<LocationDebugState>) {
 }
 
 // ─── 전역 포그라운드 인터벌 ────────────────────────────────────────────────
-let _globalFgInterval: ReturnType<typeof setInterval> | null = null;
+const globalForegroundRetry = createSingleRetryLoop(
+  (callback, intervalMs) => setInterval(callback, intervalMs),
+  (handle) => clearInterval(handle),
+);
 
 export function startGlobalFgInterval() {
-  if (_globalFgInterval) return;
-  _globalFgInterval = setInterval(async () => {
+  globalForegroundRetry.start(async () => {
     const token = await AsyncStorage.getItem(TRACKING_TOKEN_KEY);
     const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);
     if (!token || isActive !== "true") return;
@@ -79,10 +86,7 @@ export function startGlobalFgInterval() {
 }
 
 export function stopGlobalFgInterval() {
-  if (_globalFgInterval) {
-    clearInterval(_globalFgInterval);
-    _globalFgInterval = null;
-  }
+  globalForegroundRetry.stop();
 }
 
 export async function resumeTrackingIfActive() {
@@ -177,40 +181,45 @@ export async function startLocationTracking(token: string): Promise<void> {
   await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "true");
   emitDebug({ sendCount: 0, serverOk: null, serverError: null });
 
-  // 포그라운드 인터벌 시작 (화면 켜진 상태 백업)
-  startGlobalFgInterval();
+  await startNativeTrackingWithRetry(startGlobalFgInterval, async () => {
+    if (Platform.OS === "web") return;
 
-  if (Platform.OS === "web") return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Location = require("expo-location");
+      const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME);
+      if (isRunning) await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Location = require("expo-location");
-    const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME);
-    if (isRunning) await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);
-
-    await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 10000,          // 10초 간격
-      distanceInterval: 5,          // 5m 이동 시 즉시
-      foregroundService: {
-        notificationTitle: "퓨처에너지테크 기사 앱",
-        notificationBody: "고객 방문 중 위치를 공유하고 있습니다.",
-        notificationColor: "#FF6B35",
-      },
-      showsBackgroundLocationIndicator: true,
-      pausesUpdatesAutomatically: false,
-    });
-    console.log("[LocationTracking] Foreground Service 시작 완료");
-  } catch (e) {
-    console.error("[LocationTracking] Foreground Service 시작 실패 (포그라운드 폴백):", e);
-  }
+      await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 10000,          // 10초 간격
+        distanceInterval: 5,          // 5m 이동 시 즉시
+        foregroundService: {
+          notificationTitle: "퓨처에너지테크 기사 앱",
+          notificationBody: "고객 방문 중 위치를 공유하고 있습니다.",
+          notificationColor: "#FF6B35",
+        },
+        showsBackgroundLocationIndicator: true,
+        pausesUpdatesAutomatically: false,
+      });
+      console.log("[LocationTracking] Foreground Service 시작 완료");
+    } catch (e: any) {
+      console.error("[LocationTracking] 백그라운드 위치 추적 시작 실패 (포그라운드 재시도 유지):", e);
+      throw new Error(e?.message || "기기 위치 추적을 시작하지 못했습니다.");
+    }
+  });
 }
 
 // ─── 위치 추적 중단 ────────────────────────────────────────────────────────
 export async function stopLocationTracking(): Promise<void> {
-  await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "false");
-  await AsyncStorage.removeItem(TRACKING_TOKEN_KEY);
   stopGlobalFgInterval();
+
+  try {
+    await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "false");
+    await AsyncStorage.removeItem(TRACKING_TOKEN_KEY);
+  } catch (e) {
+    console.error("[LocationTracking] 위치 추적 상태 정리 실패:", e);
+  }
 
   if (Platform.OS === "web") return;
   try {
@@ -266,18 +275,21 @@ export async function getCurrentLocation(): Promise<{ lat: number; lng: number }
 export async function sendLocationToServer(
   token: string, lat: number, lng: number,
   speed?: number | null, heading?: number | null, accuracy?: number | null
-): Promise<void> {
+): Promise<boolean> {
   try {
-    const resp = await fetch(`${API_BASE_URL}/api/location/update`, {
+    const result = await requestLocationUpdate(fetch, `${API_BASE_URL}/api/location/update`, {
       method: "POST",
       headers: await authorizedJsonHeaders(),
       body: JSON.stringify({ token, lat, lng, speed: speed ?? null, heading: heading ?? null, accuracy: accuracy ?? null }),
     });
     const now = Date.now();
-    emitDebug({ serverOk: resp.ok, lastSuccessAt: resp.ok ? now : _debugState.lastSuccessAt, serverError: resp.ok ? null : `HTTP ${resp.status}`, sendCount: _debugState.sendCount + 1 });
+    emitDebug({ serverOk: result.ok, lastSuccessAt: result.ok ? now : _debugState.lastSuccessAt, serverError: result.ok ? null : result.status ? `HTTP ${result.status}` : result.error ?? "네트워크 오류", sendCount: _debugState.sendCount + 1 });
+    if (!result.ok && result.error) console.error("[LocationTracking] 위치 전송 실패:", result.error);
+    return result.ok;
   } catch (e: any) {
     emitDebug({ serverOk: false, serverError: e?.message || "네트워크 오류" });
     console.error("[LocationTracking] 위치 전송 실패:", e);
+    return false;
   }
 }
 

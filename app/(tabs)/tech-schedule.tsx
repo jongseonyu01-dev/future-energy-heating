@@ -87,8 +87,6 @@ export default function TechScheduleScreen() {
   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);
   const [startingTrackingRequestId, setStartingTrackingRequestId] = useState<number | null>(null);
   const startingTrackingRequestIdRef = useRef<number | null>(null);
-  const [departedWithoutLocalTrackingRequestId, setDepartedWithoutLocalTrackingRequestId] = useState<number | null>(null);
-  const departedWithoutLocalTrackingRequestIdRef = useRef<number | null>(null);
   const [arrivingRequestId, setArrivingRequestId] = useState<number | null>(null);
   const arrivingRequestIdRef = useRef<number | null>(null);
   const [showDebug, setShowDebug] = useState(false);
@@ -103,12 +101,18 @@ export default function TechScheduleScreen() {
     isTracking,
     trackingToken,
     trackingRequestId,
+    trackingRecoveryRequestId,
+    departureLockRequestId,
+    isTrackingHydrated,
     trackingUrl,
     debugState,
     permStatus,
     startTracking,
     stopTracking,
     checkPermissions,
+    isTrackingRecoveryLocked,
+    tryBeginDeparture,
+    releaseDeparture,
   } = useLocationTracking();
 
 
@@ -158,7 +162,7 @@ export default function TechScheduleScreen() {
       return;
     }
 
-    if (departedWithoutLocalTrackingRequestIdRef.current !== null) {
+    if (isTrackingRecoveryLocked()) {
       Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
       return;
     }
@@ -202,6 +206,13 @@ export default function TechScheduleScreen() {
     } else if (startingTrackingRequestIdRef.current !== work.id) {
       return;
     }
+    if (isTrackingRecoveryLocked()) {
+      startingTrackingRequestIdRef.current = null;
+      setStartingTrackingRequestId(null);
+      Alert.alert("출발 완료 · 위치 확인 필요", LOCAL_TRACKING_RECOVERY_MESSAGE);
+      return;
+    }
+    let sharedDepartureAcquired = false;
     try {
       // 위치 권한 요청
       const { granted, backgroundGranted } = await requestLocationPermissions();
@@ -227,6 +238,18 @@ export default function TechScheduleScreen() {
       const destLng = work.customerLng ? Number(work.customerLng) : undefined;
 
       // 서버에 세션 시작 요청
+      if (!tryBeginDeparture(work.id)) {
+        Alert.alert(
+          isTrackingRecoveryLocked() ? "출발 완료 · 위치 확인 필요" : "출발 처리 중",
+          isTrackingRecoveryLocked()
+            ? LOCAL_TRACKING_RECOVERY_MESSAGE
+            : isTrackingHydrated
+              ? "다른 방문의 출발 처리가 진행 중입니다. 잠시 후 다시 확인해 주세요."
+              : "기존 위치 세션을 확인하고 있습니다. 잠시 후 다시 시도해 주세요.",
+        );
+        return;
+      }
+      sharedDepartureAcquired = true;
       const result = await startTrackingMutation.mutateAsync({
         requestId: work.id,
         technicianId: effectiveTechnicianId,
@@ -250,9 +273,8 @@ export default function TechScheduleScreen() {
         requestId: work.id,
         trackingUrl: result.trackingUrl,
       });
+      sharedDepartureAcquired = false;
       if (!trackResult.ok) {
-        departedWithoutLocalTrackingRequestIdRef.current = work.id;
-        setDepartedWithoutLocalTrackingRequestId(work.id);
         console.warn('[TechSchedule] 서버 출발 완료 후 기기 위치 추적 시작 실패:', trackResult.error);
         await refetch();
         if (Platform.OS !== "web") {
@@ -274,6 +296,7 @@ export default function TechScheduleScreen() {
     } catch (e: any) {
       Alert.alert("출발 처리 오류", friendlyDepartError(e));
     } finally {
+      if (sharedDepartureAcquired) releaseDeparture(work.id);
       startingTrackingRequestIdRef.current = null;
       setStartingTrackingRequestId(null);
     }
@@ -425,9 +448,11 @@ export default function TechScheduleScreen() {
     const workspaceAvailable = canOpenWorkspace(work);
     const isArriving = arrivingRequestId === work.id;
     const isStartingThis = startingTrackingRequestId === work.id;
-    const needsLocationRecovery = departedWithoutLocalTrackingRequestId === work.id;
+    const needsLocationRecovery = trackingRecoveryRequestId === work.id;
     const isDepartBusy = !workspaceAvailable && (
-      startingTrackingRequestId !== null || departedWithoutLocalTrackingRequestId !== null
+      startingTrackingRequestId !== null ||
+      departureLockRequestId !== null ||
+      !isTrackingHydrated
     );
     const statusColor = STATUS_COLOR[work.status] ?? "#6B7280";
     return (
