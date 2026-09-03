@@ -140,7 +140,7 @@ jobs:
               minSupportedVersionCode: 28,
               sha256: process.env.SHA256,
               fileSize: Number(process.env.FILE_SIZE),
-              releaseNotes: "작업목록 출발·실시간 위치공유 및 기존 기사 아이디 로그인 호환",
+              releaseNotes: "기사별 월간 완료보고 매출 및 결제수단별 자동 합산",
               publishedAt: process.env.PUBLISHED_AT,
               sourceSha: process.env.SOURCE_SHA
             };
