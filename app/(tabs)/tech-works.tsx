@@ -84,7 +84,7 @@ export default function TechWorksScreen() {
     undefined,
     { enabled: !!userId }
   );
-  const { data: monthlyCollections, refetch: refetchMonthlyCollections } = trpc.workReport.monthlySummary.useQuery(collectionMonth, { enabled: !!userId });
+  const { data: monthlyCollections, refetch: refetchMonthlyCollections } = (trpc.workReport as any).monthlySummary.useQuery(collectionMonth, { enabled: !!userId });
   const resolvedTechnicianId = technicianId ?? (works.length > 0 ? works[0].technicianId : null);
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? 0 },
