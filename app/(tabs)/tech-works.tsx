@@ -64,6 +64,8 @@ export default function TechWorksScreen() {
 
   const userId = user?.userId;
   const technicianId = user?.technicianId;
+  const now = new Date();
+  const collectionMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
 
   const {
     trackingRequestId,
@@ -82,6 +84,7 @@ export default function TechWorksScreen() {
     undefined,
     { enabled: !!userId }
   );
+  const { data: monthlyCollections, refetch: refetchMonthlyCollections } = trpc.workReport.monthlySummary.useQuery(collectionMonth, { enabled: !!userId });
   const resolvedTechnicianId = technicianId ?? (works.length > 0 ? works[0].technicianId : null);
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? 0 },
@@ -93,14 +96,14 @@ export default function TechWorksScreen() {
   // 화면 재진입 시 자동 refetch
   useFocusEffect(
     useCallback(() => {
-      if (userId) refetch();
-    }, [userId, refetch])
+      if (userId) { refetch(); refetchMonthlyCollections(); }
+    }, [userId, refetch, refetchMonthlyCollections])
   );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await refetch(); } finally { setRefreshing(false); }
-  }, [refetch]);
+    try { await Promise.all([refetch(), refetchMonthlyCollections()]); } finally { setRefreshing(false); }
+  }, [refetch, refetchMonthlyCollections]);
 
   const filtered = works.filter((w) => {
     const matchFilter = activeFilter === "전체" || w.status === activeFilter;
@@ -283,6 +286,12 @@ export default function TechWorksScreen() {
         </View>
       </View>
 
+      <View style={[s.monthlyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={s.monthlyTop}><Text style={[s.monthlyTitle, { color: colors.foreground }]}>{collectionMonth.month}월 완료보고 합계</Text><Text style={s.monthlyAmount}>{Number(monthlyCollections?.totals.amount || 0).toLocaleString()}원</Text></View>
+        <Text style={{ color: colors.muted, fontSize: 12 }}>{monthlyCollections?.totals.count || 0}건 · 매월 1일부터 말일까지 자동 합산</Text>
+        <View style={s.methodRow}>{Object.entries(monthlyCollections?.totals.byMethod || {}).map(([method, amount]) => (<View key={method} style={s.methodChip}><Text style={s.methodText}>{method} {Number(amount).toLocaleString()}원</Text></View>))}</View>
+      </View>
+
       {/* 검색 */}
       <View style={[s.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TextInput
@@ -449,6 +458,11 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { backgroundColor: "#FF6B35", padding: 20, paddingBottom: 16 },
   headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },
   headerSub: { fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 2 },
+  monthlyCard: { marginHorizontal: 12, marginTop: 12, borderRadius: 12, borderWidth: 1, padding: 14 },
+  monthlyTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  monthlyTitle: { fontSize: 15, fontWeight: "800" }, monthlyAmount: { color: "#FF6B35", fontSize: 18, fontWeight: "900" },
+  methodRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 9 }, methodChip: { backgroundColor: "#FFF7ED", borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
+  methodText: { color: "#C2410C", fontSize: 11, fontWeight: "700" },
   searchBox: { margin: 12, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12 },
   searchInput: { fontSize: 14, paddingVertical: 10 },
   filterRow: { height: 52 },
