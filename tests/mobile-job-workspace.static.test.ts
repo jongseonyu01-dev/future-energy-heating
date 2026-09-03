@@ -13,6 +13,13 @@ import {
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
 describe("technician arrival workspace flow", () => {
+  it("shows the signed-in technician current-month payment total on Android and iOS", () => {
+    const works = source("app/(tabs)/tech-works.tsx");
+    expect(works).toContain("trpc.workReport.monthlySummary.useQuery");
+    expect(works).toContain("매월 1일부터 말일까지 자동 합산");
+    expect(works).toContain("monthlyCollections?.totals.byMethod");
+  });
+
   it("removes the schedule checklist shortcut and opens the workspace after arrival", () => {
     const schedule = source("app/(tabs)/tech-schedule.tsx");
 
