@@ -1,0 +1,9 @@
+{
+  "version": "1.1.23",
+  "iosBundleIdentifier": "com.futureenergy.heatingcare",
+  "iosBuildNumber": "23",
+  "androidVersionCode": 23,
+  "projectId": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+  "reviewApi": "https://futureenergytech-wlvr2pr81-futureenergytech.vercel.app",
+  "reviewMode": "1"
+}

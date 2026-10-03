@@ -1,0 +1,3 @@
+Archive:  FET_TechEstimate_1.1.36_code36_APK.zip
+    testing: FET_TechEstimate_1.1.36_code36.apk   OK
+No errors detected in compressed data of FET_TechEstimate_1.1.36_code36_APK.zip.

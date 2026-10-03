@@ -1,0 +1,3 @@
+artifact_url=https://expo.dev/artifacts/eas/f6fpzVhZfGtt_h3_ZCwfwI4DgMirnArmqNlDNi3FJ5Q.apk
+build_id=7a5289b0-9f21-4f64-ae7b-5f05a7f3bb0b
+checkpoint=61151468

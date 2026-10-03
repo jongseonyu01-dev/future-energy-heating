@@ -1,0 +1,18 @@
+HTTP/2 502 
+access-control-allow-credentials: true
+access-control-allow-headers: Origin, X-Requested-With, Content-Type, Accept, Authorization
+access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
+age: 0
+cache-control: no-store
+content-type: text/html; charset=utf-8
+date: Mon, 14 Sep 2026 14:10:16 GMT
+etag: W/"55-rcEt/YbeuxtqM+QY6dBSEqn5PbY"
+expires: 0
+pragma: no-cache
+server: Vercel
+strict-transport-security: max-age=63072000
+x-powered-by: Express
+x-vercel-cache: MISS
+x-vercel-id: lhr1::iad1::g7jbt-1789395014950-7e5904e40ac9
+content-length: 85
+

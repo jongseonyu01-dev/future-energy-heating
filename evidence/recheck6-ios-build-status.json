@@ -1,0 +1,50 @@
+{
+  "id": "9ff0c32f-979f-415b-9685-ae0efdaaf347",
+  "status": "FINISHED",
+  "platform": "IOS",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/dLHyzEp7fsM7BkLuMfvZpbfpFIaPjtZrwSK1tJXCmC0.ipa",
+    "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9ff0c32f-979f-415b-9685-ae0efdaaf347/2026-09-13T04%3A52%3A51Z-9ff0c32f-979f-415b-9685-ae0efdaaf347-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T045942Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=4439695192ab1d0bda01080f84db14689fe5cc2e53ea6d48a2265cd58494afd2ff0d2921b2a55ae2437e55b488806b98c0049245cfef6a9153997fafb37235e6ca9de4999217599204c5fabc49369ea9bba8923f07be8e035818e182c58872d143daebdf82ae480aeb2c8498a791e2fee6cbd772a2a5f3a5492ed2e13d5bc60ba4adf64d38255846019cfa5a3073c25c9cf83f1230c4e07ac49345e4aaa96eae0381a3f72cfa61c3dd8dcc443f61b11f7ba4f2f720a59831c6684b12436b6b93f0c55ba6370b447d5a3ac55ca61e1891f03df8be0240b3d467f1ab61ba32b7a8409a8d693edc4e35c2c9d52b332ccaeaeded8a576a385613bb6ecbcde9c01e53",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/dLHyzEp7fsM7BkLuMfvZpbfpFIaPjtZrwSK1tJXCmC0.ipa"
+  },
+  "fingerprint": {
+    "id": "01a0991c-57a5-73c1-ad86-b878a91213d1",
+    "hash": "490616d44df0001d086b8a6516ed06f0e866834d"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9ff0c32f-979f-415b-9685-ae0efdaaf347/2026-09-13T04%3A52%3A51Z-9ff0c32f-979f-415b-9685-ae0efdaaf347-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T045942Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=4439695192ab1d0bda01080f84db14689fe5cc2e53ea6d48a2265cd58494afd2ff0d2921b2a55ae2437e55b488806b98c0049245cfef6a9153997fafb37235e6ca9de4999217599204c5fabc49369ea9bba8923f07be8e035818e182c58872d143daebdf82ae480aeb2c8498a791e2fee6cbd772a2a5f3a5492ed2e13d5bc60ba4adf64d38255846019cfa5a3073c25c9cf83f1230c4e07ac49345e4aaa96eae0381a3f72cfa61c3dd8dcc443f61b11f7ba4f2f720a59831c6684b12436b6b93f0c55ba6370b447d5a3ac55ca61e1891f03df8be0240b3d467f1ab61ba32b7a8409a8d693edc4e35c2c9d52b332ccaeaeded8a576a385613bb6ecbcde9c01e53",
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9ff0c32f-979f-415b-9685-ae0efdaaf347/2026-09-13T04%3A52%3A51Z-a22eadf3-599c-48b6-94cf-eef139a105a7.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T045407Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=86e0086f1aa6c48b6447f8fa7fe76be212085fb007c7407ee5072158daf0c6705ec86a281cd7c1fabd7611ad67facb120e722623f6aa24ffd5bfdd5b3aada8c44eeeb773e983a585370b142365da49b3563f463269079f7c548dc05e90181c197432fd7fce80163e317b6640403fbbecb1f4581b35a18e2744bbd67c7edbcc4379d0705a5aeb84d5209100f9aafa602865e43575348991d662093d08d88244d60ff182ad3d8ab7523a7a6cdc70741a87973b5b803df09e8409bf9210ca0822fcc54081a6c6dc196765ec0cc9137d5217cf32ed95106c6cd62eb38dc213bfc06d9e8e275f94b1c4ce181a5a0739a100c0177eda1fa35857be1ebd68858d298d06"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "review-store",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.34",
+  "appBuildVersion": "34",
+  "gitCommitHash": "026df51d13a1b07940ebd9b4df5d032fc4926326",
+  "gitCommitMessage": "Checkpoint: Codex 재검수 6차 후보: 실제 견적 화면에서 저장·삭제·제출 완료 후 actor와 request scope를 재확인해 계정/접수 전환 뒤 다른 화면 state를 변경하지 않게 보완했다. 지사 견적·일정·초기 보고 배지의 raw unauthenticated fetch를 인증 tRPC 호출로 전환하고 report_pending 옛 상태를 pending/sourceType/techRequestStatus 계약으로 교체했다. version 1.1.34, Android versionCode 34, iOS buildNumber 34로 source를 구분했다. 운영 게시·공용 단가·고객 문자·TestFlight 제출·실기기 시험은 보류/미실시다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-13T04:52:46.596Z",
+  "updatedAt": "2026-09-13T04:58:32.841Z",
+  "completedAt": "2026-09-13T04:58:32.500Z",
+  "expirationDate": "2026-10-13T04:52:46.622Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 4493,
+    "buildQueueTime": 7856,
+    "buildDuration": 333555
+  }
+}

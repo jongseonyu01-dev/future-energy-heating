@@ -1,0 +1,48 @@
+{
+  "id": "3f0ecd7c-f6d1-434e-ab1c-04839925548d",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/DyocM28Gvm9e6uNweIb3ZcxhRY79QjjF51Pxd0hZi1I.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/DyocM28Gvm9e6uNweIb3ZcxhRY79QjjF51Pxd0hZi1I.apk"
+  },
+  "fingerprint": {
+    "id": "01a09901-93e7-7c10-a804-ae9d116ed14c",
+    "hash": "cf96d840645b7859595f3a2cd70fa50fc889c14b"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/3f0ecd7c-f6d1-434e-ab1c-04839925548d/2026-09-13T04%3A23%3A36Z-702250f8-d5f6-4a91-ac84-dab67e702020.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T043737Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=2bc6effdd0bab1f65d6203a31ff37f0047d19e665a1883c69c8ec02e7b11c9896fa17b99d0cad6f2ea399d21e53cad9526c5d465e13e753726c7e623fe75c2047450656c799fe2515c6312b7fe52451a220756b8225c69ab6738d138b6b20f3caa17562167d95961579e151acc8af7dd14c930f1f53b944d479fb8e4fd16d606f6584a2cfa16dea3b0b14e111f2f5d1b70a5b3b7f7134efaa6b6571bcf8d2111119bf3cb7726a7c128fe08f6b8061d33750ece80ede9eebf2009a4e677b6b7834fca9847f8c74cef774295039e00fe89958e34e48c221fcd079bdc44036fe8f22737e8e0f8ee28098aefe292eedbb755492def770511c54b194333ec8bfe2ffe"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.34",
+  "appBuildVersion": "34",
+  "gitCommitHash": "026df51d13a1b07940ebd9b4df5d032fc4926326",
+  "gitCommitMessage": "Checkpoint: Codex 재검수 6차 후보: 실제 견적 화면에서 저장·삭제·제출 완료 후 actor와 request scope를 재확인해 계정/접수 전환 뒤 다른 화면 state를 변경하지 않게 보완했다. 지사 견적·일정·초기 보고 배지의 raw unauthenticated fetch를 인증 tRPC 호출로 전환하고 report_pending 옛 상태를 pending/sourceType/techRequestStatus 계약으로 교체했다. version 1.1.34, Android versionCode 34, iOS buildNumber 34로 source를 구분했다. 운영 게시·공용 단가·고객 문자·TestFlight 제출·실기기 시험은 보류/미실시다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-13T04:23:32.552Z",
+  "updatedAt": "2026-09-13T04:38:39.575Z",
+  "completedAt": "2026-09-13T04:38:39.395Z",
+  "expirationDate": "2026-09-27T04:23:32.577Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 3500,
+    "buildQueueTime": 4552,
+    "buildDuration": 898791
+  }
+}

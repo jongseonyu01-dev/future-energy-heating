@@ -1,0 +1,69 @@
+public/web/admin/tech-estimate.html:255:            <button class="thermo-btn" id="ctrl-wifi" onclick="selectController('wifi')">와이파이형<br/>220,000원</button>
+public/web/admin/tech-estimate.html:256:            <button class="thermo-btn" id="ctrl-vtype" onclick="selectController('vtype')">조절기<br/>V타입</button>
+public/web/admin/tech-estimate.html:278:              <option value="wifi">와이파이형 (220,000원)</option>
+public/web/admin/tech-estimate.html:279:              <option value="vtype">V타입 (110,000원)</option>
+public/web/admin/tech-estimate.html:518:// 분배기시공시 할인 적용 가능 품목 (유량밸브15A, 스트레이너25A, 메인밸브)
+public/web/admin/tech-estimate.html:519:const DIST_DISCOUNT_ITEMS = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+public/web/admin/tech-estimate.html:524:  strainer25A: null, // 스트레이너 25A
+public/web/admin/tech-estimate.html:525:  mainValve20Dist: null, // 메인밸브 20A 분배기교체
+public/web/admin/tech-estimate.html:526:  mainValve25Dist: null, // 메인밸브 25A 분배기교체
+public/web/admin/tech-estimate.html:527:  mainValve20Ind: null,  // 메인밸브 20A 독립시공
+public/web/admin/tech-estimate.html:528:  mainValve25Ind: null,  // 메인밸브 25A 독립시공
+public/web/admin/tech-estimate.html:532:  controllerWifi: null,  // 와이파이형 제어기
+public/web/admin/tech-estimate.html:533:  controllerVtype: null, // 조절기 V타입
+public/web/admin/tech-estimate.html:553:      else if (item.name === '스트레이너 25A') { PRICES.strainer25A = pr; }
+public/web/admin/tech-estimate.html:554:      else if (item.name === '메인밸브 20A (분배기교체)') { PRICES.mainValve20Dist = pr; }
+public/web/admin/tech-estimate.html:555:      else if (item.name === '메인밸브 25A (분배기교체)') { PRICES.mainValve25Dist = pr; }
+public/web/admin/tech-estimate.html:556:      else if (item.name === '메인밸브 20A (독립시공)') { PRICES.mainValve20Ind = pr; }
+public/web/admin/tech-estimate.html:557:      else if (item.name === '메인밸브 25A (독립시공)') { PRICES.mainValve25Ind = pr; }
+public/web/admin/tech-estimate.html:562:      else if (item.name === '와이파이형 제어기') { PRICES.controllerWifi = pr; }
+public/web/admin/tech-estimate.html:563:      else if (item.name === '조절기 V타입') { PRICES.controllerVtype = pr; }
+public/web/admin/tech-estimate.html:647:  // 2. 스트레이너 25A (단체할인가 고정 — 분배기 교체 시 자동 추가)
+public/web/admin/tech-estimate.html:648:  if (PRICES.strainer25A) {
+public/web/admin/tech-estimate.html:649:    addItem({ name: '스트레이너 25A', qty: 1, priceRef: PRICES.strainer25A, auto: true, distAuto: true, distOnly: true });
+public/web/admin/tech-estimate.html:729:  else if (type === 'wifi') { pr = PRICES.controllerWifi; name = '와이파이형 제어기'; }
+public/web/admin/tech-estimate.html:730:  else if (type === 'vtype') { pr = PRICES.controllerVtype; name = '조절기 V타입'; }
+public/web/admin/tech-estimate.html:733:    // 제어기/와이파이형 선택 시 디지털 온도조절기 3개 자동 추가 (이미 추가된 경우 제외)
+public/web/admin/tech-estimate.html:767:    else if (ctrlType === 'wifi') { pr = PRICES.controllerWifi; name = '와이파이형 제어기'; }
+public/web/admin/tech-estimate.html:768:    else if (ctrlType === 'vtype') { pr = PRICES.controllerVtype; name = '조절기 V타입'; }
+public/web/admin/tech-estimate.html:777:  // 분배기시공시 할인 전용 품목 제외 (유량밸브15A, 스트레이너25A, 메인밸브 분배기교체)
+public/web/admin/tech-estimate.html:778:  const excludeFromPartial = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+public/web/admin/tech-estimate.html:838:  const excludeFromDirect = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+public/web/admin/tech-estimate.html:851:  const excludeFromDirect = ['유량밸브 15A', '스트레이너 25A', '메인밸브 20A (분배기교체)', '메인밸브 25A (분배기교체)'];
+app/tech-estimate.tsx:591:                        { key: "wifi", label: "와이파이형" },
+app/tech-estimate.tsx:592:                        { key: "vtype", label: "V타입" },
+app/tech-estimate.tsx:595:                    <Text style={s.helperText}>와이파이형과 V타입은 동시에 선택·각각 해제할 수 있습니다. 기본·와이파이형 제어기는 디지털 조절기 3개를 자동 추가합니다.</Text>
+app/tech-estimate.tsx:599:                    <TouchableOpacity style={s.controllerButton} onPress={() => addMainValve(20)}><Text style={s.controllerText}>20A 추가</Text></TouchableOpacity>
+app/tech-estimate.tsx:600:                    <TouchableOpacity style={s.controllerButton} onPress={() => addMainValve(25)}><Text style={s.controllerText}>25A 추가</Text></TouchableOpacity>
+app/tech-estimate.tsx:614:                <TouchableOpacity style={s.supplyButton} onPress={() => { advanceWorkGeneration(); setLines(addSupplyLineRepair(lines, priceMode)); }}><Text style={s.supplyButtonText}>+ 공급측 라인보수 추가</Text></TouchableOpacity>
+lib/tech-estimate-engine.ts:53:  "메인밸브 20A (분배기교체)",
+lib/tech-estimate-engine.ts:54:  "메인밸브 25A (분배기교체)",
+lib/tech-estimate-engine.ts:79:  { id: -1002, category: "밸브/배관", name: "유량밸브 20A / 부분수리", unit: "개", stdPrice: 82000, discPrice: 65000 },
+lib/tech-estimate-engine.ts:80:  { id: -1003, category: "밸브/배관", name: "유량밸브 25A / 부분수리", unit: "개", stdPrice: 114000, discPrice: 94000 },
+lib/tech-estimate-engine.ts:204:/** 현재 홈페이지의 공급측 라인보수 단가 분기: 라인보수 동시 70,000원, 단독 120,000원. */
+lib/tech-estimate-engine.ts:209:  const hasLineRepair = lines.some((line) => line.name.startsWith("라인보수 20A") || line.name.startsWith("라인보수 25A"));
+lib/tech-estimate-engine.ts:211:  const name = hasLineRepair ? "공급측 라인보수 (라인보수 동시)" : "공급측 라인보수 (공급측만 단독)";
+lib/tech-estimate-engine.ts:212:  const next = lines.filter((line) => !line.name.startsWith("공급측 라인보수"));
+lib/tech-estimate-engine.ts:247:  const strainer = findItem(items, "스트레이너 25A");
+lib/tech-estimate-engine.ts:448:    wifi: "와이파이형 제어기",
+lib/tech-estimate-engine.ts:449:    vtype: "조절기 V타입",
+tests/tech-estimate-engine.test.ts:32:  { id: 31, category: "밸브/배관", name: "스트레이너 25A", unit: "개", stdPrice: 81000, discPrice: 64000 },
+tests/tech-estimate-engine.test.ts:35:  { id: 42, category: "제어/조절", name: "와이파이형 제어기", unit: "개", stdPrice: 220000, discPrice: 220000 },
+tests/tech-estimate-engine.test.ts:36:  { id: 43, category: "제어/조절", name: "조절기 V타입", unit: "개", stdPrice: 110000, discPrice: 110000 },
+tests/tech-estimate-engine.test.ts:52:      expect(selected.find((line) => line.name === "스트레이너 25A")?.unitPrice).toBe(36000);
+tests/tech-estimate-engine.test.ts:63:    expect(lines.filter((line) => line.name === "스트레이너 25A")[0]?.unitPrice).toBe(36000);
+tests/tech-estimate-engine.test.ts:69:    expect(lines.filter((line) => line.source === "controller").map((line) => line.name)).toEqual(["와이파이형 제어기", "조절기 V타입"]);
+tests/tech-estimate-engine.test.ts:73:    expect(lines.filter((line) => line.source === "controller").map((line) => line.name)).toEqual(["조절기 V타입"]);
+tests/tech-estimate-engine.test.ts:109:    expect(partialNames).toContain("와이파이형 제어기");
+tests/tech-estimate-engine.test.ts:110:    expect(partialNames).toContain("조절기 V타입");
+tests/tech-estimate-engine.test.ts:114:    expect(partialNames).toContain("스트레이너 25A");
+tests/tech-estimate-engine.test.ts:150:    const noWifi = prices.filter((item) => item.name !== "와이파이형 제어기");
+tests/tech-estimate-engine.test.ts:195:    expect(alone[0]).toMatchObject({ name: "공급측 라인보수 (공급측만 단독)", unitPrice: 120000 });
+tests/tech-estimate-engine.test.ts:198:        line.name === "제어기 교체" ? { ...line, name: "라인보수 20A" } : line,
+tests/tech-estimate-engine.test.ts:202:    expect(withLine[1]).toMatchObject({ name: "공급측 라인보수 (라인보수 동시)", unitPrice: 70000 });
+tests/tech-estimate-server-failclosed.verify.mjs:87:  lineId: "partial:42:one", name: "와이파이형 제어기", category: "제어/조절", unit: "개",
+tests/tech-estimate-review-fixture.test.ts:23:    const line = { name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 };
+tests/tech-estimate-review-fixture.test.ts:42:      autoEstimateItems: JSON.stringify([{ name: "와이파이형 제어기", qty: 1.5, unitPrice: 220000, subtotal: 330000 }]),
+tests/isolated-review-api.test.ts:27:    const input = { requestId: 810001, customerName: "검수용 합성 고객 A", phoneNumber: "010-0000-0001", amount: 220000, autoEstimateItems: JSON.stringify([{ name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 }]) };
+tests/isolated-review-api.test.ts:35:    const firstInput = { requestId: 810001, customerName: "검수용 합성 고객 A", phoneNumber: "010-0000-0001", amount: 220000, autoEstimateItems: JSON.stringify([{ name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 }]) };
+tests/tech-estimate-isolated-server.verify.mjs:159:  lineId: "controller:42:wifi", name: "와이파이형 제어기", category: "제어/조절", unit: "개",

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "7a5289b0-9f21-4f64-ae7b-5f05a7f3bb0b",
+    "status": "NEW",
+    "platform": "ANDROID",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a09a48-3773-79e6-b0d5-17f1dce46e7c",
+      "hash": "9b3804f2efa7131920f5bf7552b0867fa8b76a16"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.36",
+    "appBuildVersion": "36",
+    "gitCommitHash": "61151468b45aff57c1d7d6059ba742aa012a23b1",
+    "gitCommitMessage": "Checkpoint: Codex가 직접 검수한 7bfe7418 자동견적 source의 기능 코드는 유지하고, 기존 설치본 위 업데이트 가능한 review APK를 위해 app.config.ts version 1.1.36, Android versionCode 36, iOS buildNumber 36만 조정한 build 준비 checkpoint. 기존 package com.futureenergy.heatingcare, remote Android signing key, review API profile을 유지한다. 운영 게시·홈페이지 견적·공용 단가·고객 문자·TestFlight·실기기 검증은 미실시/보류.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-13T10:20:19.148Z",
+    "updatedAt": "2026-09-13T10:20:19.148Z",
+    "expirationDate": "2026-09-27T10:20:19.179Z",
+    "isForIosSimulator": false
+  }
+]

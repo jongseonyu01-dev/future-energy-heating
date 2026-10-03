@@ -1,0 +1,4 @@
+app.config.ts
+app/work-report.tsx
+package.json
+pnpm-lock.yaml

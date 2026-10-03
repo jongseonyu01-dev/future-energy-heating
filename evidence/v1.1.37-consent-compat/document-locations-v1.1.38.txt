@@ -1,0 +1,4 @@
+Downloads/FET_TechEstimate_CodexRecheck5_Result.pdf
+Downloads/FutureEnergyTech_Review_v1.1.38/FutureEnergyTech_v1.1.38_Compatibility_Evidence/evidence/android-v1.1.38-device-test-procedure.md
+future-energy-heating/evidence/codex-v37/android-v1.1.37-device-test-procedure.md
+future-energy-heating/evidence/v1.1.37-consent-compat/android-v1.1.38-device-test-procedure.md

@@ -1,0 +1,48 @@
+{
+  "id": "a575e0d0-cbd5-4cf4-b160-2728026063ba",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/sAr1U35R03wQJ7gXJvHNX_yBAjkokuXg_QkLo2FNN3Q.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/sAr1U35R03wQJ7gXJvHNX_yBAjkokuXg_QkLo2FNN3Q.apk"
+  },
+  "fingerprint": {
+    "id": "01a09dbe-6632-79b5-903b-47d9f2bb3099",
+    "hash": "b0f2392fa9570c2e5ffe97b70a466c15798acf81"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/a575e0d0-cbd5-4cf4-b160-2728026063ba/2026-09-14T02%3A28%3A21Z-2ef57165-9690-4296-b193-95c8f7f56689.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T023753Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=2249b85dd30b022cc27cf091a7aaec8924bb439e7152fb6aa3c3faa2c9b49a667001c40ac9b9bc85ae0c54c2248342d445faa02e6cf58b59eb2b1dcacd6908292273068289f6c322a240906d393e855161c9a49836fbf9a028fe439cb927e7adeb248f4467922042bc67ec1042c7a4ce5e1734ff75c7a750e3681cbe493f776df12b161063c3c18abf9133272200996a5f7baa332b81cdacc2fe48b99a8622827ac3965e32c1b2afc29a19a8d539063232db1729ad9158bb4a9a290a5bc698d3e396a75d300a3b05e9e3f99df95ee36d47f0fcc430bc3418cd341c8198651c7670dc4d02a41225f6ac0869fa2e7513e660811037ac687630a35ba0b7a9cb09be"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.39",
+  "appBuildVersion": "39",
+  "gitCommitHash": "85bd98be52f328e3dc3ea5e1b73d8e9c061fa3ef",
+  "gitCommitMessage": "Checkpoint: code 38의 실제 Android 종료 원인은 `ExponentImagePicker` native module 등록 누락으로 기록했다. Expo SDK 54 기준으로 expo-image-picker 17.0.11, expo-location 19.0.8, expo-task-manager 14.0.9로 package 및 lockfile을 정렬했다. autolinking resolve와 생성 ExpoModulesPackageList에서 `expo.modules.imagepicker.ImagePickerModule` / `ImagePickerModule.class` 등록을 확인했다. work-report는 ImagePicker 최상위 import를 사진 action 시점 dynamic import로 바꾸고, native module·권한·카메라·앨범 실패가 점검표 route 종료로 번지지 않도록 오류 안내를 추가했다. version 1.1.39 / Android code 39 / iOS build 39, package `com.futureenergy.heatingcare` 및 image-picker config plugin을 보존했다. ImagePicker 계약 8 PASS, review 화면 계약 7 PASS, isolated review API 6 PASS, server bundle PASS. 전체 TypeScript는 기존 88 오류가 남아 무오류 주장하지 않는다. Android 실기기와 새 APK DEX 등록은 아직 미검증이다. 운영 게시·홈페이지 견적/단가·운영 고객/SMS·TestFlight 제출은 보류했다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-14T02:28:16.022Z",
+  "updatedAt": "2026-09-14T02:46:28.955Z",
+  "completedAt": "2026-09-14T02:46:28.788Z",
+  "expirationDate": "2026-09-28T02:28:16.044Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 5055,
+    "buildQueueTime": 24519,
+    "buildDuration": 1063192
+  }
+}

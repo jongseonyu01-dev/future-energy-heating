@@ -1,0 +1,6 @@
+imagepicker_screen_contract_exit=0
+review_workflow_screen_contract_exit=0
+isolated_review_api_exit=0
+server_build_exit=0
+expo_install_check_exit=1
+target_module_warning_exit=0

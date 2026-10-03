@@ -1,0 +1,600 @@
+[
+  {
+    "id": "e5d234ba-3d50-4807-9d3b-5765e59772cd",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/hbdpoFu4CI1m-8cjOUACiOhpXA3MJDpeu9d_127Nyqc.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-e5d234ba-3d50-4807-9d3b-5765e59772cd-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=7dac3080ec3619ed3a32c26dc5282f337782924947943ce268342deb7b4fef32ff48b7cb11b30bf96ee5f737c7f49217771620376b9e2f42a6a8710639cdc5a6d73104a4dbd9142b7aeb4aef409b3f8b61e13c6a0a65da2964f72905187ba4bf9dbb35dbe4ce11cd44f0d2225230b0846d2c2819849bc0ac0e9eab67328d942a60a869c8454fdf12bb9639cd2b106b6259321adee406cee96bd7baad406b8478fe511819f93752cc1a3c274adcf787c08317d3fb25819f03b56b426c3ebc14c564e93ce51b27c52ede15778c12609f17d6c3635042768cb0ea4ae6ecd4da6d8027aa2878a9488a8c91d16f0ad6cea1ef6d84393662b0e7606d01acc14b2e76c6",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/hbdpoFu4CI1m-8cjOUACiOhpXA3MJDpeu9d_127Nyqc.ipa"
+    },
+    "fingerprint": {
+      "id": "01a095a7-aae2-78a6-92c0-d826e8bc621f",
+      "hash": "6e25d32c693c1a47cb0f2ab388aec7cf1e2adb99"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-34792c80-7f85-4bc8-ace9-00c137f5570c.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=2ec4b13cfca74c851fdab09388fce156c77afc49becd5f977d69e0b061eea079468d5897248512cf9ac335233c766a393c80f34be011d558cdcb5e8c324a8c2073c1df87e06b63c8dfcad9fedaef82c00287b829a2eecc19f0917b9fc15d7848f3599220abe6e8b61ecf4fb11f5615470bdd7c08ae4b22130e6af549ec8f563795ce59da1edf8ee2cb4b8ad292d474ebd3447c80685f33c57799e695962dee0d799ba35a044ae57007cbb8ee76448042d8efd960ffda11eccd1764fb9bb909d84e7cb2d7e04d4aa6ac340d02251292c174f87ccd78a6dd74e5e0adb08b32303959a674c01b24dfa5e088de9689ff12ee190cc00c9be09a99c6c9fbf9abe30b02",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-e5d234ba-3d50-4807-9d3b-5765e59772cd-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=7dac3080ec3619ed3a32c26dc5282f337782924947943ce268342deb7b4fef32ff48b7cb11b30bf96ee5f737c7f49217771620376b9e2f42a6a8710639cdc5a6d73104a4dbd9142b7aeb4aef409b3f8b61e13c6a0a65da2964f72905187ba4bf9dbb35dbe4ce11cd44f0d2225230b0846d2c2819849bc0ac0e9eab67328d942a60a869c8454fdf12bb9639cd2b106b6259321adee406cee96bd7baad406b8478fe511819f93752cc1a3c274adcf787c08317d3fb25819f03b56b426c3ebc14c564e93ce51b27c52ede15778c12609f17d6c3635042768cb0ea4ae6ecd4da6d8027aa2878a9488a8c91d16f0ad6cea1ef6d84393662b0e7606d01acc14b2e76c6"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.8",
+    "appBuildVersion": "8",
+    "gitCommitHash": "9941dbf8e7937aeec1759435598cd95b2b1702b5",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 Codex findings 보완 후보\n- 기준: d17debf2 보존, 운영 게시/홈페이지 배포/공용 단가 DB 변경 없음\n- 견적 엔진: 분배기 전용 유량밸브 29,000원 고정가, 구수 실패/삭제 상태 동기화, 디지털·아날로그·파라핀·모터 자동수량, Wi-Fi/V타입 독립 선택\n- 초안: 기사·접수 scoped key, requestId 일치 복원, 저장/보고 전 수량·단가·소계 fail-closed\n- 서버: requestId 필수, 본인 배정·고객 일치, malformed JSON/0원/총액 불일치 저장 전 차단, 본인 보고 조회 mapping\n- 검증: 엔진 11 PASS, 권한 계약 2 PASS, 서버 fail-closed 8 PASS, homepage boundary PASS, server build 및 Android/iOS Expo export PASS\n- 실제 APK/IPA 및 iPhone/Android 실기기 시험은 미실시",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T12:46:28.532Z",
+    "updatedAt": "2026-09-12T12:51:48.771Z",
+    "completedAt": "2026-09-12T12:51:48.483Z",
+    "expirationDate": "2026-10-12T12:46:28.561Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2584,
+      "buildQueueTime": 19897,
+      "buildDuration": 297470
+    }
+  },
+  {
+    "id": "6c484635-585b-4dc2-9e11-f4cd8ae59270",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/CEqWYYHHPLeUYPuLxxvrZtb3mG6oaMqhDstHXkQ2ftw.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/CEqWYYHHPLeUYPuLxxvrZtb3mG6oaMqhDstHXkQ2ftw.apk"
+    },
+    "fingerprint": {
+      "id": "019fcefe-4ebd-7f0e-a519-10494d9f6342",
+      "hash": "7ff5255bc00b18412d7641e75467a4702c87691c"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/6c484635-585b-4dc2-9e11-f4cd8ae59270/2026-09-12T12%3A22%3A31Z-0f93a3c9-dea4-4251-8761-a868158c0441.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=958bf67c1c4496139a81f9308296cc342f5b8ac5f2d6ba9a3306f177b17810167952e3fc178b016ea13e75618d925bf1be738379db3b0ac98d90b32d627312b18982ac28245688a19baa68ef2aeb939584ccf3fd197e482d5abc2660001b3388836333abbf79b337edde93f2e445504275caa910f85896357859eb374432f2b6bfdcf48582cc41ee5a67b502e20846ca3323c58917ecaf4fafd990bba5dd7253fb751f898e00d0b3cb6e30f6cc7ec75cd65dd89d10e0585b6392aa46770eb4ab6f856fd977c6c57fa018367c1a39dd06eac233d5edac3da8ed3930d5d446ee4621cd81f59fcbe2be381567cfc9eae39a475da2a1b902ea5008d8874d3387d969"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "preview",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.8",
+    "appBuildVersion": "19",
+    "gitCommitHash": "9941dbf8e7937aeec1759435598cd95b2b1702b5",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 Codex findings 보완 후보\n- 기준: d17debf2 보존, 운영 게시/홈페이지 배포/공용 단가 DB 변경 없음\n- 견적 엔진: 분배기 전용 유량밸브 29,000원 고정가, 구수 실패/삭제 상태 동기화, 디지털·아날로그·파라핀·모터 자동수량, Wi-Fi/V타입 독립 선택\n- 초안: 기사·접수 scoped key, requestId 일치 복원, 저장/보고 전 수량·단가·소계 fail-closed\n- 서버: requestId 필수, 본인 배정·고객 일치, malformed JSON/0원/총액 불일치 저장 전 차단, 본인 보고 조회 mapping\n- 검증: 엔진 11 PASS, 권한 계약 2 PASS, 서버 fail-closed 8 PASS, homepage boundary PASS, server build 및 Android/iOS Expo export PASS\n- 실제 APK/IPA 및 iPhone/Android 실기기 시험은 미실시",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T12:22:27.673Z",
+    "updatedAt": "2026-09-12T12:36:45.827Z",
+    "completedAt": "2026-09-12T12:36:45.633Z",
+    "expirationDate": "2026-09-26T12:22:27.697Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3541,
+      "buildQueueTime": 4725,
+      "buildDuration": 849694
+    }
+  },
+  {
+    "id": "6764f968-8181-40b2-964a-43259b1ef55e",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/Ze8f5Qb35hH2iY60kikkojVg3Itv7W8ObTQHVf5JUOk.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/6764f968-8181-40b2-964a-43259b1ef55e/2026-09-03T13%3A10%3A53Z-6764f968-8181-40b2-964a-43259b1ef55e-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=863e9caff0c6a876e5f3ed091974e3a13af87dc8470aeea34a6bf4fe3b27172c2e43d82d69e026c0af2aa4cdf0f5fb76d6933133dce22527e59196e7812e619402d39de5a9062ccfa9c8e6e9741de386e9b8b66398c2bf6ae22a06c667394ed6234d9dacc673337807f918c7064800836d362a774b4ac6a534a967cfdacf2f6bd997b6675049495a8ba6400e2b85c220d13b6807e80038c186160934d161ffd9b38e2aef315ee4730cd280a55663c71671aab3a6ddbb64f43ac1c41bde9a8cd6785aa01e30c211470679eda3d8104755d7bd54ad1994e5c13a91431e0ce1d60f28a929501736fec3668f6ad7a9a14663c6e455158a0ca95c1730c4292dc62516",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/Ze8f5Qb35hH2iY60kikkojVg3Itv7W8ObTQHVf5JUOk.ipa"
+    },
+    "fingerprint": {
+      "id": "01a06764-b93f-7f82-bf6f-872221a135f5",
+      "hash": "b638efb83002f72bc8eaca5034e29ac3523347a2"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/6764f968-8181-40b2-964a-43259b1ef55e/2026-09-03T13%3A10%3A53Z-6764f968-8181-40b2-964a-43259b1ef55e-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=863e9caff0c6a876e5f3ed091974e3a13af87dc8470aeea34a6bf4fe3b27172c2e43d82d69e026c0af2aa4cdf0f5fb76d6933133dce22527e59196e7812e619402d39de5a9062ccfa9c8e6e9741de386e9b8b66398c2bf6ae22a06c667394ed6234d9dacc673337807f918c7064800836d362a774b4ac6a534a967cfdacf2f6bd997b6675049495a8ba6400e2b85c220d13b6807e80038c186160934d161ffd9b38e2aef315ee4730cd280a55663c71671aab3a6ddbb64f43ac1c41bde9a8cd6785aa01e30c211470679eda3d8104755d7bd54ad1994e5c13a91431e0ce1d60f28a929501736fec3668f6ad7a9a14663c6e455158a0ca95c1730c4292dc62516",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/6764f968-8181-40b2-964a-43259b1ef55e/2026-09-03T13%3A10%3A53Z-cb3ce0a9-eb6e-4d44-af0d-55f822d21440.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=70369a75ff185c309b0c47976292917075559cf1424b66286a170ba1baff927db9aefb7df830eb7e5b4972190d01352c2a1ed856c1dd6e1911dc1dadbe4328a2b2c496496bf803261c19ec15f44dbad3daed057bca528487e801c9a9a49dcef6b1f789e89cd2d751bc9a17a10716fdd90411910007983376528c7c7c911977d787af43f04c79d031ae61b9038afa751810e012fed7fcb3e70cb9007d3bf2d57a7bc5cfeefc4bea2c74b2d96ebb41c915f1b8624c909c11cc74a467703a6213daf27e7cf883a132ce3ad7fbc3adeae3b3bd54b56d451643dd5b4f6ea4c9daf99b20f5d426c6b8acfe5674df3992828e5b10d4a1d4c2ad76aa82dfccdb76848166"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.21",
+    "appBuildVersion": "21",
+    "gitCommitHash": "9219ab5cc452ff2b3728505b076f376456e9493d",
+    "gitCommitMessage": "기사 월별 매출 앱 v1.1.21 배포 (#19)\n\n* Bump mobile release to v1.1.21 (32/21)\n\n* Update Android monthly sales release notes\n\n* Label iOS TestFlight workflow v1.1.21",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-03T13:10:49.374Z",
+    "updatedAt": "2026-09-03T13:16:04.443Z",
+    "completedAt": "2026-09-03T13:16:04.160Z",
+    "expirationDate": "2026-10-03T13:10:49.400Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3721,
+      "buildQueueTime": 19556,
+      "buildDuration": 291509
+    }
+  },
+  {
+    "id": "817a0d4b-1995-4a15-b172-d4a54197b135",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/Q1CbfnBgMRGYxZlwoyx_MGjJ2u9WchwGDKma4muufZc.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/817a0d4b-1995-4a15-b172-d4a54197b135/2026-09-03T12%3A21%3A58Z-817a0d4b-1995-4a15-b172-d4a54197b135-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=7525c2d148b33bc18217cd5ce9bd3056def81340b812cf8e1973fbc2cbb3e0761ca8812683defa9938e516437758d5620ff8b1ad4dec315093bcfa4dcd9a43c0ff91bd22b164d27538ac67d91f3c82a9cafc7cbd06bfdc1dbfa395a1f7ccebbada4e98424b64387fccbb1f6cbfdf03218f2d2af84785be0134004c0a254b52d259cf8b4fde868037cca37f4ffff6153ad60e8a63d7e2f1811afd58a381860249e7796508ea2bdfdf19fa77665fac775a84162239ad2f28226661102887181b810d6314a96ba42a3ce529127c823ca52b467f048438017083f95b229d82e26191d06ad6308586b303c5aea433d43b5767273633216b17d9983f4fef9268ae4fe2",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/Q1CbfnBgMRGYxZlwoyx_MGjJ2u9WchwGDKma4muufZc.ipa"
+    },
+    "fingerprint": {
+      "id": "01a06732-6fe0-7199-9843-40ffff312fbb",
+      "hash": "a5d575ed000224e504632044ae15d28a37dc46a7"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/817a0d4b-1995-4a15-b172-d4a54197b135/2026-09-03T12%3A21%3A58Z-817a0d4b-1995-4a15-b172-d4a54197b135-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=7525c2d148b33bc18217cd5ce9bd3056def81340b812cf8e1973fbc2cbb3e0761ca8812683defa9938e516437758d5620ff8b1ad4dec315093bcfa4dcd9a43c0ff91bd22b164d27538ac67d91f3c82a9cafc7cbd06bfdc1dbfa395a1f7ccebbada4e98424b64387fccbb1f6cbfdf03218f2d2af84785be0134004c0a254b52d259cf8b4fde868037cca37f4ffff6153ad60e8a63d7e2f1811afd58a381860249e7796508ea2bdfdf19fa77665fac775a84162239ad2f28226661102887181b810d6314a96ba42a3ce529127c823ca52b467f048438017083f95b229d82e26191d06ad6308586b303c5aea433d43b5767273633216b17d9983f4fef9268ae4fe2",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/817a0d4b-1995-4a15-b172-d4a54197b135/2026-09-03T12%3A21%3A58Z-8f8dd6bf-8f01-40f3-a1e2-0fc789b9afbb.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=896d7df81a19b5f61b429ca33886e8332a7870f116f419f3cc27b41515779b9c4b877c05dbdf1c48184fa506656aed3e6b24cbf3aae732b7d7e2b26d80d6ba623fea2cdecc3292078a7ea9aa911595acedbeac8e84cbbe8175f36c69dc994efe2cec88399abe6990eadca1556177cde7eb338f7a5bd6aa85b61082c0948daca2b47ca2ed9fed087542ae41a3a94c08a30ed0daefa872f904fc1b67f49cc4fab01eccbd01e0fdcf3a848471e0ac12cdf1a781e2075aabf5e545444934dc230a93cf700bb7461fa7768c5e827674967a81a6a3fd4a01fc8b7d9df21c611a340b17688779526b551d6a20f62ec7cd87300b59cb83e5225bced2bf9a00d08070da38"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.20",
+    "appBuildVersion": "20",
+    "gitCommitHash": "1be12c872420c923fa75241063b00ff995c4b7d0",
+    "gitCommitMessage": "모바일 월별 집계 API 타입 계약 보정 (#18)",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-03T12:19:43.450Z",
+    "updatedAt": "2026-09-03T12:27:24.484Z",
+    "completedAt": "2026-09-03T12:27:24.166Z",
+    "expirationDate": "2026-10-03T12:19:43.471Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 134676,
+      "buildQueueTime": 21153,
+      "buildDuration": 304887
+    }
+  },
+  {
+    "id": "80dada47-c9ed-4940-91a9-9ecb848188ce",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/eF9rr_3jaLs8KWsqZsElz6cks1Jq3AX-ceYdDRiHYjg.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/80dada47-c9ed-4940-91a9-9ecb848188ce/2026-09-03T12%3A15%3A58Z-80dada47-c9ed-4940-91a9-9ecb848188ce-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=937d1b0782b0ef5a4cf43c313e16f24fa8e8f0ea433beb724b393703f108b4b8da9c3dc744fae00e87bf7426f9e113f4675cb06c65e5886c203a193b2d3e8d2f66bfb231b238e07578e1df67106975a823de35886dffa1db8c9b33bda3b125f9a39ebab056b2c7ce8143766047b89ab6429238c16c711b6b53947a0cf2b445f774d7fd0b5e5d10843eca4d11c54eab5bfa5648a498d1a605f3bb3e512daabf9e035d969d1ac3f0bc7e980c7bdfc4076c77b5101cac1806ab4ed3916a3f63033f25a7b18f82f9bd4d14772939c106c4f029180dc5060071973097ab4a6e7d1b8c2e1bd88d9a2f60ec1a6839163e3be3114336a18f5f437576e8439b07a07a1d12",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/eF9rr_3jaLs8KWsqZsElz6cks1Jq3AX-ceYdDRiHYjg.ipa"
+    },
+    "fingerprint": {
+      "id": "01a06732-6fe0-7199-9843-40ffff312fbb",
+      "hash": "a5d575ed000224e504632044ae15d28a37dc46a7"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/80dada47-c9ed-4940-91a9-9ecb848188ce/2026-09-03T12%3A15%3A58Z-80dada47-c9ed-4940-91a9-9ecb848188ce-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=937d1b0782b0ef5a4cf43c313e16f24fa8e8f0ea433beb724b393703f108b4b8da9c3dc744fae00e87bf7426f9e113f4675cb06c65e5886c203a193b2d3e8d2f66bfb231b238e07578e1df67106975a823de35886dffa1db8c9b33bda3b125f9a39ebab056b2c7ce8143766047b89ab6429238c16c711b6b53947a0cf2b445f774d7fd0b5e5d10843eca4d11c54eab5bfa5648a498d1a605f3bb3e512daabf9e035d969d1ac3f0bc7e980c7bdfc4076c77b5101cac1806ab4ed3916a3f63033f25a7b18f82f9bd4d14772939c106c4f029180dc5060071973097ab4a6e7d1b8c2e1bd88d9a2f60ec1a6839163e3be3114336a18f5f437576e8439b07a07a1d12",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/80dada47-c9ed-4940-91a9-9ecb848188ce/2026-09-03T12%3A15%3A58Z-91fb2819-5dbe-4d17-a41d-cef025a60c02.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=55aaa2c8b1fbd2644520702b1f73c93a203eb5c75816c5eb6c3f51571602e287e465b8b401a02d023408625d820ece79b0c5f2bf5b917a6f667fc31e930aa150ecc433f5c2204e90b3572372c0207c8b7a8185b292761575c78d6f1030f78ed41c6a7c9961571acd90f5ca18e00b84f3b012ad776c134970a1fcdb7769fb4611b2ad3de242ac1f038a9f101c233af72cd9db6d85b317a91ce6897f86b43ecdf737b09553f12a2cc144f8241a69fe69c994101a8ed5eb389639a5a1adddefbe8ad75395ebf636673af2ff403f2d446f9d96955d4305b9eb25908391d602625850036e983085fb5a6e19e3e8c2df54a89b35880cd885ae591c3aa22899887d2c79"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.20",
+    "appBuildVersion": "20",
+    "gitCommitHash": "58dab754771887b27e5e2f4ab287d79b8cecaf29",
+    "gitCommitMessage": "기사앱 월별 완료보고 금액 자동 합산 표시 (#17)\n\n* Show technician current-month completed payment totals\n\n* Test cross-platform technician monthly summary",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-03T12:15:53.789Z",
+    "updatedAt": "2026-09-03T12:21:57.796Z",
+    "completedAt": "2026-09-03T12:21:57.522Z",
+    "expirationDate": "2026-10-03T12:15:53.815Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4328,
+      "buildQueueTime": 34231,
+      "buildDuration": 325174
+    }
+  },
+  {
+    "id": "f043363f-a2a5-4f79-a886-d74d407d6082",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/PSYMZOAOCQNWrgQJbQTTVVDHPKZoLRtwJXpRMuyPzLY.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/f043363f-a2a5-4f79-a886-d74d407d6082/2026-08-27T07%3A23%3A00Z-f043363f-a2a5-4f79-a886-d74d407d6082-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=348f810906de45ae5da0ce9bb9b721a481a13c79b7cb6560efede1f117d790f0314c72d62850df30915b892f8a4f73a3d656e3552257a9750a90c47fad6b3893125547e1900f1c2d4ca4a653559c0d517e1a65e9262c49341fa59fe45c04f9caf804190e86655f92dc3c6e25a0f7afae8d679b880389bdb7b1b4e085dde2c90b2aa74ea90eefaa64f09eb168a9d21d4180ba3e468a15b1ca9e5df077f4057d046880885c28a84760c166f59d03c55432e175bc02045d62f380db0d3813d3e97f2ee34bc19b7b69deb7034cd343e04bb99dd9ccb7a265d37ba784078b2467c38fde5d6d57386e96deaf1f81d374b6ced9b8e17cd0ea35a6b0dcece880254aa5ec",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/PSYMZOAOCQNWrgQJbQTTVVDHPKZoLRtwJXpRMuyPzLY.ipa"
+    },
+    "fingerprint": {
+      "id": "01a04219-b754-7070-9794-07a5fb85296d",
+      "hash": "49639d26d9df5ac3ddc8bba479054c96ba051275"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/f043363f-a2a5-4f79-a886-d74d407d6082/2026-08-27T07%3A23%3A00Z-541e2274-0375-4cb8-a5e0-164612971b09.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=2569dd46cbc516bb18cd6f9e5f179ead06e9c5a9a5741fa41ee57bf64d14319348fb98f03954ae1c86140e6af261fc8c3d2df8b8f71e405f516bf92bc0d2ca9262b9d23ac187883fafabdaeee0e6b632f00e37e6bc3a28d50580fb8977a58e151747b146bad02c3c4f930feab3351804e4af60247f8f37d725fa70b40a54a5d059cbe4f73aa563c11e70820a13fa5ea003a42bcb3a3292909a585112440cf3dd73edd3a18b0e2e5328f494b85dab26a51c8292361fc15805729c24b72158ceb0fc1b2003fc990a612e9e0340f19a1adcc6ef24be2be0ad3b5720a4d716629cde7c14474a487cfeed7a4ae57db8068f9216c1f14af55326daaa9b972e96448b93",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/f043363f-a2a5-4f79-a886-d74d407d6082/2026-08-27T07%3A23%3A00Z-f043363f-a2a5-4f79-a886-d74d407d6082-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=348f810906de45ae5da0ce9bb9b721a481a13c79b7cb6560efede1f117d790f0314c72d62850df30915b892f8a4f73a3d656e3552257a9750a90c47fad6b3893125547e1900f1c2d4ca4a653559c0d517e1a65e9262c49341fa59fe45c04f9caf804190e86655f92dc3c6e25a0f7afae8d679b880389bdb7b1b4e085dde2c90b2aa74ea90eefaa64f09eb168a9d21d4180ba3e468a15b1ca9e5df077f4057d046880885c28a84760c166f59d03c55432e175bc02045d62f380db0d3813d3e97f2ee34bc19b7b69deb7034cd343e04bb99dd9ccb7a265d37ba784078b2467c38fde5d6d57386e96deaf1f81d374b6ced9b8e17cd0ea35a6b0dcece880254aa5ec"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.19",
+    "appBuildVersion": "19",
+    "gitCommitHash": "139f3c9c4d4570a954e20631b9bc52e82546f23d",
+    "gitCommitMessage": "기사 도착 후 현장 업무공간 추가 (#14)\n\n도착 후 현장 점검표·견적 작성·본사 송출 업무공간을 제공하고, 작업보고의 사진·자재·메모·결제를 운영 웹 일일보고와 연동합니다. iPhone 위치세션 복구와 앱 버전 1.1.19를 포함하며 기존 전화·내비게이션·별도 견적 기능은 유지합니다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-27T07:22:56.680Z",
+    "updatedAt": "2026-08-27T07:29:53.084Z",
+    "completedAt": "2026-08-27T07:29:52.796Z",
+    "expirationDate": "2026-09-26T07:22:56.714Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2544,
+      "buildQueueTime": 21619,
+      "buildDuration": 391953
+    }
+  },
+  {
+    "id": "4bddc4ec-dffe-4dd4-96bd-672765cce44a",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/sYLyeB8FqzXdLc-MFQltIVExCEA64qyjVFeEznB670k.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/4bddc4ec-dffe-4dd4-96bd-672765cce44a/2026-08-23T23%3A37%3A02Z-4bddc4ec-dffe-4dd4-96bd-672765cce44a-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=884f17ea6a0de643f8be1983f0c1e9a8952b33b8ca2f22b41725d9879bd295d3cbb92d013e2da0f3022152b9d75d7da0d463f9031d7da9f872c9d2c786c9d2651a7e525ccfdf62b969d8de7f172dd4dc10808c314c50da420eed5489347afab51ece8b4ddbd7c3732d5859b7af0f9c5abe5af03e0423ad80316760b9f4743e128be9a5a6aeba2ffc200d565aefb4596b83892d42f721be05a9003d8793cc39f7908116e9a6c04dc859cd1d0e82d5611fc33594da3cc5b644fae84b8f6875bcdef02869fb9ee5da3f959a6e657f72673e2e6f6905828f239908ce6687032f30f5fb1131151e5ebdd4a7edc7bfb4c23e98e1cbf97662e1e5384b739dbdffc7a338",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/sYLyeB8FqzXdLc-MFQltIVExCEA64qyjVFeEznB670k.ipa"
+    },
+    "fingerprint": {
+      "id": "01a030fc-020e-782c-9b2e-982731613ada",
+      "hash": "0eb7fbb1b2210f27f4b5d4a276bb2a02c1c53caf"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/4bddc4ec-dffe-4dd4-96bd-672765cce44a/2026-08-23T23%3A37%3A02Z-4bddc4ec-dffe-4dd4-96bd-672765cce44a-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=884f17ea6a0de643f8be1983f0c1e9a8952b33b8ca2f22b41725d9879bd295d3cbb92d013e2da0f3022152b9d75d7da0d463f9031d7da9f872c9d2c786c9d2651a7e525ccfdf62b969d8de7f172dd4dc10808c314c50da420eed5489347afab51ece8b4ddbd7c3732d5859b7af0f9c5abe5af03e0423ad80316760b9f4743e128be9a5a6aeba2ffc200d565aefb4596b83892d42f721be05a9003d8793cc39f7908116e9a6c04dc859cd1d0e82d5611fc33594da3cc5b644fae84b8f6875bcdef02869fb9ee5da3f959a6e657f72673e2e6f6905828f239908ce6687032f30f5fb1131151e5ebdd4a7edc7bfb4c23e98e1cbf97662e1e5384b739dbdffc7a338",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/4bddc4ec-dffe-4dd4-96bd-672765cce44a/2026-08-23T23%3A37%3A02Z-b06854b0-b4e7-4862-9a68-41d7c5482a0e.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=40bb71043cf111c316d9102f80c7fb8723cbcbd3496616403a2e37421f7a9701e92c5d09744d7fadcf538fbbdda9c2d42d2486892b9cdaad6695a897824f5be9b8157aa9151661e15aacc2d995e95d5330888d24f35445b9c83a00721d9818638ea6689e6bc380c27610e4537b01688bd93a75244b4d467a94edb20114252fb67be2cbf085794381de11008ab3e2fd4a010276779859ba2fb721b6b39829672bcd4b3925aacebcf5276f5ae5f6e85cd5d59531ed6df0ff04aa4de05046f0cd2d4bc62a58affa5bfb95869253bab91d7311c0a841755ddbfc7328c922d12d7c7fd838b014b8e69baf9091b6347b27c3361e144894ae7762d5e6e6d876d039bc70"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.18",
+    "appBuildVersion": "18",
+    "gitCommitHash": "b1e05bb6634bb78de1e0b1e1a382c0eb1f4359c2",
+    "gitCommitMessage": "기사앱 작업목록 출발 버튼·기존 아이디 로그인 복구\n\nv1.1.18(29): 작업목록에서 출발·실시간 위치공유를 시작할 수 있게 하고 기존 영문·숫자 기사 아이디 로그인을 지원합니다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-23T23:36:57.054Z",
+    "updatedAt": "2026-08-23T23:42:17.365Z",
+    "completedAt": "2026-08-23T23:42:17.038Z",
+    "expirationDate": "2026-09-22T23:36:57.091Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 5040,
+      "buildQueueTime": 7250,
+      "buildDuration": 307694
+    }
+  },
+  {
+    "id": "cdc3d345-001d-4844-b3d5-edab379dabf2",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/mf9JxrGxuaZPcgBTYp63i6cXSOVU7TFs5yu7qBNaIME.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/cdc3d345-001d-4844-b3d5-edab379dabf2/2026-08-23T01%3A40%3A52Z-cdc3d345-001d-4844-b3d5-edab379dabf2-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=4c101e09b40c5a0dc07ba4f893edd021065d3dfc115a767c14a72a9f471d9f0cea25f8ac5ba784110491a5e313b6bbec932ccc413aabe8c776ef97702ccc3f7a4d0c1d3a4ab9b9a2d98442e67d4c65e81ce9c0afa46fdb6243cfc55bde38a0ebb4f514b2ed355cc43ec19007cda3a0dea7708584b8c947f5bd9cf51847438f4d5c27138aa092e08f53d315bc7eee8df7c02bfb05bf128c6163ee4912a127f049ab51e2f992ff30800aa4a2a118504e9c0f93e2a9ce7a17102312d715a8d6360c80a894d22cdf3bbe902f4d29ed74d421a0ba2819faf945945ad0254573c8a38ea07d8c87b624654834556d43e62cf9922c33c872008fe2b9935788399424d387",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/mf9JxrGxuaZPcgBTYp63i6cXSOVU7TFs5yu7qBNaIME.ipa"
+    },
+    "fingerprint": {
+      "id": "01a02c47-1491-78df-9db7-82bc2226e58d",
+      "hash": "ac5f6b69e6a5f3ca580edac1970248e8c26c3299"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/cdc3d345-001d-4844-b3d5-edab379dabf2/2026-08-23T01%3A40%3A52Z-cd298239-9525-417c-a934-fb3bbae0ddfd.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=101a4cc06c7016987a74583a646809301f3161408e74ff8ba757e401c9b7ca99c12ec078df24f8017412ac603bcbd0fca9e6cc98b8cdbfdda79a5b40765d71b5fee36d9452a9259d4788a401dfcdb5eeae50a993021efd6a07f3fd9c5054202af3fcb79863bfdad46b7997f250c9624290a3183c22a688858b8fd75b55ee68dc2b3e9b680bfefcaf2d3826638ffa056ef20f92ce532192385999da23495999a5b2c2758c34b91a76e098b46750228f4fd19fbb858237910ac948ab8f19f623f12eaf4ad4649f52f3e378b9aa7ad87d2c10597274376955a27d7f369197bd606da8f836669b7b5ea9758b3ed932c809fdb97062ff6114892c5486387cc5d554f1",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/cdc3d345-001d-4844-b3d5-edab379dabf2/2026-08-23T01%3A40%3A52Z-cdc3d345-001d-4844-b3d5-edab379dabf2-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=4c101e09b40c5a0dc07ba4f893edd021065d3dfc115a767c14a72a9f471d9f0cea25f8ac5ba784110491a5e313b6bbec932ccc413aabe8c776ef97702ccc3f7a4d0c1d3a4ab9b9a2d98442e67d4c65e81ce9c0afa46fdb6243cfc55bde38a0ebb4f514b2ed355cc43ec19007cda3a0dea7708584b8c947f5bd9cf51847438f4d5c27138aa092e08f53d315bc7eee8df7c02bfb05bf128c6163ee4912a127f049ab51e2f992ff30800aa4a2a118504e9c0f93e2a9ce7a17102312d715a8d6360c80a894d22cdf3bbe902f4d29ed74d421a0ba2819faf945945ad0254573c8a38ea07d8c87b624654834556d43e62cf9922c33c872008fe2b9935788399424d387"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.17",
+    "appBuildVersion": "17",
+    "gitCommitHash": "fa158acad69d72924f53559b719b5cce0f792d20",
+    "gitCommitMessage": "기사 일정 0건 표시 복구 (v1.1.17)\n\n인증 API의 www 리다이렉트로 Authorization 헤더가 유실되던 문제를 수정하고 기사앱을 1.1.17(28)로 배포합니다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-23T01:40:50.930Z",
+    "updatedAt": "2026-08-23T01:45:57.983Z",
+    "completedAt": "2026-08-23T01:45:57.620Z",
+    "expirationDate": "2026-09-22T01:40:50.954Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 1279,
+      "buildQueueTime": 20914,
+      "buildDuration": 284497
+    }
+  },
+  {
+    "id": "9188eb62-56f5-4cbf-84d5-f733097346ca",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/RUO335cnMc7ikrNqXJbqRnVxb3Y0oHTLJJj0AZl_7hM.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9188eb62-56f5-4cbf-84d5-f733097346ca/2026-08-22T11%3A43%3A52Z-9188eb62-56f5-4cbf-84d5-f733097346ca-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=8a02aa682e796771a94f1ca2410bf26b1fa470d3a2017f079b742c2daa522ccc85cc51e47aa0318039d3a5c73964fc5af0e0f5e01346a94f031b68b1eef343a08f0ab4c19d4a7bd68d6f5616569ea7208083a8573ae7d153922b8b109cea7f4f805567a9616f9472e06579bb6c890fa1b3f7e20ecbd9ee56de399cbb9786a4516c4de57f1102f93a3c1dc0dc0b38d1b6d4277b97b0b4e9cb25f2473248405121d151ef62dadb4a7319c6345c2a070110b6011b04ccb48c0f853e0e106063e106a4813b0b3c56c8f2213cfcd4a3fc7e4112c014aeebe25ddecfa921e1657c8ff8ccd2479a67ec7746fbe88bfc6d330c45231e8797dd6b1266e95c06a90053dd32",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/RUO335cnMc7ikrNqXJbqRnVxb3Y0oHTLJJj0AZl_7hM.ipa"
+    },
+    "fingerprint": {
+      "id": "01a02948-c24a-7679-9daa-2952106793c1",
+      "hash": "fe185fd5ed0d559110cb9bc13693d5df43f910db"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9188eb62-56f5-4cbf-84d5-f733097346ca/2026-08-22T11%3A43%3A52Z-9188eb62-56f5-4cbf-84d5-f733097346ca-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=8a02aa682e796771a94f1ca2410bf26b1fa470d3a2017f079b742c2daa522ccc85cc51e47aa0318039d3a5c73964fc5af0e0f5e01346a94f031b68b1eef343a08f0ab4c19d4a7bd68d6f5616569ea7208083a8573ae7d153922b8b109cea7f4f805567a9616f9472e06579bb6c890fa1b3f7e20ecbd9ee56de399cbb9786a4516c4de57f1102f93a3c1dc0dc0b38d1b6d4277b97b0b4e9cb25f2473248405121d151ef62dadb4a7319c6345c2a070110b6011b04ccb48c0f853e0e106063e106a4813b0b3c56c8f2213cfcd4a3fc7e4112c014aeebe25ddecfa921e1657c8ff8ccd2479a67ec7746fbe88bfc6d330c45231e8797dd6b1266e95c06a90053dd32",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/9188eb62-56f5-4cbf-84d5-f733097346ca/2026-08-22T11%3A43%3A52Z-fd3bacdf-cf16-4d01-9cfa-c734d930ed39.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=1adc0b7d3fc2b16eb8b426ec61fb00caad930d100c3459249b7e76afe9a9a44a4ff4cc6c71294be008bd8323a1c9765f1c30e6c6899a7c656b5d187ed406c2261837da2bb965944dc2a9b39eeaf0ae0b81f355fd6f09d02b45d747a12d366065fe73d7d7688278b01bd681d024c582bf51b501dc705559b63d35ceb06039cccc965b34af4a83397280ecf636925117b3446f6d10d460d718d2db82c3d29ee80983e1f2752f5f9acbd8a28177dbfe3feffc98ee55d32e3338207e3313988669ef08061c061f970b0753fbcad7072387971169fcada13747c74a47776967e14c35043ed5196eab947e241e7eb6417cfbf89a0e2f07eb50ab23a91ee2ac6b43dc61"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.16",
+    "appBuildVersion": "16",
+    "gitCommitHash": "c0c2af0466da94df674278e1701f0bee24af75d9",
+    "gitCommitMessage": "기사앱 전화번호 로그인 및 v1.1.16 배포\n\n* feat: use phone-only technician login\n\n* fix: verify restored technician sessions\n\n* chore: bump app to 1.1.16\n\n* ci: build latest APK for all app sources\n\n* ci: label TestFlight 1.1.16",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-22T11:43:49.289Z",
+    "updatedAt": "2026-08-22T11:48:44.978Z",
+    "completedAt": "2026-08-22T11:48:44.638Z",
+    "expirationDate": "2026-09-21T11:43:49.313Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2953,
+      "buildQueueTime": 7906,
+      "buildDuration": 284490
+    }
+  },
+  {
+    "id": "30183596-9e7d-4031-be2e-2e5cab1e6bc8",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/3aVl4Qr_weM4YIKwxUoLY6VwD-QYv7WLff7ZMO6IDDo.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/30183596-9e7d-4031-be2e-2e5cab1e6bc8/2026-08-22T09%3A50%3A43Z-30183596-9e7d-4031-be2e-2e5cab1e6bc8-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=03e98a63e464dd664552cb4037aec94edfd82ea0429889254e50ab1536f78673f23ec19c88dbbc700256efbf30883107ce50dcbf55e104020bb9bfc28a79b8b60370d256544b3f414df42da0934248c1828861e9fb3a0419302a893fd1091d848dd8d31bfef296ba767eb877826081768663b689c477af1812659bd885cde3f0570c3cb8a028d73a5a3af4e627d74bdd014a10e16501f2978089f5ebc6a009d59c7c1f5e5e330c843c42e7860edfe8be2b19fb2125bb428b2044ce4c2cb9edc7ee2e987dff0e55a9772ba0d271b01fd70bf51b1e8521ad94ab25a628dffdcbb67e47f2135a2fc81c5d606f70f573219bc90e2c90861b868a993723585cd0ee45",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/3aVl4Qr_weM4YIKwxUoLY6VwD-QYv7WLff7ZMO6IDDo.ipa"
+    },
+    "fingerprint": {
+      "id": "01a028e1-30a2-7117-a37c-c07fe96ac3d0",
+      "hash": "c77ef55e32e60ba32c758cf3e6a6b98649a04c13"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/30183596-9e7d-4031-be2e-2e5cab1e6bc8/2026-08-22T09%3A50%3A43Z-30183596-9e7d-4031-be2e-2e5cab1e6bc8-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=03e98a63e464dd664552cb4037aec94edfd82ea0429889254e50ab1536f78673f23ec19c88dbbc700256efbf30883107ce50dcbf55e104020bb9bfc28a79b8b60370d256544b3f414df42da0934248c1828861e9fb3a0419302a893fd1091d848dd8d31bfef296ba767eb877826081768663b689c477af1812659bd885cde3f0570c3cb8a028d73a5a3af4e627d74bdd014a10e16501f2978089f5ebc6a009d59c7c1f5e5e330c843c42e7860edfe8be2b19fb2125bb428b2044ce4c2cb9edc7ee2e987dff0e55a9772ba0d271b01fd70bf51b1e8521ad94ab25a628dffdcbb67e47f2135a2fc81c5d606f70f573219bc90e2c90861b868a993723585cd0ee45",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/30183596-9e7d-4031-be2e-2e5cab1e6bc8/2026-08-22T09%3A50%3A43Z-d147e9fb-d6ac-4916-9308-f7c4480acda4.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=1a80191a2c008ff20e3d8b9f7deb770a3100c5c1e4b2fedbb83e07124b80da8d680134cf2d0ce710622b72bc2779d1ee17c6f72681e06bfaf40bc7579bbb725b90a380689f13b70601d2d96f72ee8223cdbcf25db64cca432def5bb02e3e69205d686b2300765639c71fa809ff354d79f6e4beafb4de320d6c16189da708d6f13453f643538df1bb72c63e562603fc99cf072cf8b06ef89828aa5c9339fd206509655c2a00207e76c226a2e865b589fe3578def4cd7d8825cdd38409cc3cb056af1fb5ca514b476406bbabb5c87dec7e0daa1d1561ac15c7a40356579fbbf38a8e37ab1f1df6238a90326c32a1e3fa9533ca0c25eaf13100d61ea23f0dc62295"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.15",
+    "appBuildVersion": "15",
+    "gitCommitHash": "f54bd1c3d48c7092784978f0fa9e91674926b9f2",
+    "gitCommitMessage": "기사 앱 휴대폰 계정·실명 가입 v1.1.15 (#8)\n\n* Use verified phone accounts and real names for technician signup\n\n* Bump mobile app to 1.1.15\n\n* Label iOS TestFlight workflow for 1.1.15",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-22T09:50:41.782Z",
+    "updatedAt": "2026-08-22T09:55:15.917Z",
+    "completedAt": "2026-08-22T09:55:15.578Z",
+    "expirationDate": "2026-09-21T09:50:41.817Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 473,
+      "buildQueueTime": 6756,
+      "buildDuration": 266567
+    }
+  },
+  {
+    "id": "ba73a88d-dd5f-4c90-b5ec-9823e3020ff4",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/A5GQSgG45DEj-Fy7szZyHNVEIL8cLD214IKB63bbsEQ.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ba73a88d-dd5f-4c90-b5ec-9823e3020ff4/2026-08-22T05%3A36%3A17Z-ba73a88d-dd5f-4c90-b5ec-9823e3020ff4-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5415e20d7370f72bb899b75150823e2b7b3a86eb82b774334d8f1153f728fa4b8fb09c33d213ea6b806292d93cbe4460bf75b8111129854501e34c549b6b64f5cb2ad538fd797d6ebda08358a4075d4a21863dc78060a4da5736dfa354b9b3eadd30ce8ba6d69c24d48873754325a4474d53e7a45988faf7f5e1645a2092610f7c93273f39d80e30673cd9b991536d611471d87eecba15d850d7a317ed9da6a1676c6305bc8ea97e56c7b1620c0a580ad001b92d843bdc6a6ec12b067618aaf41e62246d27d65fca2e0e4c2362d3b5b933dab73dc2f2dfe6cf5d226c748ea02cb836b80e8935bf6004195563f05a3ad6ae0e67fbacecccc02600cca4e44f805b",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/A5GQSgG45DEj-Fy7szZyHNVEIL8cLD214IKB63bbsEQ.ipa"
+    },
+    "fingerprint": {
+      "id": "01a027f8-37f5-7619-b0d9-e69cf79faac6",
+      "hash": "ec6a76056eeb45e0e67801779514d92e8e8ce18b"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ba73a88d-dd5f-4c90-b5ec-9823e3020ff4/2026-08-22T05%3A36%3A17Z-b856f1f1-89fe-4e2a-8fbb-b43377a73df9.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=02b26d8b8254f6ebbfed24ed1a723a6fe3d99884ba83ec3280489896cefb01642e3c6ac599bd1aaec3f4c2750a9320c11aaadd78ad5707563adeb065854cc7431c77bdd5cb513375ca0a27f0005db68e1c8e68f23935635c4bc392dcb47d309b7c211ac3caf283601f21f50347635e06097cda296d9fd2b150a92ffa151d26787fcea315c1c876a96f84e4d3ed4145ba43e036f2be158e3c6d8a8f7f57a9716463ca32f32fe6b2df7693ef7b91f644d181f4c2678faea4a82c936152e2cc08ee8118f7f93cdaf8312f631395298ba3e6bedf17237ad15ef7830000294507f21d5e4f1b94d7c18e9cc693ae6b183bfaf9603149d44db435963b3fcccb1e88372f",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ba73a88d-dd5f-4c90-b5ec-9823e3020ff4/2026-08-22T05%3A36%3A17Z-ba73a88d-dd5f-4c90-b5ec-9823e3020ff4-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5415e20d7370f72bb899b75150823e2b7b3a86eb82b774334d8f1153f728fa4b8fb09c33d213ea6b806292d93cbe4460bf75b8111129854501e34c549b6b64f5cb2ad538fd797d6ebda08358a4075d4a21863dc78060a4da5736dfa354b9b3eadd30ce8ba6d69c24d48873754325a4474d53e7a45988faf7f5e1645a2092610f7c93273f39d80e30673cd9b991536d611471d87eecba15d850d7a317ed9da6a1676c6305bc8ea97e56c7b1620c0a580ad001b92d843bdc6a6ec12b067618aaf41e62246d27d65fca2e0e4c2362d3b5b933dab73dc2f2dfe6cf5d226c748ea02cb836b80e8935bf6004195563f05a3ad6ae0e67fbacecccc02600cca4e44f805b"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.14",
+    "appBuildVersion": "14",
+    "gitCommitHash": "a27c6da5fc5888a4716ded56dc5ec1bfc5d88b1f",
+    "gitCommitMessage": "기사 앱 가입·작업·견적 흐름 개선\n\n기사 앱 휴대폰 인증 가입, 신규 세션 계약, 작업·견적 조회 호환성, Android/iOS 빌드 설정을 업데이트합니다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-22T05:36:13.775Z",
+    "updatedAt": "2026-08-22T05:40:57.073Z",
+    "completedAt": "2026-08-22T05:40:56.733Z",
+    "expirationDate": "2026-09-21T05:36:13.803Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3385,
+      "buildQueueTime": 7437,
+      "buildDuration": 272136
+    }
+  },
+  {
+    "id": "22d2fee6-a35e-45e5-8a58-825b6ac9eb34",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/6H7okcEfFepNlgnq5uIafRqilkQ9SG06pwdnDob6tZs.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/22d2fee6-a35e-45e5-8a58-825b6ac9eb34/2026-08-21T10%3A12%3A24Z-22d2fee6-a35e-45e5-8a58-825b6ac9eb34-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5fadc144ddf75f75c32013e206636d305c11464544ec17b61759f20f55355f1dc1ff43f17283004c01f5b61340c21affed7dc0fdd4c5e3b652214a7ee825d91e836dceabe5ff789552d14971bdf3b83b2d5c8db7ab1c8b4bac52ca7eb87ee8de42fdbd62651e529de8e973e8db5ca487e8c83f950623a2d62c0852c41abdd0a19e304718393943c634b4f5bc33fd240f59f6ecc1b56d30f6dd8c9d3a29492a9e2153b6ee4ac06f3f2168e5bf951ffee28a352294db59c03d5e0d62b2530b98b9ceef0bebf0fe26d09d7b6eb220fab8af5c53ade8153de18be4606802be2540f7f07d40cbd2be0e65cb999dd882a53ebbfaef3273ad59d02f571d7021fc333b89",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/6H7okcEfFepNlgnq5uIafRqilkQ9SG06pwdnDob6tZs.ipa"
+    },
+    "fingerprint": {
+      "id": "01a023ce-a97f-7963-adc6-7d90ab613228",
+      "hash": "30b4ce4bfd4a610aa3094b0aaa45175f07bf6bc4"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/22d2fee6-a35e-45e5-8a58-825b6ac9eb34/2026-08-21T10%3A12%3A24Z-22d2fee6-a35e-45e5-8a58-825b6ac9eb34-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5fadc144ddf75f75c32013e206636d305c11464544ec17b61759f20f55355f1dc1ff43f17283004c01f5b61340c21affed7dc0fdd4c5e3b652214a7ee825d91e836dceabe5ff789552d14971bdf3b83b2d5c8db7ab1c8b4bac52ca7eb87ee8de42fdbd62651e529de8e973e8db5ca487e8c83f950623a2d62c0852c41abdd0a19e304718393943c634b4f5bc33fd240f59f6ecc1b56d30f6dd8c9d3a29492a9e2153b6ee4ac06f3f2168e5bf951ffee28a352294db59c03d5e0d62b2530b98b9ceef0bebf0fe26d09d7b6eb220fab8af5c53ade8153de18be4606802be2540f7f07d40cbd2be0e65cb999dd882a53ebbfaef3273ad59d02f571d7021fc333b89",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/22d2fee6-a35e-45e5-8a58-825b6ac9eb34/2026-08-21T10%3A12%3A24Z-768ffef9-965d-44cb-a913-ad0214822f20.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T165741Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=09740d33749ec5015fd828348f3e29ea6a3464e94720acc065741d0a1de4ad4eecf525239d4448f307a7a97426f70908a789eb50bf126becf8bbe49ddc0f4d222378eaa8a99d1b54b342fe4e915e85b320bc94a7d05c6747f94b6761de53be6dfb76c4b6e965ea6b96cfd68e470ec706ed9bcbe81b2ebb0403c47c650fc9426bdd662430e332c14eca88dd12b173d53e5f883378f3d99a321dc1ae9a7dfef1c5cdd40cae203e3ba12a78c4a1b09425b60b9b38e052e99a94fbd50bc18d67f2be2bd415e7ce62fbebac4e73f828f7283ba45d1d1d02e637b60539b8564ca5e9c2391b6466399cdab3993f51e2f75a01dbafe9cbe2238998654da54708a2ec63a2"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "testflight",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.13",
+    "appBuildVersion": "13",
+    "gitCommitHash": "42d09ee5425a88427448ea5a8e86d8a46d3c5ad4",
+    "gitCommitMessage": "Add iPhone TestFlight build and photo compatibility (#3)\n\nBuild and submit the existing iOS app to TestFlight while keeping Android APK updates platform-specific and requesting camera/photo permissions per action.",
+    "priority": "NORMAL",
+    "createdAt": "2026-08-21T10:12:21.457Z",
+    "updatedAt": "2026-08-21T10:17:55.607Z",
+    "completedAt": "2026-08-21T10:17:55.199Z",
+    "expirationDate": "2026-09-20T10:12:21.499Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 829,
+      "buildQueueTime": 8768,
+      "buildDuration": 324145
+    }
+  }
+]

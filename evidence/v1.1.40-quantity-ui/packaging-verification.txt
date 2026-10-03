@@ -1,0 +1,1 @@
+PASS code40 APK-only ZIP integrity, SHA256SUMS, and quantity/ImagePicker evidence are present

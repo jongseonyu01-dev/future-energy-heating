@@ -1,0 +1,592 @@
+import express, { type Express, type Request, type Response } from "express";
+import path from "path";
+import fs from "fs";
+import {
+  getAllRepairRequests,
+  getAllFlowRateSettings,
+  getFlowRateSettingBySensorId,
+  upsertFlowRateSetting,
+  updateFlowRateSetting,
+  updateFlowRateLastData,
+  deleteFlowRateSetting,
+  createFlowRateLog,
+  getFlowRateLogs,
+  getRecentFlowRateLogs,
+  getAppRolesByRole,
+  getBranchById,
+} from "./db";
+import { sendSms, buildFlowRateAlertMessage, buildTechnicianDepartedMessage } from "./notification";
+import {
+  createLocationSession,
+  getLocationSessionByToken,
+  updateLocationSessionPosition,
+  stopLocationSession,
+  markLocationSessionSmsSent,
+  getActiveLocationSessions,
+  getActiveLocationSessionsByBranch,
+  getLocationSessionByRequestId,
+  expireOldLocationSessions,
+  getLocationConsent,
+  createLocationConsent,
+} from "./db";
+
+/**
+ * public 디렉터리 위치 탐색.
+ * 로컬(Node)에서는 process.cwd()/public 이지만,
+ * Vercel 서버리스 등 cwd가 다른 환경을 위해 여러 후보를 순회한다.
+ * PUBLIC_DIR_OVERRIDE 환경변수로 강제 지정도 가능.
+ */
+function resolvePublicDir(): string {
+  // ESM 번들에서 __dirname이 없을 수 있으므로 안전하게 참조
+  let dirName = "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dirName = typeof __dirname !== "undefined" ? __dirname : "";
+  } catch {
+    dirName = "";
+  }
+  const candidates = [
+    process.env.PUBLIC_DIR_OVERRIDE,
+    path.join(process.cwd(), "public"),
+    path.join(process.cwd(), "..", "public"),
+    dirName ? path.join(dirName, "..", "..", "public") : "",
+    dirName ? path.join(dirName, "..", "public") : "",
+    "/var/task/public",
+  ].filter(Boolean) as string[];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c, "web", "index.html"))) return c;
+    } catch {
+      // ignore
+    }
+  }
+  // 폴백: 첫 후보
+  return candidates[1] || path.join(process.cwd(), "public");
+}
+
+const PUBLIC_DIR = resolvePublicDir();
+
+export function registerWebRoutes(app: Express) {
+  // 정적 파일 서빙 - /web 경로로 홈페이지 HTML 파일 제공
+  const webDir = path.join(PUBLIC_DIR, "web");
+  if (fs.existsSync(webDir)) {
+    app.use("/web", express.static(webDir, { index: "index.html" }));
+  }
+
+  // 비공개 테스트용 홈페이지 - /preview 경로 (비밀번호 보호는 클라이언트 측에서 처리)
+  const previewDir = path.join(PUBLIC_DIR, "preview");
+  if (fs.existsSync(previewDir)) {
+    app.use("/preview", express.static(previewDir, { index: "gate.html" }));
+  }
+
+  // robots.txt 서빙
+  const robotsPath = path.join(PUBLIC_DIR, "robots.txt");
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    if (fs.existsSync(robotsPath)) {
+      res.setHeader("Content-Type", "text/plain");
+      res.sendFile(robotsPath);
+    } else {
+      res.type("text/plain").send("User-agent: *\nDisallow: /preview/\n");
+    }
+  });
+
+  // 엑셀(CSV) 다운로드 API - 전국 접수 현황
+  app.get("/api/excel/repairs", async (_req: Request, res: Response) => {
+    try {
+      const repairs = await getAllRepairRequests();
+      const csvRows = [
+        ["접수번호", "고객명", "전화번호", "아파트명", "동", "호수", "증상", "상태", "접수일", "방문예정일"].join(","),
+        ...repairs.map((r: any) => [
+          r.id,
+          `"${r.customerName || ""}"`,
+          r.customerPhone || "",
+          `"${r.aptName || ""}"`,
+          r.dong || "",
+          r.ho || "",
+          `"${Array.isArray(r.symptoms) ? r.symptoms.join(" / ") : r.symptom || ""}"`,
+          r.status || "pending",
+          r.createdAt ? String(r.createdAt).slice(0, 10) : "",
+          r.visitDate || "",
+        ].join(","))
+      ];
+      const bom = "\uFEFF"; // UTF-8 BOM for Excel
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename*=UTF-8''${encodeURIComponent("접수현황_" + new Date().toISOString().slice(0, 10))}.csv`
+      );
+      res.send(bom + csvRows.join("\n"));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── 위치 추적 API ──────────────────────────────────────────────
+
+  // 고객용 위치 확인 페이지 (토큰 기반)
+  app.get("/track/:token", async (_req: Request, res: Response) => {
+    // 공개 홈페이지 경로(web)를 우선 서빙, 없으면 preview 폴백
+    const webPath = path.join(PUBLIC_DIR, "web", "track.html");
+    const previewPath = path.join(PUBLIC_DIR, "preview", "track.html");
+    const htmlPath = fs.existsSync(webPath) ? webPath : (fs.existsSync(previewPath) ? previewPath : null);
+    if (!htmlPath) {
+      return res.status(404).send("위치 확인 페이지를 찾을 수 없습니다.");
+    }
+    try {
+      let html = fs.readFileSync(htmlPath, "utf-8");
+      // 네이버 지도 클라이언트 ID 주입 (없으면 지도 없이 동작)
+      const naverClientId = process.env.NAVER_MAP_CLIENT_ID || "";
+      html = html.replace(
+        "</head>",
+        `<script>window.NAVER_MAP_CLIENT_ID = ${JSON.stringify(naverClientId)};</script></head>`
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch {
+      res.sendFile(htmlPath);
+    }
+  });
+
+  // 위치 세션 정보 조회 (고객용 - 토큰으로 조회)
+  app.get("/api/location/session/:token", async (req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const session = await getLocationSessionByToken(req.params.token);
+      if (!session) {
+        return res.status(404).json({ error: "세션을 찾을 수 없거나 만료되었습니다." });
+      }
+      // 이동중이 아니면(도착완료/업무취소/만료) 위치 정보는 더 이상 노출하지 않음 (요구사항 6,8)
+      const isActive = session.status === "이동중";
+      const isExpiredByTime = session.expiresAt && new Date(session.expiresAt) < new Date();
+      if (!isActive || isExpiredByTime) {
+        return res.status(410).json({
+          status: isExpiredByTime && isActive ? "만료" : session.status,
+          ended: true,
+          technicianName: session.technicianName,
+          arrivedAt: session.arrivedAt,
+          error: "종료된 위치 공유입니다.",
+        });
+      }
+      // 고객에게는 현재 위치와 예상 도착 정보만 노출 (출발지/과거 이동 이력 제외)
+      res.json({
+        status: session.status,
+        technicianName: session.technicianName,
+        // technicianPhone는 개인정보 보호를 위해 고객에게 노출하지 않음 (문의는 회사 고객센터로 안내)
+        customerAddress: session.customerAddress,
+        customerLat: session.customerLat,
+        customerLng: session.customerLng,
+        currentLat: session.currentLat,
+        currentLng: session.currentLng,
+        currentUpdatedAt: session.currentUpdatedAt,
+        departedAt: session.departedAt,
+        arrivedAt: session.arrivedAt,
+        expiresAt: session.expiresAt,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 위치 업데이트 (기사 앱 → 서버, 3초 간격 — 차량 이동 기준)
+  app.post("/api/location/update", async (req: Request, res: Response) => {
+    try {
+      const { token, lat, lng, speed, heading, accuracy } = req.body;
+      if (!token || lat === undefined || lng === undefined) {
+        return res.status(400).json({ error: "token, lat, lng 필수" });
+      }
+      const session = await getLocationSessionByToken(token);
+      if (!session) {
+        return res.status(404).json({ error: "세션 없음" });
+      }
+      if (session.status !== "이동중") {
+        return res.status(400).json({ error: "이미 종료된 세션입니다.", status: session.status });
+      }
+      // 만료 확인
+      if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+        await stopLocationSession(token, "만료");
+        return res.status(400).json({ error: "세션이 만료되었습니다.", status: "만료" });
+      }
+      // 좌표 검증: 한국 WGS84 범위(위도 33~39, 경도 124~132) + lat/lng 뒤바뀜 교정
+      let nLat = Number(lat);
+      let nLng = Number(lng);
+      const inKorea = (a: number, b: number) =>
+        Number.isFinite(a) && Number.isFinite(b) && a >= 33 && a <= 39 && b >= 124 && b <= 132;
+      if (!inKorea(nLat, nLng)) {
+        if (inKorea(nLng, nLat)) {
+          const tmp = nLat; nLat = nLng; nLng = tmp;
+        } else {
+          return res.status(400).json({ error: "좌표 범위 오류(한국 밖 또는 잘못된 값)", lat: nLat, lng: nLng });
+        }
+      }
+      await updateLocationSessionPosition(token, String(nLat), String(nLng));
+      // speed(m/s), heading(도), accuracy(m) 수신 확인 (현재 DB 콼럼 없음 — 로그만)
+      const speedKmh = (speed !== null && speed !== undefined) ? (Number(speed) * 3.6).toFixed(1) : null;
+      res.json({ success: true, lat: nLat, lng: nLng, updatedAt: new Date().toISOString(), speedKmh, heading: heading ?? null, accuracy: accuracy ?? null });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 위치 세션 종료 (기사 앱 → 도착/취소)
+  app.post("/api/location/stop", async (req: Request, res: Response) => {
+    try {
+      const { token, reason } = req.body;
+      if (!token || !reason) {
+        return res.status(400).json({ error: "token, reason 필수" });
+      }
+      if (!["도착완료", "업무취소"].includes(reason)) {
+        return res.status(400).json({ error: "reason은 도착완료 또는 업무취소" });
+      }
+      await stopLocationSession(token, reason as "도착완료" | "업무취소");
+      res.json({ success: true, status: reason });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자/지사장용 - 직접 위치 공유 시작 (전화 접수 고객 등, 기사 앱 미사용 케이스)
+  app.post("/api/location/start-by-admin", async (req: Request, res: Response) => {
+    try {
+      const {
+        requestId, technicianId, technicianName, technicianPhone,
+        customerName, customerPhone, customerAddress,
+        customerLat, customerLng, branchId, branchName, expireHours,
+      } = req.body;
+      if (!technicianName || !customerName || !customerPhone) {
+        return res.status(400).json({ error: "technicianName, customerName, customerPhone는 필수입니다." });
+      }
+      // 기존 이동중 세션이 있으면 종료(새 링크 발급)
+      const reqIdNum = requestId ? parseInt(String(requestId)) : 0;
+      if (reqIdNum) {
+        const existing = await getLocationSessionByRequestId(reqIdNum);
+        if (existing) {
+          await stopLocationSession(existing.trackingToken, "업무취소");
+        }
+      }
+      const crypto = await import("crypto");
+      // 추측 불가능한 긴 일회용 위치코드 (256비트 = 43자 base64url)
+      const token = crypto.randomBytes(32).toString("base64url");
+      const now = new Date();
+      const hours = expireHours && Number(expireHours) > 0 ? Number(expireHours) : 4;
+      const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+      const session = await createLocationSession({
+        requestId: reqIdNum || 0,
+        technicianId: technicianId ? parseInt(String(technicianId)) : 0,
+        technicianName,
+        technicianPhone: technicianPhone ?? null,
+        customerName,
+        customerPhone,
+        customerAddress: customerAddress ?? "",
+        customerLat: customerLat !== undefined && customerLat !== null ? String(customerLat) : null,
+        customerLng: customerLng !== undefined && customerLng !== null ? String(customerLng) : null,
+        branchId: branchId ? parseInt(String(branchId)) : null,
+        branchName: branchName ?? null,
+        trackingToken: token,
+        status: "이동중",
+        departedAt: now,
+        expiresAt,
+      });
+      if (!session) return res.status(500).json({ error: "세션 생성 실패" });
+      const baseUrl = process.env.SITE_URL || "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
+      const trackingUrl = `${baseUrl}/track/${token}`;
+      let smsSent = false;
+      let smsError: string | undefined;
+      try {
+        const msg = buildTechnicianDepartedMessage(customerName, technicianName, trackingUrl);
+        const result = await sendSms(customerPhone, msg);
+        if (result.result === "SUCCESS") {
+          smsSent = true;
+          await markLocationSessionSmsSent(token);
+        } else {
+          smsError = result.errorMessage;
+        }
+      } catch (smsErr: any) {
+        smsError = smsErr?.message ?? String(smsErr);
+      }
+      res.json({ success: true, token, trackingUrl, smsSent, smsError });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자/지사장용 - 위치 세션 강제 종료 (도착완료/업무취소)
+  app.post("/api/location/stop-by-admin", async (req: Request, res: Response) => {
+    try {
+      const { token, reason } = req.body;
+      if (!token) return res.status(400).json({ error: "token 필수" });
+      const r = reason && ["도착완료", "업무취소"].includes(reason) ? reason : "업무취소";
+      await stopLocationSession(token, r as "도착완료" | "업무취소");
+      res.json({ success: true, status: r });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 관리자용 - 이동 중 기사 전체 목록
+  app.get("/api/location/active", async (_req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const sessions = await getActiveLocationSessions();
+      res.json({ sessions });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 지사장용 - 소속 지사 이동 중 기사 목록
+  app.get("/api/location/active/branch/:branchId", async (req: Request, res: Response) => {
+    try {
+      await expireOldLocationSessions();
+      const branchId = parseInt(req.params.branchId);
+      const sessions = await getActiveLocationSessionsByBranch(branchId);
+      res.json({ sessions });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 루트 / → 홈페이지 index.html 직접 서빙 (리다이렉트 없이 직접 응답)
+  app.get("/", (_req: Request, res: Response) => {
+    const indexPath = path.join(PUBLIC_DIR, "web", "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send("홈페이지 파일을 찾을 수 없습니다.");
+    }
+  });
+
+  // ─── 유량 관리 API ───────────────────────────────────────────────
+
+  // 세대별 유량 설정 목록 조회
+  app.get("/api/flow-rate/settings", async (_req: Request, res: Response) => {
+    try {
+      const settings = await getAllFlowRateSettings();
+      res.json({ success: true, data: settings });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 세대별 유량 설정 수정
+  app.put("/api/flow-rate/settings/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { baseFlowRateLpm, warningRangePercent, cautionRangePercent, alertDurationMinutes, apartmentName, buildingNumber, roomNumber, branchId } = req.body;
+      await updateFlowRateSetting(id, {
+        ...(baseFlowRateLpm !== undefined && { baseFlowRateLpm: String(baseFlowRateLpm) }),
+        ...(warningRangePercent !== undefined && { warningRangePercent: Number(warningRangePercent) }),
+        ...(cautionRangePercent !== undefined && { cautionRangePercent: Number(cautionRangePercent) }),
+        ...(alertDurationMinutes !== undefined && { alertDurationMinutes: Number(alertDurationMinutes) }),
+        ...(apartmentName !== undefined && { apartmentName }),
+        ...(buildingNumber !== undefined && { buildingNumber }),
+        ...(roomNumber !== undefined && { roomNumber }),
+        ...(branchId !== undefined && { branchId: Number(branchId) }),
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 세대별 유량 설정 생성
+  app.post("/api/flow-rate/settings", async (req: Request, res: Response) => {
+    try {
+      const { sensorId, branchId, apartmentName, buildingNumber, roomNumber, baseFlowRateLpm, warningRangePercent, cautionRangePercent, alertDurationMinutes } = req.body;
+      if (!sensorId || !apartmentName || !buildingNumber || !roomNumber) {
+        return res.status(400).json({ success: false, error: "필수 필드 누락" });
+      }
+      await upsertFlowRateSetting({
+        sensorId,
+        branchId: branchId ? Number(branchId) : null,
+        apartmentName,
+        buildingNumber,
+        roomNumber,
+        baseFlowRateLpm: String(baseFlowRateLpm ?? "5.50"),
+        warningRangePercent: Number(warningRangePercent ?? 30),
+        cautionRangePercent: Number(cautionRangePercent ?? 15),
+        alertDurationMinutes: Number(alertDurationMinutes ?? 10),
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 세대별 유량 설정 삭제
+  app.delete("/api/flow-rate/settings/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await deleteFlowRateSetting(id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 유량 로그 조회
+  app.get("/api/flow-rate/logs", async (req: Request, res: Response) => {
+    try {
+      const sensorId = req.query.sensorId as string | undefined;
+      const limit = parseInt(req.query.limit as string ?? "100");
+      const logs = sensorId
+        ? await getFlowRateLogs(sensorId, limit)
+        : await getRecentFlowRateLogs(limit);
+      res.json({ success: true, data: logs });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ─── ESP32 웹훅 API ───────────────────────────────────────────────
+  app.post("/api/webhook/flow-rate", async (req: Request, res: Response) => {
+    try {
+      const {
+        sensorId,
+        customerId,
+        branchId,
+        apartmentName,
+        buildingNumber,
+        roomNumber,
+        flowRateLpm,
+        supplyPressure,
+        returnPressure,
+        differentialPressure,
+        measuredAt,
+        status: rawStatus,
+      } = req.body;
+
+      if (!sensorId || flowRateLpm === undefined) {
+        return res.status(400).json({ success: false, error: "sensorId와 flowRateLpm은 필수입니다." });
+      }
+
+      const now = measuredAt ? new Date(measuredAt) : new Date();
+      const flowNum = parseFloat(String(flowRateLpm));
+
+      // 기존 설정 조회
+      let setting = await getFlowRateSettingBySensorId(sensorId);
+
+      // 설정 없으면 자동 생성
+      if (!setting) {
+        await upsertFlowRateSetting({
+          sensorId,
+          branchId: branchId ? Number(branchId) : null,
+          apartmentName: apartmentName ?? "(미등록)",
+          buildingNumber: buildingNumber ?? "-",
+          roomNumber: roomNumber ?? "-",
+          baseFlowRateLpm: String(flowNum.toFixed(2)),
+          warningRangePercent: 30,
+          cautionRangePercent: 15,
+          alertDurationMinutes: 10,
+        });
+        setting = await getFlowRateSettingBySensorId(sensorId);
+      }
+
+      // 상태 계산 (설정이 있으면 기준 유량 대비 이탈 퍼센트 계산)
+      let computedStatus: "정상" | "주의" | "경고" = "정상";
+      if (setting) {
+        const base = parseFloat(String(setting.baseFlowRateLpm));
+        const diffPct = Math.abs((flowNum - base) / base) * 100;
+        const warnPct = setting.warningRangePercent;
+        const cautionPct = setting.cautionRangePercent;
+        if (diffPct >= warnPct) computedStatus = "경고";
+        else if (diffPct >= cautionPct) computedStatus = "주의";
+        else computedStatus = "정상";
+      } else if (rawStatus && ["정상", "주의", "경고"].includes(rawStatus)) {
+        computedStatus = rawStatus as "정상" | "주의" | "경고";
+      }
+
+      // 로그 기록
+      await createFlowRateLog({
+        sensorId,
+        branchId: branchId ? Number(branchId) : (setting?.branchId ?? null),
+        apartmentName: apartmentName ?? setting?.apartmentName,
+        buildingNumber: buildingNumber ?? setting?.buildingNumber,
+        roomNumber: roomNumber ?? setting?.roomNumber,
+        flowRateLpm: String(flowNum.toFixed(2)),
+        supplyPressure: supplyPressure !== undefined ? String(parseFloat(supplyPressure).toFixed(3)) : null,
+        returnPressure: returnPressure !== undefined ? String(parseFloat(returnPressure).toFixed(3)) : null,
+        differentialPressure: differentialPressure !== undefined ? String(parseFloat(differentialPressure).toFixed(3)) : null,
+        measuredAt: now,
+        status: computedStatus,
+        source: "WEBHOOK",
+      });
+
+      // 설정 캐시 업데이트 + 경고 추적
+      if (setting) {
+        const base = parseFloat(String(setting.baseFlowRateLpm));
+        const alertMinutes = setting.alertDurationMinutes;
+        let alertStartedAt = setting.alertStartedAt ? new Date(setting.alertStartedAt) : null;
+        let alertSentAt = setting.alertSentAt ? new Date(setting.alertSentAt) : null;
+
+        if (computedStatus === "정상") {
+          // 정상 복교 시 경고 추적 리셋
+          alertStartedAt = null;
+        } else {
+          // 이탈 중 - 시작 시각 기록
+          if (!alertStartedAt) alertStartedAt = now;
+
+          // 10분 이상 지속 여부 확인
+          const elapsedMs = now.getTime() - alertStartedAt.getTime();
+          const elapsedMinutes = elapsedMs / 60000;
+
+          if (elapsedMinutes >= alertMinutes) {
+            // 지난 1시간 내 이미 발송한 경우 중복 발송 방지
+            const lastSentMs = alertSentAt ? now.getTime() - alertSentAt.getTime() : Infinity;
+            if (lastSentMs > 60 * 60 * 1000) {
+              // SMS 발송
+              const msg = buildFlowRateAlertMessage({
+                apartmentName: setting.apartmentName,
+                buildingNumber: setting.buildingNumber,
+                roomNumber: setting.roomNumber,
+                sensorId,
+                currentFlowRate: flowNum,
+                baseFlowRate: base,
+                status: computedStatus as "주의" | "경고",
+                durationMinutes: Math.floor(elapsedMinutes),
+              });
+
+              // 본사 관리자 번호 조회
+              try {
+                const admins = await getAppRolesByRole("hq_admin");
+                for (const admin of admins) {
+                  if (admin.phoneNumber) await sendSms(admin.phoneNumber, msg);
+                }
+                // 담당 지사장 번호 조회
+                const bid = branchId ?? setting.branchId;
+                if (bid) {
+                  const branch = await getBranchById(Number(bid));
+                  if (branch?.phoneNumber) await sendSms(branch.phoneNumber, msg);
+                }
+              } catch (smsErr) {
+                console.error("[FlowRate] SMS 발송 오류:", smsErr);
+              }
+              alertSentAt = now;
+            }
+          }
+        }
+
+        await updateFlowRateLastData(sensorId, {
+          lastFlowRateLpm: String(flowNum.toFixed(2)),
+          lastSupplyPressure: supplyPressure !== undefined ? String(parseFloat(supplyPressure).toFixed(3)) : null,
+          lastReturnPressure: returnPressure !== undefined ? String(parseFloat(returnPressure).toFixed(3)) : null,
+          lastDifferentialPressure: differentialPressure !== undefined ? String(parseFloat(differentialPressure).toFixed(3)) : null,
+          lastMeasuredAt: now,
+          lastStatus: computedStatus,
+          alertStartedAt,
+          alertSentAt,
+        });
+      }
+
+      res.json({
+        success: true,
+        sensorId,
+        status: computedStatus,
+        flowRateLpm: flowNum,
+        measuredAt: now.toISOString(),
+      });
+    } catch (e: any) {
+      console.error("[FlowRate Webhook] 오류:", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+}

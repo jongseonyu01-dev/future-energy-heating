@@ -1,0 +1,27 @@
+{
+  "file": "downloaded-futureenergytech-v1.1.44-code44.apk",
+  "sha256": "480f821c6086c7756a4f4e759487b0f138d18fdae17c73269459f9e740e4a083",
+  "package": "com.futureenergy.heatingcare",
+  "versionName": "1.1.44",
+  "versionCode": "44",
+  "signing": {
+    "v1": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    },
+    "v2": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    },
+    "v3": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    }
+  }
+}

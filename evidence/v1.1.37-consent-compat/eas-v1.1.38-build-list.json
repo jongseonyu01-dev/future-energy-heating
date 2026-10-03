@@ -1,0 +1,50 @@
+[
+  {
+    "id": "f0ed9fa7-8e8c-40a1-a391-acf64d2bc5c0",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/xFIh8Q36DYTULorYMYBO3NsykmzXnPZTFKsIDNc4t9k.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/xFIh8Q36DYTULorYMYBO3NsykmzXnPZTFKsIDNc4t9k.apk"
+    },
+    "fingerprint": {
+      "id": "01a09bbe-2cec-79ab-a1d8-cda149788d54",
+      "hash": "0ce33468be5aacaf084db8709ff838cef64b6a58"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/f0ed9fa7-8e8c-40a1-a391-acf64d2bc5c0/2026-09-13T17%3A08%3A51Z-84db6192-6d80-436a-a58f-d1bcfe4639dc.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T172543Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=3fe03ff591fa2e634fcf49182731d80ad715d889994029b33d892ddb0226ac1462bf52377bc0a282e8cceb5ad2e26c07245483ce7566567190e1c68276f79ae903984d6e895790a9efd6e285f92462c9cdd90fe9f26bb6391773891a52294723ae9e33a30e2d03339577289cd4a54eb751f5c2a48942ad52799e9961bde3381013fdb47623a8eff17bb951924a7d3c8f8d25f19c82b52b016c3837953503227bfa348c962a6548fb1a07c7256525feb2503b07a09955e5a3e0addc7b7b7bb68c03f96b9e0785a6186200ccb49429c59f3dab56b457efc7ff50a70af0e97a59397fdf23af2020d9c6792d3441cb1c9c7425fdf4f52808407231b12ab801b154e2"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.38",
+    "appBuildVersion": "38",
+    "gitCommitHash": "97df89c7bbc170b7eb341eb0eff57f411f90cbc6",
+    "gitCommitMessage": "Checkpoint: v1.1.38 호환성 보완 후보: 운영 server의 location.saveConsent `{ success:true }` 응답 형식은 변경하지 않고, 기사 일정 화면은 저장 성공 후 인증된 location.getConsent readback이 `hasConsented:true`일 때만 출발하도록 공통 helper로 보완. 저장 실패·readback 실패·동의 false는 출발 차단. 합성 review API도 bare `{success:true}`로 운영 호환화하고 KST 전날 scheduledDate로 미작업·이월 노출을 보장. focused 11 PASS, 화면 계약 7 PASS, 새 preview actual HTTP 401/403/412·save→readback→start·checklist/권한·SMS substitute 확인. Standard Protection 유지, 새 preview 단일 exception, review profiles는 새 URL만 주입, bypass secret 없음. Android/iOS version 1.1.38/build 38 설정. 운영 홈페이지·공용 단가·운영 DB/SMS·게시·TestFlight 제출·실기기 검증은 미실시/보류.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-13T17:08:46.906Z",
+    "updatedAt": "2026-09-13T17:23:45.417Z",
+    "completedAt": "2026-09-13T17:23:45.067Z",
+    "expirationDate": "2026-09-27T17:08:46.943Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4175,
+      "buildQueueTime": 4640,
+      "buildDuration": 889346
+    }
+  }
+]

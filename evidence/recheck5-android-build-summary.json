@@ -1,0 +1,15 @@
+{
+  "id": "98ebaf04-c626-48de-bdcf-f1fba8e78ab7",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "appVersion": "1.1.33",
+  "appBuildVersion": "33",
+  "gitCommitHash": "fd0fb175a3d6b2d66b1d2f1ad87a300ecfcf253c",
+  "buildProfile": "review",
+  "distribution": "INTERNAL",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/u1WiIkZgvR7yg113CbsW6e_x8WPGhIRvU7kMmP2bbxw.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/u1WiIkZgvR7yg113CbsW6e_x8WPGhIRvU7kMmP2bbxw.apk"
+  }
+}

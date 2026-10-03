@@ -1,0 +1,27 @@
+ app.config.ts                                      |    6 [32m+[m[31m-[m
+ app/(tabs)/tech-schedule.tsx                       |   18 [32m+[m[31m-[m
+ eas.json                                           |    4 [32m+[m[31m-[m
+ .../codex-v37/61151468..6daf599f-name-status.txt   |   27 [32m+[m
+ .../codex-v37/61151468..6daf599f-review-fix.diff   | 1817 [32m++++++++++++++++++++[m
+ evidence/codex-v37/61151468..6daf599f-stat.txt     |   28 [32m+[m
+ .../codex-v37/7bfe7418..6daf599f-name-status.txt   |   27 [32m+[m
+ .../codex-v37/android-device-control-sources.md    |   13 [32m+[m
+ .../android-v1.1.37-device-test-procedure.md       |   91 [32m+[m
+ evidence/codex-v37/review-trpc-client-v37.json     |    1 [32m+[m
+ evidence/codex-v37/summary.txt                     |   57 [32m+[m
+ evidence/codex-v37/v1.1.37-codex-response.md       |   73 [32m+[m
+ evidence/review-preview-v37-deploy.json            |    2 [32m+[m[31m-[m
+ evidence/review-v37-android-build.md               |   19 [32m+[m
+ .../v1.1.37-consent-compat/compatibility-report.md |   44 [32m+[m
+ .../operational-save-consent-source.txt            |   25 [32m+[m
+ evidence/v1.1.37-consent-compat/preview-http.json  |    1 [32m+[m
+ lib/location-consent-confirmation.ts               |   48 [32m+[m
+ review-server/api/trpc/[procedure].js              |   16 [32m+[m[31m-[m
+ scripts/inspect-review-apk.py                      |   60 [32m+[m
+ scripts/verify-review-preview.mjs                  |   14 [32m+[m[31m-[m
+ scripts/verify-review-trpc-client.mjs              |  125 [32m++[m
+ tests/isolated-review-api.test.ts                  |   10 [32m+[m[31m-[m
+ tests/location-consent-confirmation.test.ts        |   80 [32m+[m
+ tests/review-workflow-screen-contract.verify.mjs   |    5 [32m+[m[31m-[m
+ todo.md                                            |   10 [32m+[m[31m-[m
+ 26 files changed, 2601 insertions(+), 20 deletions(-)

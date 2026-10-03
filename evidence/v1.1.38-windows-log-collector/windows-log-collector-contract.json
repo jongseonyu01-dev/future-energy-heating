@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "checks": [
+    "official-platform-tools-path",
+    "usb-device-and-rsa-state",
+    "filtered-native-and-js-logcat",
+    "desktop-code38-crash-output",
+    "utf8-explicit-read-and-write",
+    "no-logcat-clear",
+    "early-exit-disconnect-and-empty-log-failure",
+    "no-app-install-or-uninstall-command"
+  ]
+}

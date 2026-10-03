@@ -1,0 +1,28 @@
+ Downloads/review36/BUILD_PROVENANCE.txt            |   3 [32m+[m
+ .../review36/FET_TechEstimate_1.1.36_code36.apk    | Bin [31m0[m -> [32m94034992[m bytes
+ .../FET_TechEstimate_1.1.36_code36.apk.sha256      |   1 [32m+[m
+ .../FET_TechEstimate_1.1.36_code36_APK.zip         | Bin [31m0[m -> [32m41312105[m bytes
+ .../FET_TechEstimate_1.1.36_code36_APK.zip.sha256  |   1 [32m+[m
+ Downloads/review36/aapt-badging.txt                | 166 [32m++++++++++++++++++[m
+ Downloads/review36/apk-zip-unzip-verify.txt        |   3 [32m+[m
+ Downloads/review36/apksigner-verify.txt            |  17 [32m++[m
+ app.config.ts                                      |   6 [32m+[m[31m-[m
+ app/(tabs)/tech-schedule.tsx                       |  22 [32m++[m[31m-[m
+ app/(tabs)/tech-works.tsx                          |  12 [32m+[m[31m-[m
+ app/work-report.tsx                                |   6 [32m+[m[31m-[m
+ eas.json                                           |   4 [32m+[m[31m-[m
+ evidence/review-preview-recheck8-deploy.json       |  23 [32m+++[m
+ ...w-preview-recheck8-exception-status-20260913.md |  44 [32m+++++[m
+ evidence/review-preview-v37-deploy.json            |  23 [32m+++[m
+ evidence/review36-android-build-start.json         |  39 [32m+++++[m
+ evidence/review36-android-build-status.json        |  48 [32m++++++[m
+ lib/location-tracking.ts                           |   9 [32m+[m[31m-[m
+ review-server/api/location/stop.js                 |   7 [32m+[m
+ review-server/api/location/update.js               |   7 [32m+[m
+ review-server/api/trpc/[procedure].js              | 189 [32m++++++++++++++++[m[31m-----[m
+ scripts/build-review-deploy-payload.mjs            |  32 [32m++++[m
+ scripts/verify-review-preview.mjs                  |  89 [32m++++++++[m[31m--[m
+ tests/isolated-review-api.test.ts                  |  32 [32m+++[m[31m-[m
+ tests/review-workflow-screen-contract.verify.mjs   |  22 [32m+++[m
+ todo.md                                            |  13 [32m+[m[31m-[m
+ 27 files changed, 728 insertions(+), 90 deletions(-)

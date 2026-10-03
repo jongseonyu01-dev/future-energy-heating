@@ -1,0 +1,7 @@
+public/web/admin/admin-prices.html
+public/web/admin/branch.html
+public/web/admin/dashboard.html
+public/web/admin/login.html
+public/web/admin/tech-estimate.html
+public/web/admin/tech.html
+references/periodic-updates.md

@@ -1,0 +1,50 @@
+{
+  "id": "ada9f68b-b0d0-4bba-a2ee-43d8617436f1",
+  "status": "FINISHED",
+  "platform": "IOS",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/JH2FJo-NbwAWON6UZPwIsPFGOB8oHsgn_II2tBkR6po.ipa",
+    "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-ada9f68b-b0d0-4bba-a2ee-43d8617436f1-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T191115Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=01e45a95b1b1ec3bffb7894be8cdc257a0603ffffa84ed157a0970f6342e34965f55c890a64b01ad5afe14f54b3fe0c2304ec948b4210c53612a18981b0b9c00c56251be60cec0c333ff866f2ba87f5297b6005aff0510909d749409e9dbc69ac33aee32df591bce02ef7812d8e11ecfd7b5d993b07757f2d0fd51fe7e34f4b6491af2e9b540987e86647a5120c2e13afaa1e3fd45aff8d8312bef9a37eb3ba19f584189a26300e32825e6b349675ca4719f763d9a7c1bc65fd4352ff85d0e78f223d1be0d03bc2bfa584e08f32af3424a35afbc245436f972da49280d9d9898aaf3857142d2a0718010e22358c66b52372e9ef0c92cf317ba6a439629ac11cc",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/JH2FJo-NbwAWON6UZPwIsPFGOB8oHsgn_II2tBkR6po.ipa"
+  },
+  "fingerprint": {
+    "id": "01a096fe-edfb-71b3-95ed-664a74691926",
+    "hash": "cdb368cc0be0039960b8428bc0cf22145b9e3d64"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-65773bae-e7d0-415a-8b0f-49e7f7985a3a.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T190158Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=91ce2ef79e632287a3e8359f880648b4e28e498c38b54bcdba632667544eb49a9885f34b202505707d53526b8e446b0af33185fbac26c87703af7de8ffa7854ed1921e6d004610d9e98541ea669da5b4212dc1f08ff5cc18f6f0440c08132b7ec9055c3079f473b0b1428d3244ecddef1bce6f87e51d21c18cd22f60451c3bc48419bdb142a3c76d30b941439e68652d75e553b66d4c48e17c380e532be60e0cad42d80cf3fc3a1ba06337b637fd4b16a5c42c7706e64b2b545c0a26ce8a31d9dc6dc77d68cb5debdd8660dc730c605dd747054a9915f3445d8e5b6d91585955e2736cf44819ae3030670d5d0321a5b95d003179375e4dd02233845fc4f11254",
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-ada9f68b-b0d0-4bba-a2ee-43d8617436f1-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T191115Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=01e45a95b1b1ec3bffb7894be8cdc257a0603ffffa84ed157a0970f6342e34965f55c890a64b01ad5afe14f54b3fe0c2304ec948b4210c53612a18981b0b9c00c56251be60cec0c333ff866f2ba87f5297b6005aff0510909d749409e9dbc69ac33aee32df591bce02ef7812d8e11ecfd7b5d993b07757f2d0fd51fe7e34f4b6491af2e9b540987e86647a5120c2e13afaa1e3fd45aff8d8312bef9a37eb3ba19f584189a26300e32825e6b349675ca4719f763d9a7c1bc65fd4352ff85d0e78f223d1be0d03bc2bfa584e08f32af3424a35afbc245436f972da49280d9d9898aaf3857142d2a0718010e22358c66b52372e9ef0c92cf317ba6a439629ac11cc"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "review-store",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.23",
+  "appBuildVersion": "23",
+  "gitCommitHash": "e8ebcf13d39a750c6640cdb3daadc97189838508",
+  "gitCommitMessage": "Checkpoint: 기사앱 자동견적 검수 후보: 9941dbf8 기준 운영 홈페이지의 조절기 수량·종류 전환과 유량밸브 가격 정합화, estimates.customerPhone 실제 mapping 및 초안 수량 fail-closed 보완, 합성 기사·접수·메모리 보고·SMS 대체만 사용하는 인증 preview API 추가. 기존 preview 예외는 재보호했고 새 Vercel preview URL 한 건만 예외 적용. 미로그인 401, 본인 접수 200, 타 기사 접근 400/0건 실제 HTTP 확인. app v1.1.23 / Android versionCode 23 / iOS buildNumber 23, review profile은 새 preview URL만 사용. 운영 홈페이지·공용 단가 DB·운영 게시·TestFlight 제출 미변경.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-12T19:01:24.536Z",
+  "updatedAt": "2026-09-12T19:07:08.087Z",
+  "completedAt": "2026-09-12T19:07:07.754Z",
+  "expirationDate": "2026-10-12T19:01:24.586Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 1754,
+    "buildQueueTime": 21359,
+    "buildDuration": 320105
+  }
+}

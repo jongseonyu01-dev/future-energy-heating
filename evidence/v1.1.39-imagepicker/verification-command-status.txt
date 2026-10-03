@@ -1,0 +1,8 @@
+expo_install_check_after_exit=1
+autolinking_resolve_after_exit=0
+imagepicker_screen_contract_exit=1
+workflow_screen_contract_exit=0
+expo_prebuild_android_exit=0
+generated_registration_exit=1
+expo_export_android_exit=0
+android_js_reference_exit=0

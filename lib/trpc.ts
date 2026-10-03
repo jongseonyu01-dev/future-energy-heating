@@ -1,0 +1,39 @@
+import { createTRPCReact } from "@trpc/react-query";
+import { httpLink } from "@trpc/client";
+import superjson from "superjson";
+import type { AppRouter } from "@/server/routers";
+import * as Auth from "@/lib/_core/auth";
+import { getApiBaseUrl } from "@/constants/oauth";
+
+// 운영 build는 기존 www 포함 주소를, review build는 EAS profile이 주입한
+// 격리 preview URL만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
+const API_URL = getApiBaseUrl();
+
+export const trpc = createTRPCReact<AppRouter>();
+
+/**
+ * Creates the tRPC client with proper configuration.
+ * - httpLink (not httpBatchLink): React Native에서 배치 링크는 불필요하고 오류 원인이 됨
+ * - superjson transformer: 서버와 동일한 직렬화 형식 사용 (Date 타입 포함 응답 파싱 필수)
+ * - credentials: "include" 제거: React Native에서 지원되지 않음
+ * - globalThis.fetch 사용: React Native 기본 fetch 사용
+ */
+export function createTRPCClient() {
+  return trpc.createClient({
+    links: [
+      httpLink({
+        url: `${API_URL}/api/trpc`,
+        // tRPC v11: transformer는 httpLink 내부에 설정
+        transformer: superjson,
+        async headers() {
+          try {
+            const token = await Auth.getSessionToken();
+            return token ? { Authorization: `Bearer ${token}` } : {};
+          } catch {
+            return {};
+          }
+        },
+      }),
+    ],
+  });
+}

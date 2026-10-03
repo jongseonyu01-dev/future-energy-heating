@@ -1,0 +1,11 @@
+view a build for your project
+
+USAGE
+  $ eas build:view [BUILD_ID] [--json]
+
+FLAGS
+  --json  Enable JSON output, non-JSON messages will be printed to stderr.
+
+DESCRIPTION
+  view a build for your project
+

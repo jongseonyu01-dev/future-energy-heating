@@ -1,0 +1,48 @@
+{
+  "id": "abd929be-6cb5-45d4-a77c-2d861647b148",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/z9NsP9pq6gY0tmS-2jvJdzmcdNOHy-nd0neEP4Y4-ws.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/z9NsP9pq6gY0tmS-2jvJdzmcdNOHy-nd0neEP4Y4-ws.apk"
+  },
+  "fingerprint": {
+    "id": "01a09ffb-08f9-7afa-bb3d-2a6cc2d94c52",
+    "hash": "424bdec181ec4c01f6944cd2b7535aa4d3eab488"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/abd929be-6cb5-45d4-a77c-2d861647b148/2026-09-14T13%3A02%3A11Z-e4b4b844-c4d6-4b1b-a753-0d4bb27c5fa7.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T132119Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=92d5bb92a9b86f8cdb698b84df30b40d0339f4f7daa2632694cf2b4644e46ed12125ff2ce7888a778d6f696902efd084d28a26b49249011032071f94119233af23c41998cabb48a0b51f48b45847b61f65fb07e7dc508934960c48d5f0369b4beb24579811a8d1d310f391d040ac365a5b44adc99720f8ae65107fc3659495887906f5be9897767e8d83169ea2b2f977043611fd660d9fbf85c6d3c1133b2129e7eacea377bf866d1b35208f2ce40a94026d0edc7c2488ab0d6bfb7794d8c10ab27fc339b5531e1ca3f47cf8b157d2a9dad8544f60286373e43eb7578ee0ead18ec5a990c6daf0c0acf8f63a560ff65627c504c0883f1a57ab34f8a6f2382a3a"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "production-apk",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.42",
+  "appBuildVersion": "42",
+  "gitCommitHash": "7c0ee02de77e5d2150ce730ab75f634c96744710",
+  "gitCommitMessage": "Checkpoint: 운영 기사앱 APK candidate 보정: 첫 production-apk 요청이 EAS preview 환경으로 해석된 것을 build 생성 전에 중단하고, `production-apk` profile에 `environment: production`을 명시했다. production 공개 환경에는 공식 운영 API base URL만 있고 review mode·review preview URL·bypass 변수는 없음을 확인했다. 앱은 version 1.1.42 / Android versionCode 42이며 기존 package `com.futureenergy.heatingcare`, EAS project, remote Android signing key를 그대로 사용한다. 운영 홈페이지 작업본의 변경은 기사용 앱 다운로드 문구와 Android 삭제 없는 업데이트 안내로 한정하며 아직 GitHub push·홈페이지 배포·APK release upload는 실행하지 않았다. 홈페이지 견적·공용 단가·운영 고객 데이터·SMS는 미변경이다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-14T12:53:44.277Z",
+  "updatedAt": "2026-09-14T13:16:02.818Z",
+  "completedAt": "2026-09-14T13:16:02.615Z",
+  "expirationDate": "2026-09-28T12:53:44.305Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 4889,
+    "buildQueueTime": 507417,
+    "buildDuration": 826032
+  }
+}

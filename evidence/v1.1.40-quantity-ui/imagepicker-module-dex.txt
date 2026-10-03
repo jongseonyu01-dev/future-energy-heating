@@ -1,0 +1,1 @@
+Lexpo/modules/imagepicker/ImagePickerModule;

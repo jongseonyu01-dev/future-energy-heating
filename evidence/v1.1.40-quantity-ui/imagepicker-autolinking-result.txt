@@ -1,0 +1,1 @@
+PASS code40 SDK54 generated Android package list directly registers ImagePickerModule.class

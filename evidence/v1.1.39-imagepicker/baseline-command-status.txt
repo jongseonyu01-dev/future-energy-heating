@@ -1,0 +1,2 @@
+expo_install_check_exit=1
+autolinking_resolve_exit=0

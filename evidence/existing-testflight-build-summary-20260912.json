@@ -1,0 +1,10 @@
+{
+  "id": "e5d234ba-3d50-4807-9d3b-5765e59772cd",
+  "status": "FINISHED",
+  "distribution": "STORE",
+  "profile": "testflight",
+  "version": "1.1.8",
+  "buildNumber": "8",
+  "commit": "9941dbf8e7937aeec1759435598cd95b2b1702b5",
+  "artifact": "https://expo.dev/artifacts/eas/hbdpoFu4CI1m-8cjOUACiOhpXA3MJDpeu9d_127Nyqc.ipa"
+}

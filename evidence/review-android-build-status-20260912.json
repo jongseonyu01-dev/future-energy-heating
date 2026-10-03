@@ -1,0 +1,48 @@
+{
+  "id": "2ef29c96-193e-4413-a584-77cdf0ad60db",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk"
+  },
+  "fingerprint": {
+    "id": "01a096b6-345c-7b5f-9e25-a2dcc00c158e",
+    "hash": "d1fad232e88cc37c0252ef0e5f496340c7fe03cf"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/2ef29c96-193e-4413-a584-77cdf0ad60db/2026-09-12T17%3A42%3A03Z-ee9e72ec-4f06-4453-817f-5f548b1aced4.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T175654Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=3effa10cb4c1b24b2fe33e3c68afb3145679d18065ae9d56c09138cfe7a14fa47ac323cd687add9ee2a8a5204547adf82945ab81821017a594fd6ce233e99e04083c3ba1c4cfd7bcf34ec5b9f812bf6b4b298c79e31ae099c26f97c167f848cd2d39cbac39c17ebc0453d73af3d9b032b7ccb35ac9222b4b78af3e94c982374dd6e455d79f591cb7de9fcfc47d7aee67a4932de956f771d8656ebf719a4c94388545be69ccb1aa9499319df3cdb3cb635fe0990d9e3f42e804b23dbb4bee62325b09606b9d1e50835a7ac73c0768f69f8f66612ca649aa213df5b275c78db58a15495d6a64d261ded4fb52d385a9a4fc60031242b5812bc925e8b5c7bdda4270"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.23",
+  "appBuildVersion": "23",
+  "gitCommitHash": "e8ebcf13d39a750c6640cdb3daadc97189838508",
+  "gitCommitMessage": "Checkpoint: 기사앱 자동견적 검수 후보: 9941dbf8 기준 운영 홈페이지의 조절기 수량·종류 전환과 유량밸브 가격 정합화, estimates.customerPhone 실제 mapping 및 초안 수량 fail-closed 보완, 합성 기사·접수·메모리 보고·SMS 대체만 사용하는 인증 preview API 추가. 기존 preview 예외는 재보호했고 새 Vercel preview URL 한 건만 예외 적용. 미로그인 401, 본인 접수 200, 타 기사 접근 400/0건 실제 HTTP 확인. app v1.1.23 / Android versionCode 23 / iOS buildNumber 23, review profile은 새 preview URL만 사용. 운영 홈페이지·공용 단가 DB·운영 게시·TestFlight 제출 미변경.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-12T17:41:58.443Z",
+  "updatedAt": "2026-09-12T17:56:47.953Z",
+  "completedAt": "2026-09-12T17:56:47.784Z",
+  "expirationDate": "2026-09-26T17:41:58.481Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 2769,
+    "buildQueueTime": 6641,
+    "buildDuration": 879931
+  }
+}

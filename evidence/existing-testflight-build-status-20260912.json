@@ -1,0 +1,50 @@
+{
+  "id": "e5d234ba-3d50-4807-9d3b-5765e59772cd",
+  "status": "FINISHED",
+  "platform": "IOS",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/hbdpoFu4CI1m-8cjOUACiOhpXA3MJDpeu9d_127Nyqc.ipa",
+    "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-e5d234ba-3d50-4807-9d3b-5765e59772cd-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T185634Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=628c26dd01ac2a3c0e90eca07b9556e6ec6b5bd51f441ae27cc7f96f2615d82af96fce2edf033e1b14e6f792ff95fe9a4f4be83308fa5a4bd3fc049cd3387be21f3540969e8f1387298040408c5447a0a205134ce94693e32ff298546dc7a08616e76ced72d1bd892d83930e7eb716e77158654ed76e61743541164fdd7dfe76965120bd412e7d5fd36de1f41b0bda3089b54b72d01a987a3ea4d2600d8d1be9c1ad237b8dc2bfa5cf19108b5c0ee873e7d724782ffbdbc00f49408215ede1533322776a8c41c0bac909235cbd7c43f3667da4b874d74c5c7c48704809bfeaded31c097ca30ac0def8b082a3f7b4bcf0408172f3914fbc83b9bd65d03f3e2912",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/hbdpoFu4CI1m-8cjOUACiOhpXA3MJDpeu9d_127Nyqc.ipa"
+  },
+  "fingerprint": {
+    "id": "01a095a7-aae2-78a6-92c0-d826e8bc621f",
+    "hash": "6e25d32c693c1a47cb0f2ab388aec7cf1e2adb99"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-34792c80-7f85-4bc8-ace9-00c137f5570c.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T185634Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=91d88bdb04d1f3c0b2218b4be0f942a700357cc5984c795006ae195b06c53b8b3bceee55ef0e8ffe58d4d17c9a1256ac8922c69400f64742160c162bffd6632e47316ada1d8967d1b197e95bcb1fee74a953242b827f9f91c95e46bcc2255a176a65c82ea3acaa1365ab64e4a058009400d5863fa3b19c0179cdd8ed764cdd30b1a0bff7f538952101abb8af1c1438d29d7156d8f3a8737095a0aac6bf9d5a5d804d1e7a503fa6ea0778b48e120bcbf8d65ba6ad379df18f320ca5ed987e90ae16df0a5eec7a60fb82acf1601d340164b03996afb71bda9f8c8ee5fb9f09ff862d5b816b56335346643101a3f639eb68e00980fbc32e9f2b89159d7c47008309",
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/e5d234ba-3d50-4807-9d3b-5765e59772cd/2026-09-12T12%3A46%3A31Z-e5d234ba-3d50-4807-9d3b-5765e59772cd-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T185634Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=628c26dd01ac2a3c0e90eca07b9556e6ec6b5bd51f441ae27cc7f96f2615d82af96fce2edf033e1b14e6f792ff95fe9a4f4be83308fa5a4bd3fc049cd3387be21f3540969e8f1387298040408c5447a0a205134ce94693e32ff298546dc7a08616e76ced72d1bd892d83930e7eb716e77158654ed76e61743541164fdd7dfe76965120bd412e7d5fd36de1f41b0bda3089b54b72d01a987a3ea4d2600d8d1be9c1ad237b8dc2bfa5cf19108b5c0ee873e7d724782ffbdbc00f49408215ede1533322776a8c41c0bac909235cbd7c43f3667da4b874d74c5c7c48704809bfeaded31c097ca30ac0def8b082a3f7b4bcf0408172f3914fbc83b9bd65d03f3e2912"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "testflight",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.8",
+  "appBuildVersion": "8",
+  "gitCommitHash": "9941dbf8e7937aeec1759435598cd95b2b1702b5",
+  "gitCommitMessage": "Checkpoint: 기사앱 자동견적 Codex findings 보완 후보\n- 기준: d17debf2 보존, 운영 게시/홈페이지 배포/공용 단가 DB 변경 없음\n- 견적 엔진: 분배기 전용 유량밸브 29,000원 고정가, 구수 실패/삭제 상태 동기화, 디지털·아날로그·파라핀·모터 자동수량, Wi-Fi/V타입 독립 선택\n- 초안: 기사·접수 scoped key, requestId 일치 복원, 저장/보고 전 수량·단가·소계 fail-closed\n- 서버: requestId 필수, 본인 배정·고객 일치, malformed JSON/0원/총액 불일치 저장 전 차단, 본인 보고 조회 mapping\n- 검증: 엔진 11 PASS, 권한 계약 2 PASS, 서버 fail-closed 8 PASS, homepage boundary PASS, server build 및 Android/iOS Expo export PASS\n- 실제 APK/IPA 및 iPhone/Android 실기기 시험은 미실시",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-12T12:46:28.532Z",
+  "updatedAt": "2026-09-12T12:51:48.771Z",
+  "completedAt": "2026-09-12T12:51:48.483Z",
+  "expirationDate": "2026-10-12T12:46:28.561Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 2584,
+    "buildQueueTime": 19897,
+    "buildDuration": 297470
+  }
+}

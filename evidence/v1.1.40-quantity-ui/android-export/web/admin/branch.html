@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA / Safari 홈 화면 추가 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="퓨처에너지테크" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#e85d04" />
+  <link rel="apple-touch-icon" href="/web/apple-touch-icon.png" />
+  <link rel="manifest" href="/web/manifest.json" />
+  <title>지사장 대시보드 - 퓨처에너지테크</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --primary: #0ea5e9; --sidebar-bg: #0f172a; --bg: #f1f5f9; --card: #fff; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+    .sidebar { width: 230px; background: var(--sidebar-bg); color: rgba(255,255,255,.75); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 200; transition: transform .25s; }
+    .sidebar-logo { padding: 20px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .sidebar-logo .name { font-size: 15px; font-weight: 700; color: #fff; }
+    .sidebar-logo .sub { font-size: 12px; color: rgba(255,255,255,.5); margin-top: 2px; }
+    .sidebar-user { padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 13px; }
+    .sidebar-user .badge { display: inline-block; background: var(--primary); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+    nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section { padding: 8px 20px 4px; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.35); text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: 14px; cursor: pointer; transition: all .15s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+    .nav-item.active { background: rgba(14,165,233,.15); color: var(--primary); border-left-color: var(--primary); font-weight: 600; }
+    .sidebar-footer { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.1); }
+    .logout-btn { width: 100%; padding: 9px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.7); border: none; border-radius: 8px; font-size: 13px; cursor: pointer; }
+    .main { margin-left: 230px; flex: 1; }
+    .topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; height: 58px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .topbar h1 { font-size: 17px; font-weight: 700; }
+    .content { padding: 24px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: var(--card); border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .stat-value { font-size: 26px; font-weight: 800; }
+    .section-card { background: var(--card); border-radius: 14px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.05); margin-bottom: 18px; }
+    .section-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th { padding: 9px 10px; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid var(--border); }
+    .data-table td { padding: 11px 10px; border-bottom: 1px solid #f3f4f6; }
+    .data-table tr:hover td { background: #f9fafb; }
+    .status-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-assigned { background: #dbeafe; color: #1e40af; }
+    .status-in_progress { background: #e0f2fe; color: #0369a1; }
+    .status-completed { background: #dcfce7; color: #166534; }
+    .action-btn { padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; margin-right: 4px; }
+    .btn-assign { background: #dbeafe; color: #1e40af; }
+    .btn-complete { background: #dcfce7; color: #166534; }
+    .btn-estimate { background: #fef3c7; color: #92400e; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .loading-row td { text-align: center; color: var(--muted); padding: 28px; }
+    .sidebar-toggle { display: none; background: none; border: none; font-size: 22px; cursor: pointer; }
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 150; }
+    .overlay.show { display: block; }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; }
+      .sidebar-toggle { display: block; }
+      /* iPhone 안전 영역 */
+      .topbar { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+      .content { padding: 16px max(16px, env(safe-area-inset-right)) max(80px, calc(env(safe-area-inset-bottom) + 60px)) max(16px, env(safe-area-inset-left)); }
+      .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+      /* 테이블 가로 스크롤 */
+      .section-card { overflow-x: auto; }
+    }
+    @media (max-width: 480px) {
+      .topbar h1 { font-size: 15px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .stat-value { font-size: 20px; }
+    }
+    /* iOS 공통 */
+    input, select, textarea { font-size: 16px; }
+    a, button { -webkit-tap-highlight-color: transparent; }
+    .sidebar nav { -webkit-overflow-scrolling: touch; }
+    /* 모달 iOS 스크롤 */
+    .modal-box { -webkit-overflow-scrolling: touch; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; align-items: center; justify-content: center; }
+    .modal.show { display: flex; }
+    .modal-box { background: #fff; border-radius: 20px; padding: 28px; width: 90%; max-width: 480px; max-height: 80vh; overflow-y: auto; }
+    .modal-box h3 { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 9px; font-size: 14px; font-family: inherit; }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .btn-primary { flex: 1; padding: 11px; background: var(--primary); color: #fff; border: none; border-radius: 9px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .btn-cancel { flex: 1; padding: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 9px; font-size: 14px; cursor: pointer; }
+    .sensor-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.05); }
+  </style>
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- 기사 배정 모달 -->
+<div class="modal" id="assignModal">
+  <div class="modal-box">
+    <h3>👷 기사 배정</h3>
+    <div class="form-group">
+      <label>담당 기사 선택</label>
+      <select id="assignTechSelect"><option value="">기사를 선택하세요</option></select>
+    </div>
+    <div class="form-group">
+      <label>방문 예정일</label>
+      <input type="date" id="assignDate" />
+    </div>
+    <div class="form-group">
+      <label>방문 시간</label>
+      <select id="assignTime" onchange="checkScheduleConflict()">
+        <option value="09:00">오전 9시</option><option value="10:00">오전 10시</option>
+        <option value="11:00">오전 11시</option><option value="13:00">오후 1시</option>
+        <option value="14:00">오후 2시</option><option value="15:00">오후 3시</option>
+        <option value="16:00">오후 4시</option><option value="17:00">오후 5시</option>
+      </select>
+    </div>
+    <div id="assignConflict" style="display:none;background:#fef2f2;color:#b91c1c;border-radius:8px;padding:10px;font-size:13px;margin:6px 0"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0">
+      <input type="checkbox" id="assignNotify" checked /> 고객에게 일정 안내 문자/알림톡 발송
+    </label>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="submitAssign()">배정 및 일정 확정</button>
+      <button class="btn-cancel" onclick="closeModal('assignModal')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 견적 작성 모달 -->
+<div class="modal" id="estimateModal">
+  <div class="modal-box">
+    <h3>🧾 견적 작성</h3>
+    <div class="form-group">
+      <label>작업 내용</label>
+      <textarea id="estimateWork" placeholder="수행할 작업 내용을 입력하세요"></textarea>
+    </div>
+    <div class="form-group">
+      <label>견적 금액 (원)</label>
+      <input type="number" id="estimateAmount" placeholder="예: 150000" />
+    </div>
+    <div class="form-group">
+      <label>비고</label>
+      <input type="text" id="estimateNote" placeholder="추가 안내 사항" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="submitEstimate()">견적 전송</button>
+      <button class="btn-cancel" onclick="closeModal('estimateModal')">취소</button>
+    </div>
+  </div>
+</div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-58W97D3UGLWn9JzTakGt8a.webp" alt="퓨처에너지테크" style="width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:8px;" />
+    <div class="name">퓨처에너지테크</div>
+    <div class="sub">지사장 시스템</div>
+  </div>
+  <div class="sidebar-user">
+    <div class="badge">지사장</div>
+    <div id="sidebarUsername" style="color:#fff;font-weight:600;font-size:14px">지사장</div>
+    <div id="sidebarBranch" style="font-size:12px;color:rgba(255,255,255,.5);margin-top:2px"></div>
+  </div>
+  <nav>
+    <div class="nav-section">대시보드</div>
+    <div class="nav-item active" onclick="showPanel('overview')"><span>📊</span> 지사 현황</div>
+    <div class="nav-section">접수 관리</div>
+    <div class="nav-item" onclick="showPanel('requests')"><span>📋</span> 접수 목록</div>
+    <div class="nav-item" onclick="showPanel('assign')"><span>👷</span> 기사 배정</div>
+    <div class="nav-item" onclick="showPanel('schedule')"><span>📅</span> 방문 일정</div>
+    <div class="nav-section">기사 관리</div>
+    <div class="nav-item" onclick="showPanel('technicians')"><span>🔧</span> 기사 목록</div>
+    <div class="nav-section">통계</div>
+    <div class="nav-item" onclick="showPanel('sales')"><span>💰</span> 월 매출</div>
+    <div class="nav-section">견적서</div>
+    <div class="nav-item" id="nav-bes-send" onclick="showPanel('estimate-send')"><span>📤</span> 견적서 전송하기</div>
+    <div class="nav-item" id="nav-bes-manage" onclick="showPanel('estimate-manage')"><span>📋</span> 기사 견적 보고 대기 <span id="branch-report-badge" style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></div>
+    <div class="nav-item" id="nav-branch-schedule" onclick="showPanel('schedule-requests')"><span>📅</span> 일정요청 확인 <span id="branch-schedule-badge" style="background:#2563eb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></div>
+    <div class="nav-item" id="nav-branch-auto-estimate" onclick="window.open('/web/admin/tech-estimate.html','_blank')"><span>✏️</span> 견적 자동 생성기</div>
+    <div class="nav-section">기타</div>
+    <div class="nav-item" onclick="showPanel('sensors')"><span>📡</span> 누수센서 알림</div>
+    <div class="nav-item" onclick="showPanel('materials')"><span>📦</span> 자재 주문</div>
+    <div class="nav-section">실시간</div>
+    <div class="nav-item" onclick="showPanel('tracking')"><span>📍</span> 기사 이동 현황</div>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="logout-btn" onclick="doLogout()">🚪 로그아웃</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+      <h1 id="pageTitle">지사 현황</h1>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button onclick="loadCurrentPanel()" style="padding:6px 13px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;font-size:13px;cursor:pointer">🔄 새로고침</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 지사 현황 -->
+    <div class="panel active" id="panel-overview">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">오늘 접수</div><div class="stat-value" id="bstat-today">-</div></div>
+        <div class="stat-card"><div class="stat-label">처리 대기</div><div class="stat-value" id="bstat-pending">-</div></div>
+        <div class="stat-card"><div class="stat-label">진행 중</div><div class="stat-value" id="bstat-inprogress">-</div></div>
+        <div class="stat-card"><div class="stat-label">이달 완료</div><div class="stat-value" id="bstat-completed">-</div></div>
+        <div class="stat-card"><div class="stat-label">소속 기사</div><div class="stat-value" id="bstat-techs">-</div></div>
+        <div class="stat-card"><div class="stat-label">누수 경보</div><div class="stat-value" id="bstat-alerts" style="color:#ef4444">-</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+        <div class="section-card"><h3>📈 이달 접수 추이</h3><canvas id="branchMonthChart" height="200"></canvas></div>
+        <div class="section-card"><h3>👷 기사별 작업 현황</h3><canvas id="techWorkChart" height="200"></canvas></div>
+      </div>
+      <div class="section-card">
+        <h3>🆕 최근 접수</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>증상</th><th>접수일</th><th>상태</th><th>처리</th></tr></thead>
+            <tbody id="branchRecentTbody"><tr class="loading-row"><td colspan="7">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 접수 목록 -->
+    <div class="panel" id="panel-requests">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <select id="bFilterStatus" onchange="loadBranchRequests()">
+          <option value="">전체 상태</option>
+          <option value="pending">대기</option>
+          <option value="assigned">배정됨</option>
+          <option value="in_progress">진행 중</option>
+          <option value="completed">완료</option>
+        </select>
+        <button onclick="loadBranchRequests()" style="padding:8px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔍 검색</button>
+      </div>
+      <div class="section-card">
+        <h3>📋 접수 목록</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>전화번호</th><th>주소</th><th>증상</th><th>접수일</th><th>상태</th><th>처리</th></tr></thead>
+            <tbody id="branchRequestsTbody"><tr class="loading-row"><td colspan="8">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 기사 배정 -->
+    <div class="panel" id="panel-assign">
+      <div class="section-card">
+        <h3>👷 기사 미배정 접수</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>증상</th><th>접수일</th><th>배정</th></tr></thead>
+            <tbody id="unassignedTbody"><tr class="loading-row"><td colspan="6">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 방문 일정 -->
+    <div class="panel" id="panel-schedule">
+      <div class="section-card">
+        <h3>📅 방문 일정</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>접수번호</th><th>고객명</th><th>주소</th><th>담당기사</th><th>방문예정일</th><th>시간</th><th>상태</th><th>변경</th></tr></thead>
+            <tbody id="scheduleTbody"><tr class="loading-row"><td colspan="8">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 기사 목록 -->
+    <div class="panel" id="panel-technicians">
+      <div class="section-card">
+        <h3>🔧 소속 기사 목록</h3>
+        <div id="techCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">
+          <div style="text-align:center;padding:40px;color:#6b7280">불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 월 매출 -->
+    <div class="panel" id="panel-sales">
+      <div class="section-card">
+        <h3>💰 월별 매출 현황</h3>
+        <canvas id="salesChart" height="200" style="margin-bottom:20px"></canvas>
+        <table class="data-table">
+          <thead><tr><th>월</th><th>접수 건수</th><th>완료 건수</th><th>완료율</th></tr></thead>
+          <tbody id="branchSalesTbody"><tr class="loading-row"><td colspan="4">불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 견적서 전송 -->
+    <!-- 견적서 전송하기 패널 (지사) -->
+    <div class="panel" id="panel-estimate-send">
+      <div class="section-card">
+        <h3>📤 견적서 전송하기</h3>
+        <!-- 탭 선택 -->
+        <div style="display:flex;gap:0;border-bottom:2px solid #e5e8ec;margin-bottom:18px">
+          <button id="btab-file" onclick="switchBranchEstimateTab('file')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:700;color:#0ea5e9;border-bottom:2px solid #0ea5e9;cursor:pointer;margin-bottom:-2px">📄 파일 업로드</button>
+          <button id="btab-auto" onclick="switchBranchEstimateTab('auto')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;margin-bottom:-2px">✨ 자동 생성 곬적 송출</button>
+        </div>
+        <!-- 탭1: 기존 파일 업로드 -->
+        <div id="btab-content-file">
+        <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">곬적서 파일(PDF/이미지)를 업로드하고 고객에게 문자로 발송합니다. 고객이 승인하면 자동으로 접수가 생성됩니다.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label>
+            <input id="bes-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label>
+            <input id="bes-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label>
+            <input id="bes-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 금액(원)</label>
+            <input id="bes-amount" type="number" placeholder="선택 입력" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" />
+          </div>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label>
+          <textarea id="bes-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">견적서 파일 (PDF / JPG / PNG) *</label><br/>
+          <input id="bes-file" type="file" accept=".pdf,image/*" style="margin-top:6px" />
+          <span id="bes-file-status" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
+        </div>
+        <div style="margin-top:12px;max-width:680px">
+          <label style="font-size:12px;font-weight:600;color:#374151">유효기간</label>
+          <select id="bes-valid" style="width:200px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px">
+            <option value="3">3일</option>
+            <option value="7" selected>7일</option>
+            <option value="14">14일</option>
+            <option value="30">30일</option>
+          </select>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="bes-send-btn" onclick="submitBranchEstimate()" style="padding:12px 24px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">📤 견적서 문자 발송</button>
+          <button onclick="showPanel('estimate-manage')" style="padding:12px 20px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;cursor:pointer">🧾 발송 내역 보기</button>
+        </div>
+        <div id="bes-result" style="display:none;margin-top:14px;max-width:680px"></div>
+        </div><!-- /btab-content-file -->
+
+        <!-- 탭2: 자동 생성 견적 송출 -->
+        <div id="btab-content-auto" style="display:none">
+          <p style="color:#6b7280;font-size:13px;margin:4px 0 14px">견적 자동 생성기에서 만든 견적 데이터를 붙여넣고 고객에게 문자로 발송합니다.</p>
+          <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;color:#0369a1">
+            💡 <strong>사용 방법:</strong> 견적 자동 생성기에서 견적 완성 후 "기존 시스템으로 내보내기" 버튼을 누르면 JSON이 복사됩니다. 아래 입력란에 붙여넣으세요.
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;font-weight:600;color:#374151">견적 데이터 (JSON 붙여넣기) *</label>
+            <textarea id="bauto-json-input" rows="6" placeholder="견적 자동 생성기에서 복사한 JSON을 여기에 붙여넣으세요..." style="width:100%;max-width:680px;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px;font-family:monospace;font-size:12px" onchange="parseBranchAutoJson()" oninput="parseBranchAutoJson()"></textarea>
+          </div>
+          <div id="bauto-preview" style="display:none;max-width:680px;margin-bottom:14px">
+            <div style="background:#f8fafc;border:1px solid #e5e8ec;border-radius:10px;padding:14px">
+              <div style="font-weight:700;margin-bottom:10px;color:#1e293b">👁️ 견적 내용 미리보기</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;font-size:13px">
+                <div><span style="color:#6b7280">고객명:</span> <strong id="bap-name"></strong></div>
+                <div><span style="color:#6b7280">연락처:</span> <strong id="bap-phone"></strong></div>
+                <div><span style="color:#6b7280">주소:</span> <strong id="bap-addr"></strong></div>
+                <div><span style="color:#6b7280">총 금액:</span> <strong id="bap-total" style="color:#0ea5e9"></strong></div>
+              </div>
+              <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#1e293b;color:#fff"><th style="padding:6px 8px;text-align:left">품목명</th><th style="padding:6px 8px;text-align:left">규격</th><th style="padding:6px 4px;text-align:center">수량</th><th style="padding:6px 8px;text-align:right">단가</th><th style="padding:6px 8px;text-align:right">합계</th></tr></thead><tbody id="bap-items"></tbody></table></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:680px">
+            <div><label style="font-size:12px;font-weight:600;color:#374151">고객명 *</label><input id="bauto-name" type="text" placeholder="홍길동" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" /></div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151">고객 연락처 *</label><input id="bauto-phone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" /></div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151">견적 제목</label><input id="bauto-title" type="text" placeholder="예) 난방 배관 교체 공사" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px" /></div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151">유효기간</label><select id="bauto-valid" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"><option value="3">3일</option><option value="7" selected>7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
+          </div>
+          <div style="margin-top:12px;max-width:680px"><label style="font-size:12px;font-weight:600;color:#374151">고객 안내 메모</label><textarea id="bauto-memo" rows="2" placeholder="견적서에 함께 안내할 내용" style="width:100%;padding:10px;border:1px solid #e5e8ec;border-radius:8px;margin-top:4px"></textarea></div>
+          <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+            <button id="bauto-send-btn" onclick="submitBranchAutoEstimate()" style="padding:12px 24px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">✨ 자동 견적 문자 발송</button>
+            <button onclick="showPanel('estimate-manage')" style="padding:12px 20px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;cursor:pointer">🧾 발송 내역 보기</button>
+          </div>
+          <div id="bauto-result" style="display:none;margin-top:14px;max-width:680px"></div>
+        </div><!-- /btab-content-auto -->
+      </div>
+    </div>
+
+    <!-- 견적서 관리 패널 (지사) -->
+    <!-- 기사 견적 보고 대기 섹션 (report_pending) -->
+    <div class="panel" id="panel-estimate-manage">
+      <div class="section-card" style="border-left:4px solid #f59e0b;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0">📋 기사 견적 보고 대기 <span id="b-report-pending-badge" style="background:#f59e0b;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:6px">0</span></h3>
+            <p style="font-size:13px;color:#6b7280;margin:4px 0 0">기사가 보고한 견적 — 검토 후 고객에게 발송하거나 반려하세요</p>
+          </div>
+          <button onclick="loadBranchReportPending()" style="padding:8px 14px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>견적번호</th><th>기사명</th><th>고객</th><th>연락처</th><th>금액</th><th>보고일시</th><th>관리</th></tr></thead>
+            <tbody id="branchReportPendingTbody"><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 기존 견적서 관리 목록 -->
+      <div class="section-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0">🧾 견적서 관리</h3>
+            <p style="font-size:13px;color:#6b7280;margin:4px 0 0">우리 지사 견적서 조회 및 상태 관리</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="bes-filter" onchange="loadBranchEstimates()" style="padding:8px;border:1px solid #e5e8ec;border-radius:8px;font-size:13px">
+              <option value="">전체 상태</option>
+              <option value="report_pending">📋 보고대기</option>
+              <option value="pending">발송됨</option>
+              <option value="viewed">열람</option>
+              <option value="schedule_requested">📅 일정요청</option>
+              <option value="schedule_confirmed">✅ 일정확정</option>
+              <option value="converted">접수완료</option>
+              <option value="expired">만료</option>
+            </select>
+            <button onclick="loadBranchEstimates()" style="padding:8px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+            <button onclick="showPanel('estimate-send')" style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">📤 견적서 전송하기</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>견적번호</th><th>고객</th><th>연락처</th><th>금액</th><th>상태</th><th>발송일</th><th>관리</th></tr></thead>
+            <tbody id="besTbody"><tr class="loading-row"><td colspan="7">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:#6b7280">
+          🔵 발송됨 &nbsp;🟣 열람 &nbsp;📅 일정요청 &nbsp;✅ 일정확정 &nbsp;🟢 접수완료 &nbsp;⚪ 만료
+        </div>
+      </div>
+    </div>
+
+    <!-- 일정요청 확인 패널 (지사용) -->
+    <div class="panel" id="panel-schedule-requests">
+      <div class="section-card" style="border-left:4px solid #2563eb;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div>
+            <h3 style="margin:0">📅 일정요청 확인 <span id="branch-schedule-req-badge" style="background:#2563eb;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:6px">0</span></h3>
+            <p style="font-size:13px;color:#6b7280;margin:4px 0 0">고객이 일정 잡기를 요청한 견적 — 방문 일정을 확정하거나 접수로 전환하세요</p>
+          </div>
+          <button onclick="loadBranchScheduleRequests()" style="padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>견적번호</th><th>고객명</th><th>연락처</th><th>금액</th><th>요청 일정</th><th>요청일시</th><th>관리</th></tr></thead>
+            <tbody id="branchScheduleReqTbody"><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 누수센서 -->
+    <div class="panel" id="panel-sensors">
+      <div class="section-card">
+        <h3>📡 지사 누수센서 현황</h3>
+        <div id="branchSensorGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+          <div style="text-align:center;padding:40px;color:#6b7280">불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 자재 주문 -->
+    <div class="panel" id="panel-materials">
+      <div class="section-card">
+        <h3>📦 자재 주문</h3>
+        <div style="text-align:center;padding:48px;color:#6b7280">자재 주문 기능은 앱에서 이용해 주세요.</div>
+      </div>
+    </div>
+
+    <!-- 기사 이동 현황 (지사장용) -->
+    <div class="panel" id="panel-tracking">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800">📍 기사 이동 현황</h2>
+          <p style="font-size:13px;color:#6b7280;margin-top:4px">소속 지사 기사 실시간 이동 현황</p>
+        </div>
+        <button onclick="loadBranchTracking()" style="padding:8px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🔄 새로고침</button>
+      </div>
+
+      <!-- 전화 접수 고객 위치 공유 시작 -->
+      <div class="section-card" style="margin-bottom:20px;border:1px solid #BAE6FD;background:#F0F9FF">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:18px">📞</span>
+          <h3 style="margin:0">전화 접수 고객 위치 공유</h3>
+        </div>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 14px">앱을 설치하지 않은 고객에게도 기사 위치 확인 링크를 문자로 보낼 수 있습니다.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">고객명 *</label>
+            <input id="bmanual-customer-name" type="text" placeholder="예) 홍길동" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">고객 전화번호 *</label>
+            <input id="bmanual-customer-phone" type="tel" placeholder="01012345678" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">담당 기사명 *</label>
+            <input id="bmanual-tech-name" type="text" placeholder="예) 김기사" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">기사 전화번호</label>
+            <input id="bmanual-tech-phone" type="tel" placeholder="01012345678" style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:4px">방문 주소</label>
+            <input id="bmanual-customer-address" type="text" placeholder="예) 안산시 단원구 ..." style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px">
+          </div>
+        </div>
+        <button onclick="startBranchManualTracking()" style="width:100%;padding:12px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📤 위치 공유 시작 및 링크 문자 발송</button>
+        <div id="bmanual-tracking-result" style="margin-top:12px"></div>
+      </div>
+
+      <div class="section-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3>🚗 이동 중인 기사</h3>
+          <div id="branch-tracking-count" style="background:#FFF3E0;color:#FF6B35;border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">0명</div>
+        </div>
+        <div id="branch-tracking-list">
+          <div style="text-align:center;padding:48px;color:#6b7280">
+            <div style="font-size:48px;margin-bottom:16px">🚗</div>
+            <div>현재 이동 중인 기사가 없습니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 개발 미리보기(8081)에서는 Express 서버(3000 포트)로 직접 요청
+  function getApiBase() {
+    const host = window.location.hostname;
+    // 호스트명이 808x-xxx 패턴이면 3000-xxx로 변환
+    const devMatch = host.match(/^(808\d)-(.*)/);
+    if (devMatch) {
+      return window.location.protocol + '//' + '3000-' + devMatch[2];
+    }
+    return '';
+  }
+  const API = getApiBase() + '/api/trpc';
+  let user = null;
+  let currentPanel = 'overview';
+  let selectedRequestId = null;
+
+  function checkAuth() {
+    const stored = sessionStorage.getItem('authUser') || localStorage.getItem('authUser') || sessionStorage.getItem('adminUser');
+    if (!stored) { window.location.href = window.location.origin + '/web/login.html'; return; }
+    user = JSON.parse(stored);
+    if (user.appRole !== 'branch_manager') {
+      alert('지사장 전용 화면입니다.');
+      window.location.href = window.location.origin + '/web/login.html';
+      return;
+    }
+    document.getElementById('sidebarUsername').textContent = user.name || user.username || '지사장';
+    document.getElementById('sidebarBranch').textContent = user.branchName || '';
+  }
+
+  function doLogout() { sessionStorage.removeItem('adminUser'); sessionStorage.removeItem('authUser'); localStorage.removeItem('authUser'); window.location.href = window.location.origin + '/web/login.html'; }
+  function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('show'); }
+  function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('show'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => { if (n.getAttribute('onclick')?.includes("'" + name + "'")) n.classList.add('active'); });
+    const titles = { overview:'지사 현황', requests:'접수 목록', assign:'기사 배정', schedule:'방문 일정', technicians:'기사 목록', sales:'월 매출', estimates:'견적서 전송', 'estimate-send':'견적서 전송하기', 'estimate-manage':'견적서 관리', sensors:'누수센서 알림', materials:'자재 주문' };
+    document.getElementById('pageTitle').textContent = titles[name] || name;
+    currentPanel = name;
+    loadCurrentPanel();
+    closeSidebar();
+  }
+
+  function loadCurrentPanel() {
+    if (currentPanel === 'overview') loadOverview();
+    else if (currentPanel === 'requests') loadBranchRequests();
+    else if (currentPanel === 'assign') loadUnassigned();
+    else if (currentPanel === 'schedule') loadSchedule();
+    else if (currentPanel === 'technicians') loadTechnicians();
+    else if (currentPanel === 'sales') loadSales();
+    else if (currentPanel === 'sensors') loadSensors();
+    else if (currentPanel === 'estimates') loadBranchEstimates();
+    else if (currentPanel === 'estimate-send') { /* 전송 폼 - 자동 로드 불필요 */ }
+    else if (currentPanel === 'estimate-manage') { if (window.loadBranchEstimates) window.loadBranchEstimates(); else loadBranchEstimates(); if (window.loadBranchReportPending) window.loadBranchReportPending(); }
+    else if (currentPanel === 'schedule-requests') { if (window.loadBranchScheduleRequests) window.loadBranchScheduleRequests(); }
+  }
+
+  // 프론트에서 사용하는 간단 이름 → 실제 라우터 procedure 매핑
+  function resolveProc(proc) {
+    const alias = { 'repair.list':'repair.listAll', 'branch.list':'branch.listAll', 'sensor.list':'sensor.listAll' };
+    return alias[proc] || proc;
+  }
+  function branchAuthHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    if (user && user.userId && user.token) headers['Authorization'] = 'Bearer ' + user.token;
+    return headers;
+  }
+  async function trpc(proc, input) {
+    try {
+      let url = API + '/' + resolveProc(proc);
+      // 인증 헤더 포함 (지사장 토큰)
+      let opts = { headers: branchAuthHeaders() };
+      const isMutation = input && (input._mutation === true || (Object.keys(input).length > 0 && !input._query));
+      const cleanInput = input ? Object.fromEntries(Object.entries(input).filter(([k]) => k !== '_mutation' && k !== '_query' && k !== '_dummy')) : {};
+      if (!isMutation) {
+        url += '?input=' + encodeURIComponent(JSON.stringify({ json: cleanInput }));
+        opts.method = 'GET';
+      } else {
+        opts.method = 'POST';
+        opts.body = JSON.stringify({ json: cleanInput });
+      }
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        alert('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.');
+        doLogout();
+        return null;
+      }
+      if (res.status === 403) { console.warn('[trpc] 403 Forbidden:', proc); return null; }
+      const data = await res.json();
+      if (data.error) {
+        const code = data.error?.json?.data?.code;
+        if (code === 'UNAUTHORIZED') { alert('로그인이 필요합니다. 다시 로그인해 주세요.'); doLogout(); return null; }
+        if (code === 'FORBIDDEN') { console.warn('[trpc] FORBIDDEN:', proc); return null; }
+      }
+      return data.result?.data?.json;
+    } catch (e) { console.error('[trpc]', proc, e); return null; }
+  }
+
+  function statusLabel(s) {
+    const m = { pending:'대기', assigned:'배정됨', in_progress:'진행중', completed:'완료', cancelled:'취소' };
+    return m[s] || s || '신규접수';
+  }
+  function statusClass(s) {
+    const m = { '신규접수':'pending','기사배정대기':'pending','방문예정':'assigned','작업진행중':'in_progress','견적승인대기':'in_progress','작업완료':'completed','재방문필요':'cancelled', pending:'pending',assigned:'assigned',in_progress:'in_progress',completed:'completed',cancelled:'cancelled' };
+    return m[s] || 'pending';
+  }
+  function addrText(r) { return `${r.apartmentName || r.aptName || ''} ${r.dong || ''}동 ${r.ho || ''}호`.trim(); }
+  // 미배정(기사 없음) 여부
+  function isUnassignedReq(r) { return !r.technicianId; }
+
+  async function loadOverview() {
+    const [repairs, sensors] = await Promise.all([
+      trpc('repair.list', {}),
+      trpc('sensor.list', {}),
+    ]);
+    const branchId = user.branchId;
+    const list = (repairs || []).filter(r => !branchId || r.branchId === branchId);
+    const today = new Date().toISOString().split('T')[0];
+    const thisMonth = new Date().toISOString().slice(0, 7);
+
+    document.getElementById('bstat-today').textContent = list.filter(r => r.createdAt?.startsWith(today)).length;
+    document.getElementById('bstat-pending').textContent = list.filter(r => isUnassignedReq(r) && r.status !== '작업완료').length;
+    document.getElementById('bstat-inprogress').textContent = list.filter(r => !isUnassignedReq(r) && r.status !== '작업완료').length;
+    document.getElementById('bstat-completed').textContent = list.filter(r => r.status === '작업완료' && r.createdAt?.startsWith(thisMonth)).length;
+    document.getElementById('bstat-techs').textContent = '-';
+    document.getElementById('bstat-alerts').textContent = (sensors || []).filter(s => s.status === 'leak_detected' && (!branchId || s.branchId === branchId)).length;
+
+    // 최근 접수
+    const tbody = document.getElementById('branchRecentTbody');
+    const recent = list.slice(-10).reverse();
+    tbody.innerHTML = recent.length ? recent.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${addrText(r)}</td>
+        <td>${Array.isArray(r.symptoms) ? r.symptoms.slice(0,2).join(', ') : r.symptom || '-'}</td>
+        <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td>
+          <button class="action-btn btn-assign" onclick="openAssign(${r.id})">${isUnassignedReq(r) ? '배정' : '재배정'}</button>
+          <button class="action-btn btn-estimate" onclick="openEstimate(${r.id})">견적</button>
+        </td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="7">접수 데이터가 없습니다</td></tr>';
+
+    // 이달 접수 추이 (일별)
+    const days = {};
+    list.filter(r => r.createdAt?.startsWith(thisMonth)).forEach(r => {
+      const d = r.createdAt.slice(8, 10) + '일';
+      days[d] = (days[d] || 0) + 1;
+    });
+    const sortedDays = Object.keys(days).sort();
+    renderChart('branchMonthChart', 'bar', sortedDays, sortedDays.map(d => days[d]), '접수', '#0ea5e9');
+  }
+
+  function renderChart(id, type, labels, data, label, color) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (canvas._chart) canvas._chart.destroy();
+    canvas._chart = new Chart(canvas, {
+      type,
+      data: { labels, datasets: [{ label, data, backgroundColor: color, borderColor: type === 'line' ? color : undefined, borderWidth: type === 'line' ? 2 : 0, borderRadius: type === 'bar' ? 4 : 0, fill: type === 'line' }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+
+  async function loadBranchRequests() {
+    const data = await trpc('repair.list', {});
+    const branchId = user.branchId;
+    const list = (data || []).filter(r => !branchId || r.branchId === branchId);
+    const statusFilter = document.getElementById('bFilterStatus')?.value;
+    const filtered = statusFilter ? list.filter(r => r.status === statusFilter) : list;
+    const tbody = document.getElementById('branchRequestsTbody');
+    tbody.innerHTML = filtered.length ? filtered.reverse().map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${r.phoneNumber || r.customerPhone || '-'}</td>
+        <td>${addrText(r)}</td>
+        <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
+        <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td>
+          <button class="action-btn btn-assign" onclick="openAssign(${r.id})">${isUnassignedReq(r) ? '배정' : '재배정'}</button>
+          <button class="action-btn btn-estimate" onclick="openEstimate(${r.id})">견적</button>
+          ${r.status !== '작업완료' ? `<button class="action-btn btn-complete" onclick="completeRequest(${r.id})">완료</button>` : ''}
+        </td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="8">접수 데이터가 없습니다</td></tr>';
+  }
+
+  async function loadUnassigned() {
+    const data = await trpc('repair.list', {});
+    const branchId = user.branchId;
+    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && isUnassignedReq(r) && r.status !== '작업완료');
+    const tbody = document.getElementById('unassignedTbody');
+    tbody.innerHTML = list.length ? list.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${addrText(r)}</td>
+        <td>${Array.isArray(r.symptoms) ? r.symptoms.join(', ') : r.symptom || '-'}</td>
+        <td>${r.createdAt ? r.createdAt.slice(0,10) : '-'}</td>
+        <td><button class="action-btn btn-assign" onclick="openAssign(${r.id})">기사 배정</button></td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="6">미배정 접수가 없습니다</td></tr>';
+  }
+
+  async function loadSchedule() {
+    const data = await trpc('repair.list', {});
+    const branchId = user.branchId;
+    const list = (data || []).filter(r => (!branchId || r.branchId === branchId) && !isUnassignedReq(r) && r.status !== '작업완료' && r.scheduledDate);
+    const tbody = document.getElementById('scheduleTbody');
+    tbody.innerHTML = list.length ? list.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.customerName || '-'}</td>
+        <td>${addrText(r)}</td>
+        <td>${r.technicianName || (r.technicianId ? '기사 #' + r.technicianId : '미배정')}</td>
+        <td>${r.scheduledDate || '-'}</td>
+        <td>${r.scheduledTime || '-'}</td>
+        <td><span class="status-badge status-${statusClass(r.status)}">${r.status || '신규접수'}</span></td>
+        <td><button class="action-btn btn-assign" onclick="openAssign(${r.id})">변경</button></td>
+      </tr>
+    `).join('') : '<tr class="loading-row"><td colspan="8">예정된 방문 일정이 없습니다</td></tr>';
+  }
+
+  async function loadTechnicians() {
+    const el = document.getElementById('techCards');
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280">기사 목록은 앱에서 관리해 주세요.</div>';
+  }
+
+  async function loadSales() {
+    const data = await trpc('repair.list', {});
+    const branchId = user.branchId;
+    const list = (data || []).filter(r => !branchId || r.branchId === branchId);
+    const year = new Date().getFullYear();
+    const months = Array.from({length:12}, (_,i) => `${year}-${String(i+1).padStart(2,'0')}`);
+    const tbody = document.getElementById('branchSalesTbody');
+    tbody.innerHTML = months.map(m => {
+      const ml = list.filter(r => r.createdAt?.startsWith(m));
+      const completed = ml.filter(r => r.status === '작업완료').length;
+      const rate = ml.length ? Math.round(completed/ml.length*100) : 0;
+      return `<tr><td>${parseInt(m.slice(5))}월</td><td>${ml.length}</td><td>${completed}</td><td>${rate}%</td></tr>`;
+    }).join('');
+    const counts = months.map(m => list.filter(r => r.createdAt?.startsWith(m)).length);
+    renderChart('salesChart', 'bar', months.map(m => parseInt(m.slice(5))+'월'), counts, '접수', '#0ea5e9');
+  }
+
+  async function loadSensors() {
+    const data = await trpc('sensor.list', {});
+    const branchId = user.branchId;
+    const list = (data || []).filter(s => !branchId || s.branchId === branchId);
+    const el = document.getElementById('branchSensorGrid');
+    const stInfo = { normal:{label:'정상',color:'#22c55e',bg:'#dcfce7',icon:'✅'}, leak_detected:{label:'누수 감지',color:'#ef4444',bg:'#fee2e2',icon:'🚨'}, low_battery:{label:'배터리 부족',color:'#f59e0b',bg:'#fef3c7',icon:'🔋'}, offline:{label:'통신 끊김',color:'#6b7280',bg:'#f3f4f6',icon:'📵'} };
+    el.innerHTML = list.length ? list.map(s => {
+      const st = stInfo[s.status] || stInfo.normal;
+      return `<div class="sensor-card" style="border-top:4px solid ${st.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700">${s.name || '센서 #'+s.id}</div>
+          <div style="background:${st.bg};color:${st.color};padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600">${st.icon} ${st.label}</div>
+        </div>
+        <div style="font-size:12px;color:#6b7280;line-height:1.8">
+          <div>📍 ${s.location || '-'}</div>
+          <div>🔋 ${s.batteryLevel ?? '-'}%</div>
+        </div>
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:40px;color:#6b7280;grid-column:1/-1">등록된 센서가 없습니다</div>';
+  }
+
+  let _branchRequests = [];
+  let _branchTechs = [];
+  async function openAssign(requestId) {
+    selectedRequestId = requestId;
+    document.getElementById('assignConflict').style.display = 'none';
+    const [reqs, techs] = await Promise.all([ trpc('repair.list', {}), trpc('technicians.list', {}) ]);
+    _branchRequests = reqs || [];
+    // 소속 지사 기사만 표시
+    _branchTechs = (techs || []).filter(t => !user.branchId || t.branchId === user.branchId);
+    const r = _branchRequests.find(x => x.id === requestId);
+    const sel = document.getElementById('assignTechSelect');
+    sel.innerHTML = '<option value="">기사를 선택하세요</option>' +
+      _branchTechs.map(t => `<option value="${t.id}" data-name="${(t.name||'').replace(/"/g,'&quot;')}">${t.name}</option>`).join('');
+    sel.onchange = checkScheduleConflict;
+    document.getElementById('assignDate').value = (r && (r.scheduledDate || r.preferredDate)) || '';
+    if (r && r.scheduledTime) document.getElementById('assignTime').value = r.scheduledTime;
+    if (r && r.technicianId) sel.value = String(r.technicianId);
+    document.getElementById('assignModal').classList.add('show');
+  }
+
+  function checkScheduleConflict() {
+    const techId = parseInt(document.getElementById('assignTechSelect').value || '0', 10);
+    const date = document.getElementById('assignDate').value;
+    const time = document.getElementById('assignTime').value;
+    const box = document.getElementById('assignConflict');
+    if (!techId || !date) { box.style.display = 'none'; return; }
+    const conflicts = _branchRequests.filter(r => r.id !== selectedRequestId && r.technicianId === techId && r.scheduledDate === date && r.status !== '작업완료' && (!time || !r.scheduledTime || r.scheduledTime === time));
+    if (conflicts.length) {
+      box.style.display = 'block';
+      box.innerHTML = `⚠️ 이 기사는 ${date}에 이미 ${conflicts.length}건의 방문이 있습니다 (${conflicts.map(c=>'#'+c.id).join(', ')}).`;
+    } else { box.style.display = 'none'; }
+  }
+
+  async function submitAssign() {
+    const sel = document.getElementById('assignTechSelect');
+    const techId = parseInt(sel.value || '0', 10);
+    const techName = sel.options[sel.selectedIndex]?.getAttribute('data-name') || '';
+    const date = document.getElementById('assignDate').value;
+    const time = document.getElementById('assignTime').value;
+    const notify = document.getElementById('assignNotify').checked;
+    if (!techId) { alert('담당 기사를 선택해 주세요.'); return; }
+    if (!date) { alert('방문 예정일을 선택해 주세요.'); return; }
+    try {
+      await trpc('repair.assignTechnician', { id: selectedRequestId, technicianId: techId, technicianName: techName, scheduledDate: date, scheduledTime: time, notify: false });
+      await trpc('repair.updateSchedule', { id: selectedRequestId, scheduledDate: date, scheduledTime: time, notify });
+      alert('기사 배정과 일정 확정이 완료되었습니다.' + (notify ? '\n고객에게 안내를 발송했습니다.' : ''));
+      closeModal('assignModal');
+      loadCurrentPanel();
+    } catch (e) {
+      alert('배정 실패: ' + (e?.message || e));
+    }
+  }
+
+  function openEstimate(requestId) {
+    selectedRequestId = requestId;
+    document.getElementById('estimateWork').value = '';
+    document.getElementById('estimateAmount').value = '';
+    document.getElementById('estimateNote').value = '';
+    document.getElementById('estimateModal').classList.add('show');
+  }
+
+  async function submitEstimate() {
+    const work = document.getElementById('estimateWork').value.trim();
+    const amount = document.getElementById('estimateAmount').value;
+    if (!work) { alert('작업 내용을 입력해 주세요.'); return; }
+    alert(`견적이 저장되었습니다.\n작업: ${work}\n금액: ${Number(amount).toLocaleString()}원`);
+    closeModal('estimateModal');
+  }
+
+  async function completeRequest(id) {
+    if (!confirm('작업을 완료 처리하시겠습니까?')) return;
+    const res = await fetch(API + '/repair.update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json: { id, status: 'completed' } })
+    });
+    const data = await res.json();
+    if (data.result?.data?.json?.id) {
+      alert('완료 처리되었습니다.');
+      loadCurrentPanel();
+    } else {
+      alert('처리 실패: ' + (data.error?.message || '오류'));
+    }
+  }
+
+  // 기사 이동 현황 (지사장용)
+  let branchTrackingInterval = null;
+
+  async function loadBranchTracking() {
+    if (!user || !user.branchId) return;
+    try {
+      const apiBase = getApiBase();
+      const res = await fetch(apiBase + '/api/location/active/branch/' + user.branchId);
+      if (!res.ok) throw new Error('요청 실패');
+      const { sessions } = await res.json();
+      const list = document.getElementById('branch-tracking-list');
+      const countEl = document.getElementById('branch-tracking-count');
+      if (!list) return;
+      if (!sessions || sessions.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:48px;color:#6b7280"><div style="font-size:48px;margin-bottom:16px">🚗</div><div>현재 이동 중인 기사가 없습니다</div></div>';
+        if (countEl) countEl.textContent = '0명';
+        return;
+      }
+      if (countEl) countEl.textContent = sessions.length + '명 이동 중';
+      list.innerHTML = sessions.map(s => {
+        const depTime = s.departedAt ? new Date(s.departedAt).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'}) : '-';
+        const updTime = s.currentUpdatedAt ? new Date(s.currentUpdatedAt).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '위치 수신 대기';
+        const trackUrl = window.location.origin + '/track/' + s.trackingToken;
+        return `
+          <div style="border:2px solid #0ea5e9;border-radius:16px;padding:18px;margin-bottom:14px;background:#F0F9FF">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <div style="background:#0ea5e9;color:white;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🚗</div>
+              <div style="flex:1">
+                <div style="font-size:16px;font-weight:800;color:#111">${s.technicianName || '기사'}</div>
+                <div style="font-size:13px;color:#6B7280">출발 ${depTime}</div>
+              </div>
+              <div style="background:#E0F2FE;color:#0369A1;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700">이동 중</div>
+            </div>
+            <div style="background:#F9FAFB;border-radius:12px;padding:12px;margin-bottom:12px">
+              <div style="font-size:12px;color:#9CA3AF;margin-bottom:4px">고객 정보</div>
+              <div style="font-size:14px;font-weight:700;color:#374151">${s.customerName || '-'} 고객님</div>
+              <div style="font-size:13px;color:#6B7280;margin-top:2px">${s.customerAddress || '-'}</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:120px;font-size:12px;color:#9CA3AF">마지막 위치: ${updTime}</div>
+              <button onclick="copyBranchTrackUrl('${trackUrl}')" style="background:#F3F4F6;color:#374151;border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer">📋 링크 복사</button>
+              <a href="${trackUrl}" target="_blank" style="background:#3B82F6;color:white;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;text-decoration:none">🔗 위치 확인</a>
+              <button onclick="stopBranchTrackingSession('${s.trackingToken}')" style="background:#FEE2E2;color:#DC2626;border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer">⏹ 공유 종료</button>
+            </div>
+          </div>`;
+      }).join('');
+    } catch(e) {
+      console.error('지사 이동 현황 로드 실패:', e);
+    }
+  }
+
+  // 전화 접수 고객 위치 공유 시작 (지사장)
+  async function startBranchManualTracking() {
+    const customerName = (document.getElementById('bmanual-customer-name').value || '').trim();
+    const customerPhone = (document.getElementById('bmanual-customer-phone').value || '').trim();
+    const technicianName = (document.getElementById('bmanual-tech-name').value || '').trim();
+    const technicianPhone = (document.getElementById('bmanual-tech-phone').value || '').trim();
+    const customerAddress = (document.getElementById('bmanual-customer-address').value || '').trim();
+    const resultEl = document.getElementById('bmanual-tracking-result');
+    if (!customerName || !customerPhone || !technicianName) {
+      resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">고객명, 고객 전화번호, 담당 기사명은 필수입니다.</div>';
+      return;
+    }
+    resultEl.innerHTML = '<div style="color:#6B7280;font-size:13px">링크 생성 및 문자 발송 중...</div>';
+    try {
+      const apiBase = getApiBase();
+      const body = { customerName, customerPhone, technicianName, technicianPhone, customerAddress };
+      if (user && user.branchId) { body.branchId = user.branchId; }
+      const res = await fetch(apiBase + '/api/location/start-by-admin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">시작 실패: ' + (data.error || '서버 오류') + '</div>';
+        return;
+      }
+      const smsMsg = data.smsSent
+        ? '<span style="color:#16A34A;font-weight:700">✅ 고객에게 링크 문자가 발송되었습니다.</span>'
+        : '<span style="color:#F59E0B;font-weight:700">⚠️ 문자 발송 실패 (수동 전달 필요): ' + (data.smsError || '알 수 없음') + '</span>';
+      resultEl.innerHTML =
+        '<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:14px">' +
+        '<div style="font-weight:700;color:#065F46;margin-bottom:6px">위치 공유 시작됨</div>' +
+        '<div style="font-size:13px;margin-bottom:8px">' + smsMsg + '</div>' +
+        '<div style="font-size:12px;color:#374151;word-break:break-all;background:white;border-radius:8px;padding:8px;border:1px solid #E5E7EB">' + data.trackingUrl + '</div>' +
+        '<button onclick="copyBranchTrackUrl(\'' + data.trackingUrl + '\')" style="margin-top:8px;background:#0ea5e9;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">📋 링크 복사</button>' +
+        '</div>';
+      document.getElementById('bmanual-customer-name').value = '';
+      document.getElementById('bmanual-customer-phone').value = '';
+      document.getElementById('bmanual-tech-name').value = '';
+      document.getElementById('bmanual-tech-phone').value = '';
+      document.getElementById('bmanual-customer-address').value = '';
+      loadBranchTracking();
+    } catch (e) {
+      resultEl.innerHTML = '<div style="background:#FEE2E2;color:#DC2626;border-radius:8px;padding:10px;font-size:13px">오류: ' + e.message + '</div>';
+    }
+  }
+
+  async function stopBranchTrackingSession(token) {
+    if (!confirm('이 위치 공유를 종료하시겠습니까? 고객 링크가 즉시 만료됩니다.')) return;
+    try {
+      const apiBase = getApiBase();
+      const res = await fetch(apiBase + '/api/location/stop-by-admin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, reason: '업무취소' }),
+      });
+      const data = await res.json();
+      if (data.success) { loadBranchTracking(); } else { alert('종료 실패: ' + (data.error || '서버 오류')); }
+    } catch (e) { alert('오류: ' + e.message); }
+  }
+
+  function copyBranchTrackUrl(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => alert('링크가 복사되었습니다.')).catch(() => prompt('아래 링크를 복사하세요:', url));
+    } else { prompt('아래 링크를 복사하세요:', url); }
+  }
+
+  // showPanel 확장 - tracking 패널 선택 시 자동 시작
+  const _origShowPanel = showPanel;
+  showPanel = function(name) {
+    _origShowPanel(name);
+    if (name === 'tracking') {
+      loadBranchTracking();
+      if (!branchTrackingInterval) {
+        branchTrackingInterval = setInterval(loadBranchTracking, 15000);
+      }
+    } else {
+      if (branchTrackingInterval) {
+        clearInterval(branchTrackingInterval);
+        branchTrackingInterval = null;
+      }
+    }
+  };
+
+  // ===== 견적서 전송 (지사) =====
+  let besUploadedFile = null;
+  const besFileInput = document.getElementById('bes-file');
+  if (besFileInput) {
+    besFileInput.addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      const statusEl = document.getElementById('bes-file-status');
+      besUploadedFile = null;
+      if (!f) { statusEl.textContent = ''; return; }
+      if (f.size > 10 * 1024 * 1024) { statusEl.textContent = '⚠️ 10MB 이하 파일만 가능합니다.'; statusEl.style.color = '#dc2626'; besFileInput.value = ''; return; }
+      statusEl.style.color = '#6b7280'; statusEl.textContent = '업로드 중...';
+      try {
+        const allowedTypes = ['application/pdf','image/jpeg','image/jpg','image/png'];
+        if (!allowedTypes.includes(f.type)) {
+          statusEl.style.color = '#dc2626';
+          statusEl.textContent = '⚠️ 지원하지 않는 파일 형식: ' + f.type + ' (PDF, JPG, PNG만 허용)';
+          besFileInput.value = ''; return;
+        }
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = reject; reader.readAsDataURL(f);
+        });
+        const r = await trpc('estimates.uploadFile', { _mutation: true, fileName: f.name, contentType: f.type || 'application/octet-stream', base64, fileSize: f.size });
+        if (r && r.fileData) {
+          besUploadedFile = { fileData: r.fileData, fileUrl: r.fileUrl, fileName: r.fileName, fileOriginalName: r.fileOriginalName || f.name, fileType: f.type, fileSize: r.fileSize || f.size };
+          statusEl.style.color = '#16a34a';
+          statusEl.textContent = '✅ 업로드 완료: ' + (r.fileOriginalName || f.name);
+        } else {
+          statusEl.style.color = '#dc2626';
+          statusEl.textContent = '⚠️ 업로드 실패: 서버 업로드 실패 (다시 시도해주세요)';
+        }
+      } catch (err) {
+        statusEl.style.color = '#dc2626';
+        const msg = err?.message || '';
+        statusEl.textContent = '⚠️ 업로드 오류: ' + (msg || '알 수 없는 오류');
+      }
+    });
+  }
+
+  window.submitBranchEstimate = async function () {
+    const name = document.getElementById('bes-name').value.trim();
+    const phone = document.getElementById('bes-phone').value.trim();
+    if (!name || !phone) { alert('고객명과 연락처를 입력해 주세요.'); return; }
+    if (!besUploadedFile) { alert('견적서 파일을 업로드해 주세요.'); return; }
+    const amountVal = document.getElementById('bes-amount').value;
+    const days = parseInt(document.getElementById('bes-valid').value, 10) || 7;
+    const validUntil = new Date(Date.now() + days * 86400000).toISOString();
+    const btn = document.getElementById('bes-send-btn');
+    const resultEl = document.getElementById('bes-result');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    try {
+      const r = await trpc('estimates.send', {
+        customerName: name, phoneNumber: phone,
+        title: document.getElementById('bes-title').value.trim() || undefined,
+        amount: amountVal ? Number(amountVal) : undefined,
+        memo: document.getElementById('bes-memo').value.trim() || undefined,
+        fileUrl: besUploadedFile.fileUrl || undefined, fileData: besUploadedFile.fileData || undefined,
+        fileName: besUploadedFile.fileName || undefined, fileOriginalName: besUploadedFile.fileOriginalName || undefined,
+        fileType: besUploadedFile.fileType || undefined, fileSize: besUploadedFile.fileSize || undefined,
+        validUntil, branchId: user.branchId, sentBy: user.userId, sentByName: user.name || user.username || '지사',
+      });
+      btn.disabled = false; btn.textContent = '📤 견적서 문자 발송';
+      if (r && r.success) {
+        const estimateUrl = r.estimateUrl || '';
+        if (r.smsSent) {
+          const smsStatusMsg = r.smsRequested
+            ? '문자 발송 요청이 완료되었습니다. (Solapi 발송 처리 중)'
+            : '고객(' + name + ')에게 문자가 발송되었습니다.';
+          resultEl.innerHTML = '<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:14px">' +
+            '<div style="font-weight:700;color:#065F46;margin-bottom:6px">✅ 견적서 발송 완료</div>' +
+            '<div style="font-size:13px;color:#374151;margin-bottom:8px">' + smsStatusMsg + '</div>' +
+            '<div style="font-size:12px;color:#374151;word-break:break-all;background:white;border-radius:8px;padding:8px;border:1px solid #E5E7EB">' + estimateUrl + '</div>' +
+            '<button onclick="navigator.clipboard?.writeText(\'' + estimateUrl + '\').then(()=>alert(\'링크가 복사되었습니다.\'))" style="margin-top:8px;background:#0ea5e9;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">📋 링크 복사</button>' +
+            '</div>';
+          resultEl.style.display = 'block';
+          ['bes-name','bes-phone','bes-title','bes-amount','bes-memo'].forEach(id => document.getElementById(id).value = '');
+          besFileInput.value = ''; besUploadedFile = null; document.getElementById('bes-file-status').textContent = '';
+          loadBranchEstimates();
+        } else {
+          const smsErrMsg = r.smsError || '알 수 없는 오류';
+          resultEl.innerHTML = '<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:14px">' +
+            '<div style="font-weight:700;color:#92400E;margin-bottom:6px">⚠️ 견적서 생성됨 — 문자 발송 실패</div>' +
+            '<div style="font-size:13px;color:#374151;margin-bottom:8px">견적서(#' + (r.estimateId || '') + ')는 저장되었으나 문자 발송에 실패했습니다.<br>' +
+            '<span style="color:#DC2626;font-weight:600">실패 원인: ' + smsErrMsg + '</span></div>' +
+            '<div style="font-size:12px;color:#374151;word-break:break-all;background:white;border-radius:8px;padding:8px;border:1px solid #E5E7EB;margin-bottom:8px">' + estimateUrl + '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button onclick="navigator.clipboard?.writeText(\'' + estimateUrl + '\').then(()=>alert(\'링크가 복사되었습니다.\'))" style="background:#0ea5e9;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">📋 링크 복사</button>' +
+            '<button onclick="resendBranchEstimate(' + r.estimateId + ')" style="background:#0284c7;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">🔄 문자 재전송</button>' +
+            '</div></div>';
+          resultEl.style.display = 'block';
+          loadBranchEstimates();
+        }
+      } else {
+        resultEl.innerHTML = '<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:14px">' +
+          '<div style="font-weight:700;color:#991B1B;margin-bottom:4px">❌ 발송 실패</div>' +
+          '<div style="font-size:13px;color:#374151">' + ((r && r.message) || '서버 오류가 발생했습니다. 다시 시도해 주세요.') + '</div>' +
+          '</div>';
+        resultEl.style.display = 'block';
+      }
+    } catch (err) {
+      btn.disabled = false; btn.textContent = '📤 견적서 문자 발송';
+      const resultEl2 = document.getElementById('bes-result');
+      resultEl2.innerHTML = '<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:14px">' +
+        '<div style="font-weight:700;color:#991B1B;margin-bottom:4px">❌ 발송 실패</div>' +
+        '<div style="font-size:13px;color:#374151">' + (err?.message || '알 수 없는 오류') + '</div>' +
+        '</div>';
+      resultEl2.style.display = 'block';
+    }
+  };
+
+  const BES_STATUS = { hq_review:{t:'본사검토',c:'#7c3aed'}, branch_review:{t:'지사검토',c:'#7c3aed'}, tech_draft:{t:'기사임시저장',c:'#9ca3af'}, sent:{t:'발송됨',c:'#2563eb'}, pending:{t:'발송됨',c:'#2563eb'}, viewed:{t:'열람',c:'#7c3aed'}, schedule_requested:{t:'📅 일정요청',c:'#d97706'}, schedule_confirmed:{t:'✅ 일정확정',c:'#16a34a'}, converted:{t:'접수완료',c:'#059669'}, approved:{t:'접수완료',c:'#059669'}, rejected:{t:'취소',c:'#dc2626'}, cancelled:{t:'취소',c:'#dc2626'}, expired:{t:'만료',c:'#9ca3af'} };
+  // ===== 기사 견적 보고 대기 목록 - 지사 (status=pending + sourceType=tech_request + techRequestStatus=pending) =====
+  window.loadBranchReportPending = async function () {
+    const tbody = document.getElementById('branchReportPendingTbody');
+    const badge = document.getElementById('b-report-pending-badge');
+    try {
+      const rows = await trpc('estimates.list', { _query: true, branchId: user.branchId, status: 'pending', sourceType: 'tech_request', techRequestStatus: 'pending' }) || [];
+      if (badge) badge.textContent = rows.length;
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">기사 보고 대기 견적이 없습니다.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(e => {
+        const amt = e.amount ? Number(e.amount).toLocaleString('ko-KR') + '원' : '-';
+        const sent = e.createdAt ? String(e.createdAt).slice(0,16).replace('T',' ') : '-';
+        const techName = e.techRequesterName || e.sentByName || '-';
+        return `<tr>
+          <td>${e.estimateNumber || ('#' + e.id)}</td>
+          <td>${techName}</td>
+          <td>${e.customerName || '-'}</td>
+          <td>${e.customerPhone || e.phoneNumber || '-'}</td>
+          <td>${amt}</td>
+          <td>${sent}</td>
+          <td style="white-space:nowrap">
+            <button onclick="branchReviewAndSend(${e.id},'${(e.customerName||'').replace(/'/g,'')}')" style="padding:5px 9px;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">✅ 검토 후 발송</button>
+            <button onclick="branchRejectTechEstimate(${e.id})" style="padding:5px 9px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;font-size:12px;cursor:pointer">❌ 반려</button>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch(err) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px">불러오기 실패: ' + (err?.message || '') + '</td></tr>';
+    }
+  };
+
+  // 지사: 기사 견적 검토 후 고객 발송
+  window.branchReviewAndSend = async function(id, customerName) {
+    if (!confirm('[' + customerName + '] 고객에게 견적서를 발송하시겠습니까?\n(기사 보고 견적을 검토 완료 처리하고 고객 SMS를 발송합니다)')) return;
+    try {
+      const r = await trpc('estimates.approveTechRequest', { _mutation: true, estimateId: id, approverName: user.name || '지사관리자' });
+      if (r && r.success) {
+        const msg = r.smsSent ? '✅ 고객에게 견적서가 발송되었습니다.' : '⚠️ 상태는 변경되었으나 SMS 발송에 실패했습니다: ' + (r.smsError || '');
+        alert(msg);
+        loadBranchReportPending();
+        if (window.loadBranchEstimates) loadBranchEstimates();
+      } else {
+        alert('처리 실패: ' + (r?.message || '서버 오류'));
+      }
+    } catch(err) {
+      alert('오류: ' + (err?.message || '알 수 없는 오류'));
+    }
+  };
+
+  // 지사: 기사 견적 반려
+  window.branchRejectTechEstimate = async function(id) {
+    const reason = prompt('반려 사유를 입력하세요 (선택):');
+    if (reason === null) return;
+    try {
+      const r = await trpc('estimates.rejectTechRequest', { _mutation: true, estimateId: id, rejectReason: reason || undefined });
+      if (r && r.success) {
+        alert('반려 처리되었습니다.');
+        loadBranchReportPending();
+      } else {
+        alert('처리 실패');
+      }
+    } catch(err) {
+      alert('오류: ' + (err?.message || '알 수 없는 오류'));
+    }
+  };
+
+  window.loadBranchEstimates = async function () {
+    const status = document.getElementById('bes-filter').value;
+    const tbody = document.getElementById('besTbody');
+    let rows = [];
+    try {
+      const data = await trpc('estimates.list', { _query: true, branchId: user.branchId, status: status || undefined });
+      if (data === null) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px">인증이 필요하거나 권한이 없습니다. 다시 로그인해 주세요.</td></tr>'; return; }
+      rows = Array.isArray(data) ? data : [];
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px">불러오기 실패</td></tr>'; return; }
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">견적서가 없습니다.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(e => {
+      const st = BES_STATUS[e.status] || { t: e.status, c: '#6b7280' };
+      const amt = e.amount ? Number(e.amount).toLocaleString('ko-KR') + '원' : '-';
+      const sent = e.createdAt ? String(e.createdAt).slice(0,16).replace('T',' ') : '-';
+      return `<tr><td>${e.estimateNumber || ('#' + e.id)}</td><td>${e.customerName || '-'}</td><td>${e.phoneNumber || '-'}</td><td>${amt}</td><td><span style="color:${st.c};font-weight:600">${st.t}</span></td><td>${sent}</td><td style="white-space:nowrap"><button onclick="copyBranchEstimateLink('${e.token}')" style="padding:5px 9px;background:#eef2ff;color:#4338ca;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">링크</button>${(e.status==='pending'||e.status==='viewed'||e.status==='expired') ? `<button onclick="resendBranchEstimate(${e.id})" style="padding:5px 9px;background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:6px;font-size:12px;cursor:pointer">재전송</button>` : ''}${e.status==='schedule_requested' ? `<button onclick="branchConfirmSchedule(${e.id},'${e.customerName||''}','${e.visitDate||''}','${e.visitTime||''}')" style="padding:5px 9px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">확정</button>` : ''}${e.status==='schedule_confirmed' ? `<button onclick="branchConvertToOrder(${e.id})" style="padding:5px 9px;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:6px;font-size:12px;cursor:pointer">접수전환</button>` : ''}</td></tr>`;
+    }).join('');
+  };
+  window.copyBranchEstimateLink = function (token) {
+    const url = window.location.origin + '/estimate/' + token;
+    navigator.clipboard?.writeText(url).then(() => alert('견적서 링크가 복사되었습니다.\n' + url), () => prompt('아래 링크를 복사하세요', url));
+  };
+  window._showBranchResendModal = function(html) {
+    let modal = document.getElementById('branch-resend-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'branch-resend-modal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = html;
+    modal.style.display = 'flex';
+  };
+  window._closeBranchResendModal = function() {
+    const m = document.getElementById('branch-resend-modal');
+    if (m) m.style.display = 'none';
+  };
+
+  window.resendBranchEstimate = async function (id) {
+    if (!confirm('견적서를 다시 발송하시겠습니까?')) return;
+    window._showBranchResendModal('<div style="background:white;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><div style="text-align:center;font-size:15px;color:#374151">⏳ 재전송 중...</div></div>');
+    try {
+      const r = await trpc('estimates.resend', { _mutation: true, id });
+      if (r && r.success) {
+        const estimateUrl = r.estimateUrl || '';
+        const copyBtn = estimateUrl ? '<button onclick="navigator.clipboard?.writeText(\'' + estimateUrl + '\').then(()=>{this.textContent=\'✅ 복사됨\';setTimeout(()=>{this.textContent=\'📋 링크 복사\'},1500)})" style="background:#0ea5e9;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;margin-right:8px">📋 링크 복사</button>' : '';
+        const closeBtn = '<button onclick="window._closeBranchResendModal();loadBranchEstimates()" style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">닫기</button>';
+        if (r.smsSent) {
+          const smsMsg = r.smsRequested
+            ? '문자 발송 요청이 접수되었습니다. (Solapi 발송 처리 중)'
+            : '고객에게 견적서 링크가 발송되었습니다.';
+          window._showBranchResendModal(
+            '<div style="background:white;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">' +
+            '<div style="font-size:18px;font-weight:700;color:#16a34a;margin-bottom:12px">✅ 문자 발송 완료</div>' +
+            '<div style="font-size:14px;color:#374151;margin-bottom:16px">' + smsMsg + '</div>' +
+            (estimateUrl ? '<div style="font-size:12px;color:#6b7280;margin-bottom:6px">견적서 링크:</div><div style="font-size:12px;color:#1d4ed8;word-break:break-all;background:#f0f9ff;border-radius:8px;padding:8px;border:1px solid #bfdbfe;margin-bottom:14px">' + estimateUrl + '</div>' : '') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' + copyBtn + closeBtn + '</div></div>'
+          );
+        } else {
+          const smsErr = r.smsError || '알 수 없는 오류';
+          const retryBtn = '<button onclick="window._closeBranchResendModal();resendBranchEstimate(' + id + ')" style="background:#0284c7;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">🔄 다시 시도</button>';
+          window._showBranchResendModal(
+            '<div style="background:white;border-radius:16px;padding:28px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">' +
+            '<div style="font-size:18px;font-weight:700;color:#dc2626;margin-bottom:10px">⚠️ 문자 발송 실패</div>' +
+            '<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px;margin-bottom:14px">' +
+            '<div style="font-size:12px;font-weight:700;color:#991B1B;margin-bottom:4px">실패 원인:</div>' +
+            '<div style="font-size:13px;color:#374151">' + smsErr + '</div></div>' +
+            (estimateUrl ? '<div style="font-size:12px;color:#6b7280;margin-bottom:6px">견적서 링크 (직접 전달 가능):</div><div style="font-size:12px;color:#1d4ed8;word-break:break-all;background:#f0f9ff;border-radius:8px;padding:8px;border:1px solid #bfdbfe;margin-bottom:14px">' + estimateUrl + '</div>' : '') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' + copyBtn + retryBtn + closeBtn + '</div></div>'
+          );
+        }
+        loadBranchEstimates();
+      } else {
+        window._showBranchResendModal(
+          '<div style="background:white;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">' +
+          '<div style="font-size:18px;font-weight:700;color:#dc2626;margin-bottom:12px">❌ 재전송 실패</div>' +
+          '<div style="font-size:14px;color:#374151;margin-bottom:16px">' + ((r && r.message) || '서버 오류가 발생했습니다.') + '</div>' +
+          '<button onclick="window._closeBranchResendModal()" style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">닫기</button></div>'
+        );
+      }
+    } catch (err) {
+      window._showBranchResendModal(
+        '<div style="background:white;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">' +
+        '<div style="font-size:18px;font-weight:700;color:#dc2626;margin-bottom:12px">❌ 오류 발생</div>' +
+        '<div style="font-size:14px;color:#374151;margin-bottom:16px">' + (err?.message || '알 수 없는 오류') + '</div>' +
+        '<button onclick="window._closeBranchResendModal()" style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">닫기</button></div>'
+      );
+    }
+  };
+
+
+  // 지사: 일정요청 확인 패널 로드
+  window.loadBranchScheduleRequests = async function () {
+    const tbody = document.getElementById('branchScheduleReqTbody');
+    const badge = document.getElementById('branch-schedule-req-badge');
+    const sidebarBadge = document.getElementById('branch-schedule-badge');
+    try {
+      const data = await trpc('estimates.list', { _query: true, branchId: user.branchId, status: 'schedule_requested' });
+      if (data === null) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px">인증이 필요하거나 권한이 없습니다. 다시 로그인해 주세요.</td></tr>'; return; }
+      const rows = Array.isArray(data) ? data : [];
+      if (badge) badge.textContent = rows.length;
+      if (sidebarBadge) sidebarBadge.textContent = rows.length;
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">일정 요청된 견적이 없습니다.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(e => {
+        const amt = e.amount ? Number(e.amount).toLocaleString('ko-KR') + '원' : '-';
+        const reqDate = e.visitDate || '-';
+        const reqTime = e.visitTime || '';
+        const reqAt = e.updatedAt ? String(e.updatedAt).slice(0,16).replace('T',' ') : '-';
+        return `<tr><td>${e.estimateNumber || ('#' + e.id)}</td><td>${e.customerName || '-'}</td><td>${e.phoneNumber || '-'}</td><td>${amt}</td><td>${reqDate} ${reqTime}</td><td>${reqAt}</td><td style="white-space:nowrap"><button onclick="branchConfirmSchedule(${e.id},'${(e.customerName||'').replace(/'/g,'')}','${reqDate}','${reqTime}')" style="padding:5px 9px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;font-size:12px;cursor:pointer;margin-right:4px">✅ 일정 확정</button><button onclick="branchConvertToOrder(${e.id})" style="padding:5px 9px;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:6px;font-size:12px;cursor:pointer">🔄 접수전환</button></td></tr>`;
+      }).join('');
+    } catch(err) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px">불러오기 실패: ' + (err?.message || '') + '</td></tr>';
+    }
+  };
+
+  // 페이지 로드 시 배지 초기화 (지사)
+  (async function initBranchBadges() {
+    try {
+      const d1 = await trpc('estimates.list', { _query: true, branchId: user?.branchId, status: 'pending', sourceType: 'tech_request', techRequestStatus: 'pending' });
+      if (d1 === null) return;
+      const rc = Array.isArray(d1) ? d1.length : 0;
+      const rb = document.getElementById('branch-report-badge');
+      if (rb) rb.textContent = rc;
+      const d2 = await trpc('estimates.list', { _query: true, branchId: user?.branchId, status: 'schedule_requested' });
+      if (d2 === null) return;
+      const sc = Array.isArray(d2) ? d2.length : 0;
+      const sb = document.getElementById('branch-schedule-badge');
+      if (sb) sb.textContent = sc;
+    } catch(e) { /* 무시 */ }
+  })();
+
+  checkAuth();
+  loadOverview();
+
+  // ===== 곬적서 송출 탭 전환 (지사) =====
+  window.switchBranchEstimateTab = function(tab) {
+    const fileContent = document.getElementById('btab-content-file');
+    const autoContent = document.getElementById('btab-content-auto');
+    const tabFile = document.getElementById('btab-file');
+    const tabAuto = document.getElementById('btab-auto');
+    if (tab === 'file') {
+      fileContent.style.display = '';
+      autoContent.style.display = 'none';
+      tabFile.style.color = '#0ea5e9'; tabFile.style.borderBottom = '2px solid #0ea5e9'; tabFile.style.fontWeight = '700';
+      tabAuto.style.color = '#6b7280'; tabAuto.style.borderBottom = 'none'; tabAuto.style.fontWeight = '600';
+    } else {
+      fileContent.style.display = 'none';
+      autoContent.style.display = '';
+      tabAuto.style.color = '#0ea5e9'; tabAuto.style.borderBottom = '2px solid #0ea5e9'; tabAuto.style.fontWeight = '700';
+      tabFile.style.color = '#6b7280'; tabFile.style.borderBottom = 'none'; tabFile.style.fontWeight = '600';
+    }
+  };
+
+  let _branchAutoEstimateData = null;
+  window.parseBranchAutoJson = function() {
+    const raw = document.getElementById('bauto-json-input').value.trim();
+    const preview = document.getElementById('bauto-preview');
+    _branchAutoEstimateData = null;
+    if (!raw) { preview.style.display = 'none'; return; }
+    try {
+      const d = JSON.parse(raw);
+      _branchAutoEstimateData = d;
+      document.getElementById('bap-name').textContent = d.customerName || '-';
+      document.getElementById('bap-phone').textContent = d.phoneNumber || d.phone || '-';
+      document.getElementById('bap-addr').textContent = d.address || d.addr || '-';
+      const items = d.items || d.estimateItems || [];
+      let total = 0;
+      const tbody = document.getElementById('bap-items');
+      tbody.innerHTML = items.map((item, i) => {
+        const qty = Number(item.quantity || item.qty || 1);
+        const price = Number(item.unitPrice || item.price || 0);
+        const sub = qty * price; total += sub;
+        const bg = i % 2 === 1 ? '#f8f9fb' : '#fff';
+        return `<tr style="background:${bg};border-bottom:1px solid #eee"><td style="padding:6px 8px">${item.name || item.productName || '-'}</td><td style="padding:6px 8px;color:#666">${item.spec || item.specification || ''}</td><td style="padding:6px 4px;text-align:center">${qty}</td><td style="padding:6px 8px;text-align:right">${price.toLocaleString('ko-KR')}</td><td style="padding:6px 8px;text-align:right;font-weight:600">${sub.toLocaleString('ko-KR')}</td></tr>`;
+      }).join('');
+      document.getElementById('bap-total').textContent = total.toLocaleString('ko-KR') + '원';
+      if (d.customerName) document.getElementById('bauto-name').value = d.customerName;
+      if (d.phoneNumber || d.phone) document.getElementById('bauto-phone').value = d.phoneNumber || d.phone;
+      if (d.title) document.getElementById('bauto-title').value = d.title;
+      preview.style.display = '';
+    } catch(e) {
+      preview.style.display = 'none';
+      alert('유효하지 않은 JSON 형식입니다.');
+    }
+  };
+
+  window.submitBranchAutoEstimate = async function() {
+    const name = document.getElementById('bauto-name').value.trim();
+    const phone = document.getElementById('bauto-phone').value.trim();
+    if (!name || !phone) { alert('고객명과 연락처를 입력해 주세요.'); return; }
+    if (!_branchAutoEstimateData) { alert('곬적 데이터를 먼저 붙여넣어 주세요.'); return; }
+    const items = _branchAutoEstimateData.items || _branchAutoEstimateData.estimateItems || [];
+    if (!items.length) { alert('곬적 품목이 없습니다.'); return; }
+    const days = parseInt(document.getElementById('bauto-valid').value, 10) || 7;
+    const validUntil = new Date(Date.now() + days * 86400000).toISOString();
+    const btn = document.getElementById('bauto-send-btn');
+    const resultEl = document.getElementById('bauto-result');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    resultEl.style.display = 'none';
+    try {
+      const r = await trpc('estimates.sendFromAuto', {
+        _mutation: true,
+        customerName: name,
+        phoneNumber: phone,
+        title: document.getElementById('bauto-title').value.trim() || undefined,
+        memo: document.getElementById('bauto-memo').value.trim() || undefined,
+        autoEstimateItems: JSON.stringify(items),
+        totalAmount: _branchAutoEstimateData.totalAmount || items.reduce((s, it) => s + Number(it.unitPrice || it.price || 0) * Number(it.quantity || it.qty || 1), 0),
+        validUntil,
+        sentBy: user.userId,
+        sentByName: user.name || user.username || '지사',
+        branchId: user.branchId,
+      });
+      btn.disabled = false; btn.textContent = '✨ 자동 곬적 문자 발송';
+      if (r && r.success) {
+        const estimateUrl = r.estimateUrl || '';
+        resultEl.innerHTML = '<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:14px">' +
+          '<div style="font-weight:700;color:#065F46;margin-bottom:6px">✅ 곬적서 발송 완료</div>' +
+          '<div style="font-size:13px;color:#374151;margin-bottom:8px">' + name + ' 고객에게 문자가 발송되었습니다.</div>' +
+          '<div style="font-size:12px;color:#374151;word-break:break-all;background:white;border-radius:8px;padding:8px;border:1px solid #E5E7EB">' + estimateUrl + '</div>' +
+          '<button onclick="navigator.clipboard?.writeText(\'' + estimateUrl + '\').then(()=>alert(\'링크가 복사되었습니다.\'))" style="margin-top:8px;background:#3B82F6;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">📋 링크 복사</button>' +
+          '</div>';
+        resultEl.style.display = 'block';
+        document.getElementById('bauto-json-input').value = '';
+        document.getElementById('bauto-name').value = '';
+        document.getElementById('bauto-phone').value = '';
+        document.getElementById('bauto-title').value = '';
+        document.getElementById('bauto-memo').value = '';
+        document.getElementById('bauto-preview').style.display = 'none';
+        _branchAutoEstimateData = null;
+        if (window.loadBranchEstimates) loadBranchEstimates();
+      } else {
+        resultEl.innerHTML = '<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:14px">' +
+          '<div style="font-weight:700;color:#991B1B;margin-bottom:4px">❌ 발송 실패</div>' +
+          '<div style="font-size:13px;color:#374151">' + ((r && r.message) || '서버 오류가 발생했습니다.') + '</div></div>';
+        resultEl.style.display = 'block';
+      }
+    } catch(err) {
+      btn.disabled = false; btn.textContent = '✨ 자동 곬적 문자 발송';
+      resultEl.innerHTML = '<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:14px">' +
+        '<div style="font-weight:700;color:#991B1B;margin-bottom:4px">❌ 발송 실패</div>' +
+        '<div style="font-size:13px;color:#374151">' + (err?.message || '알 수 없는 오류') + '</div></div>';
+      resultEl.style.display = 'block';
+    }
+  };
+
+  // 일정 확정 (지사)
+  window.branchConfirmSchedule = async function(id, customerName, visitDate, visitTime) {
+    const newDate = prompt(`[${customerName}] 방문 일정 확정\n현재 요청: ${visitDate || '미정'} ${visitTime || ''}\n\n확정 날짜 (YYYY-MM-DD):`, visitDate || '');
+    if (!newDate) return;
+    const newTime = prompt('확정 시간대:', visitTime || '오전 (09-12시)');
+    if (!newTime) return;
+    try {
+      const r = await trpc('estimates.confirmSchedule', { _mutation: true, id, confirmedDate: newDate, confirmedTime: newTime });
+      if (r && r.success) { alert('일정이 확정되었습니다.'); loadBranchEstimates(); }
+      else alert((r && r.message) || '처리에 실패했습니다.');
+    } catch (e) { alert('서버 오류가 발생했습니다.'); }
+  };
+
+  // 접수 전환 (지사)
+  window.branchConvertToOrder = async function(id) {
+    if (!confirm('이 견적을 접수로 전환하시겠습니까?\n기존 접수 시스템에 등록됩니다.')) return;
+    try {
+      const r = await trpc('estimates.convertToOrder', { _mutation: true, id });
+      if (r && r.success) { alert('접수로 전환되었습니다.'); loadBranchEstimates(); }
+      else alert((r && r.message) || '처리에 실패했습니다.');
+    } catch (e) { alert('서버 오류가 발생했습니다.'); }
+  };
+
+</script>
+</body>
+</html>

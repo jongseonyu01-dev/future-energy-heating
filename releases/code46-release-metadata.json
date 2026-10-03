@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "appId": "driver",
+  "versionName": "1.1.46",
+  "versionCode": 46,
+  "minSupportedVersionCode": 1,
+  "sha256": "a9f2c7c64696f03e3614cc9b95df026a96e8e43e40bb64ae580b0e0de2f125e4",
+  "fileSize": 94777838,
+  "sourceSha": "5a3b458f19151135be92764e9030c05c6caee566",
+  "sourceCheckpoint": "5a3b458f",
+  "releaseNotes": "기사 매출·결제수단 기록과 본사 수금관리 연동 화면을 복구했습니다. 기존 앱을 삭제하지 않고 업데이트 설치하십시오.",
+  "publishedAt": "2026-09-15T22:56:32.000Z"
+}

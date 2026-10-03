@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="/preview/auth-check.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>지사 찾기 - 퓨처에너지테크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: #1f2937; background: #f9fafb; }
+    a { text-decoration: none; color: inherit; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { font-size: 18px; font-weight: 700; color: #e85d04; }
+    .back-btn { color: #6b7280; font-size: 14px; }
+    .hero { background: linear-gradient(135deg, #064e3b, #065f46); color: #fff; padding: 48px 24px; text-align: center; }
+    .hero h1 { font-size: clamp(24px, 4vw, 40px); font-weight: 800; margin-bottom: 10px; }
+    .hero p { color: rgba(255,255,255,.75); font-size: 16px; }
+    .container { max-width: 900px; margin: 40px auto; padding: 0 16px 60px; }
+    .search-box { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.06); margin-bottom: 28px; }
+    .search-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-row input { flex: 1; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 15px; }
+    .search-row input:focus { outline: none; border-color: #e85d04; }
+    .search-row button { padding: 12px 20px; background: #e85d04; color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .branch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .branch-card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.06); border-left: 4px solid #e85d04; }
+    .branch-name { font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #e85d04; }
+    .branch-info { font-size: 14px; color: #4b5563; line-height: 2; }
+    .branch-info span { display: inline-block; width: 20px; }
+    .branch-regions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .region-tag { padding: 3px 10px; background: #fff3ec; color: #e85d04; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .branch-btns { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-call { flex: 1; padding: 10px; background: #e85d04; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }
+    .btn-report { flex: 1; padding: 10px; background: #fff; color: #e85d04; border: 1.5px solid #e85d04; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }
+    .no-branch { background: #fff; border-radius: 16px; padding: 40px; text-align: center; color: #6b7280; }
+    .loading { text-align: center; padding: 40px; color: #6b7280; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/preview/index.html" class="logo">🔥 퓨처에너지테크</a>
+  <a href="/preview/index.html" class="back-btn">← 홈으로</a>
+</header>
+<div class="hero">
+  <h1>🗺️ 지사 찾기</h1>
+  <p>가까운 지사를 찾아 빠른 서비스를 받으세요</p>
+</div>
+<div class="container">
+  <div class="search-box">
+    <h3>📍 지역으로 지사 검색</h3>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="예: 안산, 수원, 화성..." onkeydown="if(event.key==='Enter')searchBranch()" />
+      <button onclick="searchBranch()">검색</button>
+    </div>
+  </div>
+  <div id="branchList" class="loading">지사 정보를 불러오는 중...</div>
+</div>
+<script>
+  let allBranches = [];
+
+  async function loadBranches() {
+    try {
+      const res = await fetch('/api/trpc/branch.list', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      const data = await res.json();
+      allBranches = data.result?.data?.json || [];
+      renderBranches(allBranches);
+    } catch (e) {
+      // 서버 연결 실패 시 기본 데이터 표시
+      allBranches = [
+        { id: 1, name: '안산지사', phone: '031-000-0000', address: '경기도 안산시 단원구', regions: ['안산', '시흥', '광명'], managerName: '김지사장' },
+      ];
+      renderBranches(allBranches);
+    }
+  }
+
+  function renderBranches(branches) {
+    const el = document.getElementById('branchList');
+    if (!branches.length) {
+      el.innerHTML = '<div class="no-branch"><div style="font-size:48px;margin-bottom:16px">🔍</div><p>검색 결과가 없습니다.<br/>고객센터로 문의해 주세요.</p></div>';
+      return;
+    }
+    el.className = 'branch-grid';
+    el.innerHTML = branches.map(b => `
+      <div class="branch-card">
+        <div class="branch-name">📍 ${b.name}</div>
+        <div class="branch-info">
+          <div><span>📞</span> ${b.phone || '문의 중'}</div>
+          <div><span>📍</span> ${b.address || '주소 준비 중'}</div>
+          ${b.managerName ? `<div><span>👤</span> 지사장: ${b.managerName}</div>` : ''}
+        </div>
+        ${b.regions?.length ? `<div class="branch-regions">${b.regions.map(r => `<span class="region-tag">${r}</span>`).join('')}</div>` : ''}
+        <div class="branch-btns">
+          ${b.phone ? `<a href="tel:${b.phone}" class="btn-call">📞 전화하기</a>` : ''}
+          <a href="/preview/report.html" class="btn-report">접수하기</a>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function searchBranch() {
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (!q) { renderBranches(allBranches); return; }
+    const filtered = allBranches.filter(b =>
+      b.name?.toLowerCase().includes(q) ||
+      b.address?.toLowerCase().includes(q) ||
+      b.regions?.some(r => r.toLowerCase().includes(q))
+    );
+    renderBranches(filtered);
+  }
+
+  loadBranches();
+</script>
+</body>
+</html>

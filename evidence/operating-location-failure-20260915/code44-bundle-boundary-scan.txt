@@ -1,0 +1,7 @@
+--- official api ---
+https://github.com/software-mansion/react-native-reanimated/issuesetIsTrustedFlipOutYRighttps://map.kakao.com/?q=getLinkingURLightSpeedOutRighttps://maps.google.com/?q=RollInRighttps://phony.exampleRollOutRighttps://tmap.life/route/search?q=ZoomOutRotateInDownRighttps://xn--h50b270bp0ceuddugnobx2m.kreactNativeWorklets_initializersTs3FactoryRotateOutDownRighttps?:\/\/[^/]+(\/[^?#]*)?innerWidthwbToRgb_reactNativeReanimated_ColorsTs3Factoryimagesearch-rollerevealOrder_worklet_2699540289163_init_datairplanemode-inactiveBackgroundColorevertLaneunstable_onMomentumScrollBeginitIterableMixinitReducereactNativeWorklets_runtimesTs1Factory_handleMomentumScrollBeginitResponsearchInput_pullAgainitSensorDatabActivebg-originitSuspenseListRenderStatecreateChainitialCalculations_reactNativeReanimated_springUtilsTs4FactorycrossOriginitialScrollIndex
+--- review values ---
+--- location auth symbols ---
+Authorization
+buildLocationRequestHeaders
+location/update

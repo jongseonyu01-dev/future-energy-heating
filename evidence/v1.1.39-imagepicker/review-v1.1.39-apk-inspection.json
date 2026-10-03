@@ -1,0 +1,23 @@
+{
+  "file": "futureenergytech-review-v1.1.39-code39.apk",
+  "sha256": "7de7489a1dc9e84e470a2ba5f9a40ad9429cda8b94ab423f5717f68bd52cfdd2",
+  "package": "com.futureenergy.heatingcare",
+  "versionName": "1.1.39",
+  "versionCode": "39",
+  "signing": {
+    "v1": {
+      "present": false,
+      "certificateSha256": []
+    },
+    "v2": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    },
+    "v3": {
+      "present": false,
+      "certificateSha256": []
+    }
+  }
+}

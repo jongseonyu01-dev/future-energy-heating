@@ -1,0 +1,5 @@
+ app.config.ts       |  6 [32m++[m[31m---[m
+ app/work-report.tsx | 72 [32m+++++++++++++++++++++++++++++++++++++++[m[31m--------------[m
+ package.json        | 10 [32m++++[m[31m----[m
+ pnpm-lock.yaml      | 51 [32m++++++++++++++++++[m[31m-------------------[m
+ 4 files changed, 88 insertions(+), 51 deletions(-)

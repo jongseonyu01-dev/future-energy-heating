@@ -1,0 +1,1817 @@
+[1mdiff --git a/app.config.ts b/app.config.ts[m
+[1mindex 89944e3..3802e9e 100644[m
+[1m--- a/app.config.ts[m
+[1m+++ b/app.config.ts[m
+[36m@@ -1,147 +1,147 @@[m
+ // Load environment variables with proper priority (system > .env)[m
+ import "./scripts/load-env.js";[m
+ import type { ExpoConfig } from "expo/config";[m
+ [m
+ // Bundle ID format: space.manus.<project_name_dots>.<timestamp>[m
+ // e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"[m
+ // Bundle ID can only contain letters, numbers, and dots[m
+ // Android requires each dot-separated segment to start with a letter[m
+ const rawBundleId = "com.futureenergy.heatingcare";[m
+ const bundleId =[m
+   rawBundleId[m
+     .replace(/[-_]/g, ".") // Replace hyphens/underscores with dots[m
+     .replace(/[^a-zA-Z0-9.]/g, "") // Remove invalid chars[m
+     .replace(/\.+/g, ".") // Collapse consecutive dots[m
+     .replace(/^\.+|\.+$/g, "") // Trim leading/trailing dots[m
+     .toLowerCase()[m
+     .split(".")[m
+     .map((segment) => {[m
+       // Android requires each segment to start with a letter[m
+       // Prefix with 'x' if segment starts with a digit[m
+       return /^[a-zA-Z]/.test(segment) ? segment : "x" + segment;[m
+     })[m
+     .join(".") || "space.manus.app";[m
+ // Extract timestamp from bundle ID and prefix with "manus" for deep link scheme[m
+ // e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"[m
+ const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";[m
+ const schemeFromBundleId = `manus${timestamp}`;[m
+ [m
+ const env = {[m
+   // App branding - update these values directly (do not use env vars)[m
+   appName: "퓨처에너지테크",[m
+   appSlug: "future-energy-heating",[m
+   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo[m
+   // Leave empty to use the default icon from assets/images/icon.png[m
+   logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663730788081/hTdx5kSeE7mshzAjGega74/app-icon-KjRgngG4L8kpqAHbUhB3yC.png",[m
+   scheme: schemeFromBundleId,[m
+   iosBundleId: bundleId,[m
+   androidPackage: bundleId,[m
+ };[m
+ [m
+ const config: ExpoConfig = {[m
+   name: env.appName,[m
+   slug: env.appSlug,[m
+   owner: "futureenergytech",[m
+[31m-  version: "1.1.36",[m
+[32m+[m[32m  version: "1.1.37",[m
+   orientation: "portrait",[m
+   icon: "./assets/images/icon.png",[m
+   scheme: env.scheme,[m
+   userInterfaceStyle: "automatic",[m
+   newArchEnabled: true,[m
+   ios: {[m
+     supportsTablet: true,[m
+[31m-    buildNumber: "36",[m
+[32m+[m[32m    buildNumber: "37",[m
+     bundleIdentifier: env.iosBundleId,[m
+     infoPlist: {[m
+       ITSAppUsesNonExemptEncryption: false,[m
+       NSLocationWhenInUseUsageDescription: "기사 방문 중 고객에게 위치를 공유하기 위해 위치 접근 권한이 필요합니다.",[m
+       NSLocationAlwaysAndWhenInUseUsageDescription: "출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.",[m
+       NSLocationAlwaysUsageDescription: "출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.",[m
+       NSCameraUsageDescription: "고장 사진 첨부를 위해 카메라 접근 권한이 필요합니다.",[m
+       NSPhotoLibraryUsageDescription: "고장 사진 첨부를 위해 사진 접근 권한이 필요합니다.",[m
+       NSPhotoLibraryAddUsageDescription: "작업 완료 사진을 저장하기 위해 사진 저장 권한이 필요합니다.",[m
+       NSMicrophoneUsageDescription: "음성 메모 기능을 위해 마이크 접근 권한이 필요합니다."[m
+     }[m
+   },[m
+   android: {[m
+[31m-    versionCode: 36,[m
+[32m+[m[32m    versionCode: 37,[m
+     allowBackup: false,[m
+     adaptiveIcon: {[m
+       backgroundColor: "#E6F4FE",[m
+       foregroundImage: "./assets/images/android-icon-foreground.png",[m
+       backgroundImage: "./assets/images/android-icon-background.png",[m
+       monochromeImage: "./assets/images/android-icon-monochrome.png",[m
+     },[m
+     edgeToEdgeEnabled: true,[m
+     predictiveBackGestureEnabled: false,[m
+     package: env.androidPackage,[m
+     permissions: ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION"],[m
+     intentFilters: [[m
+       {[m
+         action: "VIEW",[m
+         autoVerify: true,[m
+         data: [[m
+           {[m
+             scheme: env.scheme,[m
+             host: "*",[m
+           },[m
+         ],[m
+         category: ["BROWSABLE", "DEFAULT"],[m
+       },[m
+     ],[m
+   },[m
+   web: {[m
+     bundler: "metro",[m
+     output: "static",[m
+     favicon: "./assets/images/favicon.png",[m
+   },[m
+   plugins: [[m
+     "expo-router",[m
+     [[m
+       "expo-location",[m
+       {[m
+         "locationAlwaysAndWhenInUsePermission": "퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",[m
+         "isIosBackgroundLocationEnabled": true,[m
+         "isAndroidBackgroundLocationEnabled": true[m
+       }[m
+     ],[m
+     [[m
+       "expo-audio",[m
+       {[m
+         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",[m
+       },[m
+     ],[m
+     [[m
+       "expo-video",[m
+       {[m
+         supportsBackgroundPlayback: true,[m
+         supportsPictureInPicture: true,[m
+       },[m
+     ],[m
+     [[m
+       "expo-splash-screen",[m
+       {[m
+         image: "./assets/images/splash-icon.png",[m
+         imageWidth: 200,[m
+         resizeMode: "contain",[m
+         backgroundColor: "#ffffff",[m
+         dark: {[m
+           backgroundColor: "#000000",[m
+         },[m
+       },[m
+     ],[m
+     [[m
+       "expo-image-picker",[m
+       {[m
+         photosPermission:[m
+           "$(PRODUCT_NAME)에서 고장 사진을 첨부하기 위해 사진 접근 권한이 필요합니다.",[m
+       },[m
+     ],[m
+     [[m
+       "expo-build-properties",[m
+       {[m
+         android: {[m
+           minSdkVersion: 24,[m
+         },[m
+       },[m
+     ],[m
+[1mdiff --git a/app/(tabs)/tech-schedule.tsx b/app/(tabs)/tech-schedule.tsx[m
+[1mindex c573ebd..2c2ff82 100644[m
+[1m--- a/app/(tabs)/tech-schedule.tsx[m
+[1m+++ b/app/(tabs)/tech-schedule.tsx[m
+[36m@@ -23,160 +23,161 @@[m [mconst STATUS_COLOR: Record<string, string> = {[m
+   "기사배정대기": "#F59E0B",[m
+   "방문예정": "#3B82F6",[m
+   "작업진행중": "#FF6B35",[m
+   "견적승인대기": "#8B5CF6",[m
+   "작업완료": "#22C55E",[m
+   "재방문필요": "#EF4444",[m
+ };[m
+ [m
+ export default function TechScheduleScreen() {[m
+   const colors = useColors();[m
+   const router = useRouter();[m
+   const { user } = useAppAuth();[m
+ [m
+   const technicianId = user?.technicianId;[m
+   const userId = user?.userId;[m
+   // KST(Asia/Seoul) 기준 날짜 계산 - UTC+9 고정 (getTimezoneOffset 사용 금지)[m
+   const getKSTDate = (offsetDays = 0) => {[m
+     const now = new Date();[m
+     const kstMs = now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000;[m
+     const d = new Date(kstMs);[m
+     const y = d.getUTCFullYear();[m
+     const mo = String(d.getUTCMonth() + 1).padStart(2, '0');[m
+     const dy = String(d.getUTCDate()).padStart(2, '0');[m
+     return `${y}-${mo}-${dy}`;[m
+   };[m
+   const today = getKSTDate(0);[m
+   const tomorrow = getKSTDate(1);[m
+ [m
+   // URL 파라미터로 초기 탭 설정 (홈 화면 버튼 연동)[m
+   const params = useLocalSearchParams<{ tab?: string }>();[m
+   const [showConsentModal, setShowConsentModal] = useState(false);[m
+   const [pendingDepartRequestId, setPendingDepartRequestId] = useState<number | null>(null);[m
+   const [isStartingTracking, setIsStartingTracking] = useState(false);[m
+   const [showDebug, setShowDebug] = useState(false);[m
+   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "overdue" | "all">([m
+     (params.tab as any) || "today"[m
+   );[m
+   // 유량 이상 상태 맵 (전화번호 → 알림 데이터)[m
+   const [flowAlertMap, setFlowAlertMap] = useState<Record<string, any>>({});[m
+ [m
+   // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)[m
+   const {[m
+     isTracking,[m
+     trackingToken,[m
+     trackingRequestId,[m
+     trackingUrl,[m
+     debugState,[m
+     permStatus,[m
+     startTracking,[m
+     stopTracking,[m
+     checkPermissions,[m
+   } = useLocationTracking();[m
+ [m
+ [m
+ [m
+   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)[m
+   const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery([m
+     undefined,[m
+     { enabled: !!userId, retry: 1 }[m
+   );[m
+   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용[m
+   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);[m
+ [m
+   // 화면 진입 시 자동 재조회 (기사배정 후 즉시 반영)[m
+   useFocusEffect([m
+     useCallback(() => {[m
+       refetch();[m
+       // URL 파라미터로 탭 전환 (홈 화면 버튼 연동)[m
+       if (params.tab && ["today", "tomorrow", "overdue", "all"].includes(params.tab)) {[m
+         setActiveTab(params.tab as "today" | "tomorrow" | "overdue" | "all");[m
+       }[m
+     }, [params.tab])[m
+   );[m
+ [m
+   const consentQuery = trpc.location.getConsent.useQuery([m
+     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },[m
+     { enabled: !!(resolvedTechnicianId ?? technicianId) }[m
+   );[m
+ [m
+   const startTrackingMutation = trpc.location.startTracking.useMutation();[m
+[32m+[m[32m  const saveConsentMutation = trpc.location.saveConsent.useMutation();[m
+   const sessionQuery = trpc.location.getSessionByRequest.useQuery([m
+     { requestId: trackingRequestId ?? 0 },[m
+     { enabled: !!trackingRequestId, refetchInterval: 10000 }[m
+   );[m
+ [m
+ [m
+ [m
+ [m
+ [m
+   // 출발 버튼 처리[m
+   const handleDepart = async (work: any) => {[m
+     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);[m
+ [m
+     // 동의 여부 확인[m
+     if (!consentQuery.data?.hasConsented) {[m
+       setPendingDepartRequestId(work.id);[m
+       setShowConsentModal(true);[m
+       return;[m
+     }[m
+     await doDepart(work);[m
+   };[m
+ [m
+   const doDepart = async (work: any) => {[m
+     setIsStartingTracking(true);[m
+     try {[m
+       // 위치 권한 요청[m
+       const { granted, backgroundGranted } = await requestLocationPermissions();[m
+       await checkPermissions();[m
+       if (!granted && Platform.OS !== "web") {[m
+         Alert.alert([m
+           "위치 권한 필요",[m
+           "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 앱 사용 중 허용",[m
+           [{ text: "확인" }][m
+         );[m
+         setIsStartingTracking(false);[m
+         return;[m
+       }[m
+       if (!backgroundGranted && Platform.OS !== "web") {[m
+         Alert.alert([m
+           "백그라운드 위치 권한 권장",[m
+           "화면을 끄거나 내비게이션 앱 사용 중에도 위치를 전송하려면\n위치 권한을 '항상 허용'으로 설정해 주세요.\n\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용\n\n(지금은 앱 켜진 상태에서만 위치가 전송됩니다)",[m
+           [{ text: "나중에" }, { text: "설정 열기", onPress: () => Linking.openSettings() }][m
+         );[m
+       }[m
+ [m
+       // 목적지 좌표 - 접수건에 저장된 좌표 사용 (카카오 지오코딩 연동 시 자동 저장됨)[m
+       const destLat = work.customerLat ? Number(work.customerLat) : undefined;[m
+       const destLng = work.customerLng ? Number(work.customerLng) : undefined;[m
+ [m
+       // 서버에 세션 시작 요청[m
+       const result = await startTrackingMutation.mutateAsync({[m
+         requestId: work.id,[m
+         technicianId: (resolvedTechnicianId ?? technicianId)!,[m
+         technicianName: user?.loginId || "기사",[m
+         technicianPhone: user?.phoneNumber || "",[m
+         customerName: work.customerName,[m
+         customerPhone: work.phoneNumber,[m
+         customerAddress: formatFullAddress(work),[m
+         customerLat: destLat,[m
+         customerLng: destLng,[m
+         branchId: work.branchId ?? undefined,[m
+         branchName: work.branchName ?? undefined,[m
+         demoMode: false,[m
+       });[m
+ [m
+       if (!result.success || !result.token) throw new Error("세션 시작 실패");[m
+ [m
+       // 전역 위치 추적 컨텍스트로 시작 (화면 이동 후에도 위치 전송 유지)[m
+       const trackResult = await startTracking({[m
+         token: result.token,[m
+         requestId: work.id,[m
+         trackingUrl: result.trackingUrl,[m
+       });[m
+       if (!trackResult.ok) {[m
+         console.warn('[TechSchedule] 전역 추적 시작 실패:', trackResult.error);[m
+       }[m
+ [m
+       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);[m
+ [m
+       Alert.alert([m
+[36m@@ -537,167 +538,174 @@[m [mexport default function TechScheduleScreen() {[m
+       ) : isError ? ([m
+         <View style={s.center}>[m
+           <Text style={s.emptyIcon}>⚠️</Text>[m
+           <Text style={[s.empty, { color: '#EF4444', fontWeight: 'bold' }]}>일정 조회 실패</Text>[m
+           <Text style={[s.empty, { color: colors.muted, fontSize: 13, marginTop: 4 }]}>[m
+             {(scheduleError as any)?.data?.code === 'UNAUTHORIZED'[m
+               ? '인증이 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.'[m
+               : (scheduleError as any)?.message || '서버 연결에 실패했습니다.'}[m
+           </Text>[m
+           <TouchableOpacity[m
+             style={{ marginTop: 16, backgroundColor: '#FF6B35', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}[m
+             onPress={() => refetch()}[m
+             activeOpacity={0.8}[m
+           >[m
+             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>다시 시도</Text>[m
+           </TouchableOpacity>[m
+         </View>[m
+       ) : (allWorks ?? []).length === 0 ? ([m
+         <View style={s.center}>[m
+           <Text style={s.emptyIcon}>📅</Text>[m
+           <Text style={[s.empty, { color: colors.muted }]}>배정된 방문 일정이 없습니다.</Text>[m
+         </View>[m
+       ) : ([m
+         <>[m
+           {/* 탭 바 */}[m
+           <View style={s.tabBar}>[m
+             {tabs.map((tab) => ([m
+               <TouchableOpacity[m
+                 key={tab.key}[m
+                 style={[s.tabItem, activeTab === tab.key ? { borderBottomColor: tab.color, borderBottomWidth: 2.5 } : {}]}[m
+                 onPress={() => {[m
+                   if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);[m
+                   setActiveTab(tab.key);[m
+                 }}[m
+                 activeOpacity={0.7}[m
+               >[m
+                 <Text style={[s.tabLabel, { color: activeTab === tab.key ? tab.color : colors.muted }]}>[m
+                   {tab.label}[m
+                 </Text>[m
+                 {tab.count > 0 && ([m
+                   <View style={[s.tabBadge, { backgroundColor: tab.color }]}>[m
+                     <Text style={s.tabBadgeText}>{tab.count}</Text>[m
+                   </View>[m
+                 )}[m
+               </TouchableOpacity>[m
+             ))}[m
+           </View>[m
+           {/* 탭 콘텐츠 */}[m
+           {currentWorks.length === 0 ? ([m
+             <View style={s.center}>[m
+               <Text style={s.emptyIcon}>[m
+                 {activeTab === "today" ? "☀️" : activeTab === "tomorrow" ? "🗓" : activeTab === "overdue" ? "⏰" : "📋"}[m
+               </Text>[m
+               <Text style={[s.empty, { color: colors.muted }]}>[m
+                 {activeTab === "today" ? "오늘 작업이 없습니다"[m
+                   : activeTab === "tomorrow" ? "내일 일정이 없습니다"[m
+                   : activeTab === "overdue" ? "미작업·이월 건이 없습니다"[m
+                   : "전체 작업이 없습니다"}[m
+               </Text>[m
+             </View>[m
+           ) : ([m
+             <ScrollView[m
+               contentContainerStyle={s.list}[m
+               refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B35" />}[m
+             >[m
+               {currentWorks.map((work: any) => renderWorkCard(work))}[m
+             </ScrollView>[m
+           )}[m
+         </>[m
+       )}[m
+ [m
+       {/* 위치 동의 모달 */}[m
+       <LocationConsentModal[m
+         visible={showConsentModal}[m
+         onConsent={async () => {[m
+           setShowConsentModal(false);[m
+           // 동의 저장[m
+           const effectiveTechId = resolvedTechnicianId ?? technicianId;[m
+           if (effectiveTechId) {[m
+             try {[m
+[31m-              await fetch(`${getApiBaseUrl()}/api/trpc/location.saveConsent`, {[m
+[31m-                method: "POST",[m
+[31m-                headers: { "Content-Type": "application/json" },[m
+[31m-                body: JSON.stringify({ json: { technicianId: effectiveTechId } }),[m
+[31m-              });[m
+[31m-              consentQuery.refetch();[m
+[31m-            } catch {}[m
+[32m+[m[32m              const savedConsent = await saveConsentMutation.mutateAsync({ technicianId: effectiveTechId });[m
+[32m+[m[32m              if (!savedConsent?.success || !savedConsent?.hasConsented) {[m
+[32m+[m[32m                throw new Error("위치정보 동의 저장을 확인하지 못했습니다.");[m
+[32m+[m[32m              }[m
+[32m+[m[32m              await consentQuery.refetch();[m
+[32m+[m[32m            } catch (error: any) {[m
+[32m+[m[32m              setPendingDepartRequestId(null);[m
+[32m+[m[32m              Alert.alert("동의 저장 실패", error?.message || "위치정보 동의를 저장하지 못했습니다. 다시 시도해 주세요.");[m
+[32m+[m[32m              return;[m
+[32m+[m[32m            }[m
+[32m+[m[32m          } else {[m
+[32m+[m[32m            setPendingDepartRequestId(null);[m
+[32m+[m[32m            Alert.alert("동의 저장 실패", "기사 정보를 확인하지 못했습니다.");[m
+[32m+[m[32m            return;[m
+           }[m
+           // 대기 중인 방문 건 출발 처리[m
+           if (pendingDepartRequestId !== null) {[m
+             const allDisplayWorks: any[] = allWorks ?? [];[m
+             const work = allDisplayWorks.find((w) => w.id === pendingDepartRequestId);[m
+             if (work) await doDepart(work);[m
+             setPendingDepartRequestId(null);[m
+           }[m
+         }}[m
+         onDecline={() => {[m
+           setShowConsentModal(false);[m
+           setPendingDepartRequestId(null);[m
+         }}[m
+       />[m
+     </ScreenContainer>[m
+   );[m
+ }[m
+ [m
+ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({[m
+   header: { backgroundColor: "#FF6B35", padding: 20, paddingBottom: 16 },[m
+   headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },[m
+   headerDate: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 2 },[m
+   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },[m
+   emptyIcon: { fontSize: 48 },[m
+   empty: { fontSize: 16, textAlign: "center" },[m
+   list: { padding: 16, gap: 12 },[m
+   // 섹션 헤더[m
+   sectionHeader: {[m
+     flexDirection: "row",[m
+     justifyContent: "space-between",[m
+     alignItems: "center",[m
+     paddingHorizontal: 4,[m
+     paddingVertical: 6,[m
+     borderBottomWidth: 1,[m
+     borderBottomColor: "#E5E7EB",[m
+     marginBottom: 4,[m
+   },[m
+   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#374151" },[m
+   sectionCount: { fontSize: 13, fontWeight: "600" },[m
+   // 카드[m
+   card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 6 },[m
+   cardTracking: { borderWidth: 2 },[m
+   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },[m
+   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },[m
+   statusText: { fontSize: 12, fontWeight: "700" },[m
+   requestNum: { fontSize: 12 },[m
+   customerName: { fontSize: 18, fontWeight: "700" },[m
+   address: { fontSize: 14 },[m
+   symptom: { fontSize: 14, fontWeight: "600" },[m
+   time: { fontSize: 14, fontWeight: "600" },[m
+   detail: { fontSize: 13, lineHeight: 18 },[m
+   actions: { flexDirection: "row", gap: 8, marginTop: 8 },[m
+   actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },[m
+   actionBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },[m
+   // 위치 추적 배너[m
+   trackingBanner: {[m
+     backgroundColor: "#FF6B35",[m
+     flexDirection: "row",[m
+     alignItems: "center",[m
+     paddingHorizontal: 16,[m
+     paddingVertical: 10,[m
+     gap: 10,[m
+   },[m
+   trackingBannerIcon: { fontSize: 20 },[m
+   trackingBannerText: { flex: 1 },[m
+   trackingBannerTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },[m
+   trackingBannerSub: { color: "rgba(255,255,255,0.85)", fontSize: 12 },[m
+   trackingDot: {[m
+     width: 10, height: 10, borderRadius: 5,[m
+     backgroundColor: "#fff",[m
+     shadowColor: "#fff",[m
+     shadowOpacity: 1,[m
+     shadowRadius: 4,[m
+   },[m
+   // 카드 내 위치 공유 표시[m
+   trackingIndicator: {[m
+     backgroundColor: "#FFF3E0",[m
+     borderRadius: 8,[m
+     paddingHorizontal: 10,[m
+     paddingVertical: 5,[m
+[1mdiff --git a/app/(tabs)/tech-works.tsx b/app/(tabs)/tech-works.tsx[m
+[1mindex 99e2990..c1f939f 100644[m
+[1m--- a/app/(tabs)/tech-works.tsx[m
+[1m+++ b/app/(tabs)/tech-works.tsx[m
+[36m@@ -1,195 +1,195 @@[m
+ import React, { useState, useCallback } from "react";[m
+ import {[m
+   View, Text, ScrollView, TouchableOpacity, StyleSheet,[m
+   ActivityIndicator, TextInput, RefreshControl,[m
+ } from "react-native";[m
+ import { useRouter, useFocusEffect } from "expo-router";[m
+ import { ScreenContainer } from "@/components/screen-container";[m
+ import { useColors } from "@/hooks/use-colors";[m
+ import { useAppAuth } from "@/lib/auth-context";[m
+ import { trpc } from "@/lib/trpc";[m
+ import { formatFullAddress } from "@/constants/address-data";[m
+ [m
+ const STATUS_COLOR: Record<string, string> = {[m
+   "신규접수": "#6B7280", "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",[m
+   "작업진행중": "#FF6B35", "견적승인대기": "#8B5CF6", "작업완료": "#22C55E", "재방문필요": "#EF4444",[m
+ };[m
+ [m
+ const FILTER_TABS = ["전체", "방문예정", "작업진행중", "작업완료", "재방문필요"];[m
+ [m
+ export default function TechWorksScreen() {[m
+   const colors = useColors();[m
+   const router = useRouter();[m
+   const { user } = useAppAuth();[m
+   const [activeFilter, setActiveFilter] = useState("전체");[m
+   const [search, setSearch] = useState("");[m
+   const [refreshing, setRefreshing] = useState(false);[m
+ [m
+   const userId = user?.userId;[m
+ [m
+   // 세션 기반 보안 조회 - 서버에서 기사 ID를 확인하므로 클라이언트에서 technicianId를 전달하지 않음[m
+   const { data: works = [], isLoading, error, refetch } = trpc.repair.listMySchedule.useQuery([m
+     { phoneNumber: user?.phoneNumber ?? undefined },[m
+     { enabled: !!userId }[m
+   );[m
+ [m
+   // 화면 재진입 시 자동 refetch[m
+   useFocusEffect([m
+     useCallback(() => {[m
+       if (userId) refetch();[m
+     }, [userId, refetch])[m
+   );[m
+ [m
+   const handleRefresh = useCallback(async () => {[m
+     setRefreshing(true);[m
+     try { await refetch(); } finally { setRefreshing(false); }[m
+   }, [refetch]);[m
+ [m
+   const filtered = works.filter((w) => {[m
+[31m-    const matchFilter = activeFilter === "전체" || w.status === activeFilter;[m
+[31m-    const matchSearch = !search || w.customerName.includes(search) || w.apartmentName.includes(search) || w.requestNumber.includes(search);[m
+[32m+[m[32m    const matchFilter = activeFilter === "전체" || (w.status ?? "") === activeFilter;[m
+[32m+[m[32m    const matchSearch = !search || String(w.customerName ?? "").includes(search) || String(w.apartmentName ?? "").includes(search) || String(w.requestNumber ?? "").includes(search);[m
+     return matchFilter && matchSearch;[m
+   });[m
+ [m
+   const s = styles(colors);[m
+ [m
+   if (!userId) {[m
+     return ([m
+       <ScreenContainer className="p-6">[m
+         <Text style={{ color: colors.muted, textAlign: "center", marginTop: 40, fontSize: 16 }}>기사 계정으로 로그인해주세요.</Text>[m
+       </ScreenContainer>[m
+     );[m
+   }[m
+ [m
+   return ([m
+     <ScreenContainer>[m
+       <View style={s.header}>[m
+         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>[m
+           <View>[m
+             <Text style={s.headerTitle}>작업 목록</Text>[m
+             <Text style={s.headerSub}>{user?.name ? `${user.name}님 · ` : ""}소속: {user?.branchName || "미지정"} · 전체 {works.length}건</Text>[m
+           </View>[m
+           <TouchableOpacity[m
+             style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}[m
+             onPress={() => router.push("/tech-estimate" as any)}[m
+             activeOpacity={0.8}[m
+           >[m
+             <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>✏️ 견적 작성</Text>[m
+           </TouchableOpacity>[m
+         </View>[m
+       </View>[m
+ [m
+       {/* 검색 */}[m
+       <View style={[s.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>[m
+         <TextInput[m
+           style={[s.searchInput, { color: colors.foreground }]}[m
+           value={search}[m
+           onChangeText={setSearch}[m
+           placeholder="고객명·아파트명·접수번호 검색"[m
+           placeholderTextColor={colors.muted}[m
+           returnKeyType="search"[m
+         />[m
+       </View>[m
+ [m
+       {/* 필터 탭 */}[m
+       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow} contentContainerStyle={s.filterContent}>[m
+         {FILTER_TABS.map((tab) => ([m
+           <TouchableOpacity[m
+             key={tab}[m
+             style={[s.filterTab, activeFilter === tab && s.filterTabActive]}[m
+             onPress={() => setActiveFilter(tab)}[m
+             activeOpacity={0.7}[m
+           >[m
+             <Text style={[s.filterTabText, activeFilter === tab && s.filterTabTextActive]}>{tab}</Text>[m
+           </TouchableOpacity>[m
+         ))}[m
+       </ScrollView>[m
+ [m
+       {isLoading ? ([m
+         <View style={s.center}><ActivityIndicator color="#FF6B35" size="large" /></View>[m
+       ) : error ? ([m
+         <View style={s.center}>[m
+           <Text style={{ fontSize: 40 }}>⚠️</Text>[m
+           <Text style={{ color: "#EF4444", fontSize: 15, marginTop: 8 }}>작업 목록을 불러오지 못했습니다.</Text>[m
+           <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>{(error as any)?.message || "서버 연결을 확인해주세요."}</Text>[m
+           <TouchableOpacity[m
+             style={{ marginTop: 16, backgroundColor: "#FF6B35", borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 }}[m
+             onPress={() => refetch()}[m
+             activeOpacity={0.8}[m
+           >[m
+             <Text style={{ color: "#fff", fontWeight: "700" }}>다시 시도</Text>[m
+           </TouchableOpacity>[m
+         </View>[m
+       ) : filtered.length === 0 ? ([m
+         <ScrollView[m
+           contentContainerStyle={s.center}[m
+           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}[m
+         >[m
+           <Text style={{ fontSize: 40 }}>📋</Text>[m
+           <Text style={{ color: colors.muted, fontSize: 15, marginTop: 8 }}>해당 작업이 없습니다.</Text>[m
+         </ScrollView>[m
+       ) : ([m
+         <ScrollView[m
+           contentContainerStyle={s.list}[m
+           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B35" />}[m
+         >[m
+           {filtered.map((work) => ([m
+             <TouchableOpacity[m
+               key={work.id}[m
+               style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}[m
+               onPress={() => router.push(`/work-report?id=${work.id}` as any)}[m
+               activeOpacity={0.8}[m
+             >[m
+               <View style={s.cardTop}>[m
+[31m-                <View style={[s.statusBadge, { backgroundColor: STATUS_COLOR[work.status] + "20" }]}>[m
+[31m-                  <Text style={[s.statusText, { color: STATUS_COLOR[work.status] }]}>{work.status}</Text>[m
+[32m+[m[32m                <View style={[s.statusBadge, { backgroundColor: (STATUS_COLOR[work.status] ?? "#6B7280") + "20" }]}>[m
+[32m+[m[32m                  <Text style={[s.statusText, { color: STATUS_COLOR[work.status] ?? "#6B7280" }]}>{work.status ?? "상태 미확인"}</Text>[m
+                 </View>[m
+                 <Text style={[s.requestNum, { color: colors.muted }]}>{work.requestNumber}</Text>[m
+               </View>[m
+[31m-              <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName}</Text>[m
+[32m+[m[32m              <Text style={[s.customerName, { color: colors.foreground }]}>{work.customerName ?? "고객 정보 미확인"}</Text>[m
+               <Text style={[s.address, { color: colors.muted }]}>{formatFullAddress(work)}</Text>[m
+               {(work.preferredDate || work.preferredTime) && ([m
+                 <Text style={[s.schedLine, { color: colors.muted }]}>희망: {`${work.preferredDate || ""} ${work.preferredTime || ""}`.trim()}</Text>[m
+               )}[m
+               <Text style={[s.schedLine, { color: (work.scheduledDate || work.scheduledTime) ? "#0369A1" : colors.muted, fontWeight: (work.scheduledDate || work.scheduledTime) ? "700" : "400" }]}>[m
+                 확정: {(work.scheduledDate || work.scheduledTime) ? `${work.scheduledDate || ""} ${work.scheduledTime || ""}`.trim() : "일정 미확정"}[m
+               </Text>[m
+               <View style={s.cardBottom}>[m
+                 <Text style={[s.symptom, { color: "#FF6B35" }]}>[m
+[31m-                  {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom}`}[m
+[32m+[m[32m                  {work.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${work.symptom ?? "증상 미확인"}`}[m
+                 </Text>[m
+               </View>[m
+             </TouchableOpacity>[m
+           ))}[m
+         </ScrollView>[m
+       )}[m
+     </ScreenContainer>[m
+   );[m
+ }[m
+ [m
+ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({[m
+   header: { backgroundColor: "#FF6B35", padding: 20, paddingBottom: 16 },[m
+   headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff" },[m
+   headerSub: { fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 2 },[m
+   searchBox: { margin: 12, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12 },[m
+   searchInput: { fontSize: 14, paddingVertical: 10 },[m
+   filterRow: { maxHeight: 44 },[m
+   filterContent: { paddingHorizontal: 12, gap: 8, alignItems: "center" },[m
+   filterTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: "transparent", borderWidth: 1, borderColor: "#E5E7EB" },[m
+   filterTabActive: { backgroundColor: "#FF6B35", borderColor: "#FF6B35" },[m
+   filterTabText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },[m
+   filterTabTextActive: { color: "#fff" },[m
+   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 60 },[m
+   list: { padding: 12, gap: 10 },[m
+   card: { borderRadius: 14, padding: 14, borderWidth: 1, gap: 4 },[m
+   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },[m
+   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },[m
+   statusText: { fontSize: 12, fontWeight: "700" },[m
+   requestNum: { fontSize: 12 },[m
+   customerName: { fontSize: 16, fontWeight: "700" },[m
+   address: { fontSize: 13 },[m
+   cardBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },[m
+   symptom: { fontSize: 13, fontWeight: "600" },[m
+   date: { fontSize: 12 },[m
+   schedLine: { fontSize: 12, marginTop: 2 },[m
+ });[m
+[1mdiff --git a/app/work-report.tsx b/app/work-report.tsx[m
+[1mindex d5ad3e9..d89adf6 100644[m
+[1m--- a/app/work-report.tsx[m
+[1m+++ b/app/work-report.tsx[m
+[36m@@ -213,174 +213,174 @@[m [mexport default function WorkReportScreen() {[m
+       if (next.has(item)) next.delete(item);[m
+       else next.add(item);[m
+       return next;[m
+     });[m
+   };[m
+ [m
+   const handleSave = () => {[m
+     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }[m
+     saveMutation.mutate({[m
+       requestId,[m
+       technicianId,[m
+       checkItems: JSON.stringify(Array.from(checkedItems)),[m
+       usedMaterials: usedMaterials || undefined,[m
+       workMemo: workMemo || undefined,[m
+       isCompleted: false,[m
+       beforePhotoUrl,[m
+       afterPhotoUrl,[m
+     });[m
+   };[m
+ [m
+   const handleComplete = () => {[m
+     if (!technicianId) { Alert.alert("오류", "기사 정보를 찾을 수 없습니다."); return; }[m
+     Alert.alert([m
+       "작업 완료 보고",[m
+       "작업을 완료로 보고하시겠습니까? 완료 후에는 수정이 어렵습니다.",[m
+       [[m
+         { text: "취소", style: "cancel" },[m
+         {[m
+           text: "완료 보고",[m
+           onPress: () => {[m
+             if (needsRevisit) {[m
+               revisitMutation.mutate({ id: requestId, needsRevisit: true, revisitReason });[m
+             }[m
+             completeMutation.mutate({[m
+               requestId,[m
+               technicianId,[m
+               checkItems: JSON.stringify(Array.from(checkedItems)),[m
+               usedMaterials: usedMaterials || undefined,[m
+               workMemo: workMemo || undefined,[m
+               isCompleted: !needsRevisit,[m
+               beforePhotoUrl,[m
+               afterPhotoUrl,[m
+             });[m
+           }[m
+         }[m
+       ][m
+     );[m
+   };[m
+ [m
+   const s = styles(colors);[m
+ [m
+   if (requestLoading) {[m
+     return ([m
+       <ScreenContainer className="p-6">[m
+         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>[m
+           <ActivityIndicator color="#FF6B35" size="large" />[m
+         </View>[m
+       </ScreenContainer>[m
+     );[m
+   }[m
+ [m
+   if (!request) {[m
+     return ([m
+       <ScreenContainer className="p-6">[m
+         <Text style={{ color: colors.muted, textAlign: "center", marginTop: 40, fontSize: 16 }}>접수 정보를 찾을 수 없습니다.</Text>[m
+       </ScreenContainer>[m
+     );[m
+   }[m
+ [m
+   const isCompleted = request.status === "작업완료";[m
+ [m
+   return ([m
+     <ScreenContainer>[m
+       <View style={s.header}>[m
+         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={s.backBtn}>[m
+           <Text style={s.backBtnText}>← 뒤로</Text>[m
+         </TouchableOpacity>[m
+         <Text style={s.headerTitle}>현장 점검표</Text>[m
+         <TouchableOpacity[m
+           style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)" }}[m
+[31m-          onPress={() => router.push(`/tech-estimate?requestId=${request.id}&customerName=${encodeURIComponent(request.customerName)}&customerPhone=${encodeURIComponent(request.phoneNumber)}` as any)}[m
+[32m+[m[32m          onPress={() => router.push(`/tech-estimate?requestId=${request.id}&customerName=${encodeURIComponent(request.customerName ?? "")}&customerPhone=${encodeURIComponent(request.phoneNumber ?? "")}` as any)}[m
+           activeOpacity={0.8}[m
+         >[m
+           <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>현장견적</Text>[m
+         </TouchableOpacity>[m
+       </View>[m
+ [m
+       <ScrollView contentContainerStyle={s.scroll}>[m
+         {/* 고객 정보 */}[m
+         <View style={[s.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>[m
+[31m-          <Text style={[s.infoTitle, { color: colors.foreground }]}>{request.customerName}</Text>[m
+[32m+[m[32m          <Text style={[s.infoTitle, { color: colors.foreground }]}>{request.customerName ?? "고객 정보 미확인"}</Text>[m
+           <Text style={[s.infoSub, { color: colors.muted }]}>{formatFullAddress(request)}</Text>[m
+           <Text style={[s.infoSub, { color: "#FF6B35" }]}>[m
+[31m-            {request.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${request.symptom}`}[m
+[32m+[m[32m            {request.requestType === "배관청소" ? "🚿 배관청소" : `🔧 ${request.symptom ?? "증상 미확인"}`}[m
+           </Text>[m
+           {request.detailContent && ([m
+             <Text style={[s.infoDetail, { color: colors.muted }]}>{request.detailContent}</Text>[m
+           )}[m
+         </View>[m
+ [m
+         {/* 점검 항목 */}[m
+         <View style={s.section}>[m
+           <Text style={[s.sectionTitle, { color: colors.foreground }]}>✅ 점검 항목</Text>[m
+           <Text style={[s.sectionSub, { color: colors.muted }]}>[m
+             {checkedItems.size}/{CHECK_ITEMS.length} 완료[m
+           </Text>[m
+           {CHECK_ITEMS.map((item) => ([m
+             <TouchableOpacity[m
+               key={item}[m
+               style={[s.checkItem, { backgroundColor: checkedItems.has(item) ? "#F0FDF4" : colors.surface, borderColor: checkedItems.has(item) ? "#22C55E" : colors.border }]}[m
+               onPress={() => !isCompleted && toggleCheck(item)}[m
+               activeOpacity={isCompleted ? 1 : 0.7}[m
+             >[m
+               <View style={[s.checkbox, { backgroundColor: checkedItems.has(item) ? "#22C55E" : "transparent", borderColor: checkedItems.has(item) ? "#22C55E" : "#D1D5DB" }]}>[m
+                 {checkedItems.has(item) && <Text style={s.checkmark}>✓</Text>}[m
+               </View>[m
+               <Text style={[s.checkItemText, { color: colors.foreground }]}>{item}</Text>[m
+             </TouchableOpacity>[m
+           ))}[m
+         </View>[m
+ [m
+         {/* 현장 사진 */}[m
+         <View style={s.section}>[m
+           <Text style={[s.sectionTitle, { color: colors.foreground }]}>📸 현장 사진</Text>[m
+           <View style={s.photoRow}>[m
+             {/* 작업 전 사진 */}[m
+             <View style={s.photoBox}>[m
+               <Text style={[s.photoLabel, { color: colors.muted }]}>작업 전</Text>[m
+               {beforePhotoUri ? ([m
+                 <View>[m
+                   <Image source={{ uri: beforePhotoUri }} style={s.photoPreview} resizeMode="cover" />[m
+                   {uploadingBefore && ([m
+                     <View style={s.photoOverlay}>[m
+                       <ActivityIndicator color="#fff" />[m
+                       <Text style={{ color: "#fff", fontSize: 12, marginTop: 4 }}>업로드 중...</Text>[m
+                     </View>[m
+                   )}[m
+                   {beforePhotoUrl && !uploadingBefore && ([m
+                     <View style={s.photoSuccess}>[m
+                       <Text style={{ color: "#fff", fontSize: 11 }}>✓ 저장됨</Text>[m
+                     </View>[m
+                   )}[m
+                   {!isCompleted && ([m
+                     <TouchableOpacity style={s.photoRetake} onPress={() => pickPhoto("before")} activeOpacity={0.8}>[m
+                       <Text style={{ color: "#fff", fontSize: 12 }}>다시 찍기</Text>[m
+                     </TouchableOpacity>[m
+                   )}[m
+                 </View>[m
+               ) : ([m
+                 <TouchableOpacity[m
+                   style={[s.photoPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}[m
+                   onPress={() => !isCompleted && pickPhoto("before")}[m
+                   activeOpacity={isCompleted ? 1 : 0.7}[m
+                   disabled={isCompleted}[m
+                 >[m
+                   <Text style={{ fontSize: 28 }}>📷</Text>[m
+                   <Text style={[s.photoPlaceholderText, { color: colors.muted }]}>[m
+                     {isCompleted ? "사진 없음" : "사진 추가"}[m
+                   </Text>[m
+                 </TouchableOpacity>[m
+               )}[m
+             </View>[m
+ [m
+             {/* 작업 후 사진 */}[m
+             <View style={s.photoBox}>[m
+               <Text style={[s.photoLabel, { color: colors.muted }]}>작업 후</Text>[m
+               {afterPhotoUri ? ([m
+                 <View>[m
+                   <Image source={{ uri: afterPhotoUri }} style={s.photoPreview} resizeMode="cover" />[m
+                   {uploadingAfter && ([m
+                     <View style={s.photoOverlay}>[m
+                       <ActivityIndicator color="#fff" />[m
+                       <Text style={{ color: "#fff", fontSize: 12, marginTop: 4 }}>업로드 중...</Text>[m
+                     </View>[m
+[1mdiff --git a/eas.json b/eas.json[m
+[1mindex 766d065..f972741 100644[m
+[1m--- a/eas.json[m
+[1m+++ b/eas.json[m
+[36m@@ -1,78 +1,78 @@[m
+ {[m
+   "cli": {[m
+     "version": ">= 12.0.0",[m
+     "appVersionSource": "local"[m
+   },[m
+   "build": {[m
+     "development": {[m
+       "developmentClient": true,[m
+       "distribution": "internal",[m
+       "android": {[m
+         "buildType": "apk"[m
+       },[m
+       "ios": {[m
+         "simulator": false[m
+       }[m
+     },[m
+     "preview": {[m
+       "distribution": "internal",[m
+       "android": {[m
+         "buildType": "apk",[m
+         "gradleCommand": ":app:assembleRelease"[m
+       },[m
+       "ios": {[m
+         "simulator": false[m
+       }[m
+     },[m
+     "review": {[m
+       "extends": "preview",[m
+       "env": {[m
+         "EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE": "1",[m
+[31m-        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-qqsc7llrp-futureenergytech.vercel.app"[m
+[32m+[m[32m        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-4tlv7asl8-futureenergytech.vercel.app"[m
+       }[m
+     },[m
+     "testflight": {[m
+       "distribution": "store",[m
+       "ios": {},[m
+       "android": {[m
+         "buildType": "app-bundle"[m
+       }[m
+     },[m
+     "review-store": {[m
+       "extends": "testflight",[m
+       "env": {[m
+         "EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE": "1",[m
+[31m-        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-qqsc7llrp-futureenergytech.vercel.app"[m
+[32m+[m[32m        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-4tlv7asl8-futureenergytech.vercel.app"[m
+       }[m
+     },[m
+     "production": {[m
+       "distribution": "store",[m
+       "android": {[m
+         "buildType": "app-bundle"[m
+       },[m
+       "ios": {}[m
+     },[m
+     "production-apk": {[m
+       "distribution": "internal",[m
+       "android": {[m
+         "buildType": "apk"[m
+       }[m
+     }[m
+   },[m
+   "submit": {[m
+     "production": {[m
+       "ios": {[m
+         "appleId": "jongseonyu01@gmail.com",[m
+         "ascAppId": "6788993921",[m
+         "appleTeamId": "83MU3C8JZN"[m
+       }[m
+     },[m
+     "testflight": {[m
+       "ios": {[m
+         "appleId": "jongseonyu01@gmail.com",[m
+         "ascAppId": "6788993921",[m
+         "appleTeamId": "83MU3C8JZN"[m
+       }[m
+     }[m
+   }[m
+ }[m
+[1mdiff --git a/lib/location-tracking.ts b/lib/location-tracking.ts[m
+[1mindex f5f1497..bae60df 100644[m
+[1m--- a/lib/location-tracking.ts[m
+[1m+++ b/lib/location-tracking.ts[m
+[36m@@ -1,287 +1,286 @@[m
+ /**[m
+  * 기사 위치 추적 모듈 (네이티브 APK 전용)[m
+  *[m
+  * ⚠️ 핵심 원칙:[m
+  * - TaskManager.defineTask 는 반드시 전역 스코프에서 호용 (컴포넌트 X)[m
+  * - 출발 버튼 클릭 시에만 추적 시작[m
+  * - Android Foreground Service + 10초 간격 위치 전송[m
+  * - 화면 꺼짘 / 내비 사용 중에도 위치 전송 유지[m
+  */[m
+ [m
+ import { Platform } from "react-native";[m
+ import AsyncStorage from "@react-native-async-storage/async-storage";[m
+[32m+[m[32mimport { getApiBaseUrl } from "@/constants/oauth";[m
+ [m
+ const TRACKING_TOKEN_KEY = "location_tracking_token";[m
+ const TRACKING_ACTIVE_KEY = "location_tracking_active";[m
+[31m-// 정적 상수 직접 사용 (process.env가 undefined로 치환되는 경우 방지)[m
+[31m-const API_BASE_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";[m
+ const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";[m
+ [m
+ // ─── 디버그 상태 (UI에서 구독 가능) ──────────────────────────────────────────[m
+ export interface LocationDebugState {[m
+   lat: number | null;[m
+   lng: number | null;[m
+   accuracy: number | null;[m
+   speed: number | null;[m
+   heading: number | null;[m
+   lastSentAt: number | null;       // 마지막 전송 시도 타임스탬프[m
+   lastSuccessAt: number | null;    // 마지막 성공 타임스탬프[m
+   serverOk: boolean | null;        // 마지막 서버 응답 성공 여부[m
+   serverError: string | null;      // 마지막 서버 오류 메시지[m
+   sendCount: number;               // 총 전송 횟수[m
+   source: string;                  // 'background-task' | 'foreground-interval'[m
+ }[m
+ [m
+ let _debugState: LocationDebugState = {[m
+   lat: null, lng: null, accuracy: null, speed: null, heading: null,[m
+   lastSentAt: null, lastSuccessAt: null, serverOk: null, serverError: null,[m
+   sendCount: 0, source: "",[m
+ };[m
+ [m
+ const _debugListeners: Array<(state: LocationDebugState) => void> = [];[m
+ [m
+ export function subscribeDebug(cb: (state: LocationDebugState) => void) {[m
+   _debugListeners.push(cb);[m
+   cb({ ..._debugState }); // 즉시 현재 상태 전달[m
+   return () => {[m
+     const idx = _debugListeners.indexOf(cb);[m
+     if (idx !== -1) _debugListeners.splice(idx, 1);[m
+   };[m
+ }[m
+ [m
+ function emitDebug(patch: Partial<LocationDebugState>) {[m
+   _debugState = { ..._debugState, ...patch };[m
+   for (const cb of _debugListeners) cb({ ..._debugState });[m
+ }[m
+ [m
+ // ─── 전역 포그라운드 인터벌 ────────────────────────────────────────────────[m
+ let _globalFgInterval: ReturnType<typeof setInterval> | null = null;[m
+ [m
+ export function startGlobalFgInterval() {[m
+   if (_globalFgInterval) return;[m
+   _globalFgInterval = setInterval(async () => {[m
+     const token = await AsyncStorage.getItem(TRACKING_TOKEN_KEY);[m
+     const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);[m
+     if (!token || isActive !== "true") return;[m
+     const loc = await getCurrentLocationFull();[m
+     if (!loc) return;[m
+     emitDebug({ lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy, speed: loc.speed, heading: loc.heading, source: "foreground-interval", lastSentAt: Date.now() });[m
+     await sendLocationToServer(token, loc.lat, loc.lng, loc.speed, loc.heading, loc.accuracy);[m
+   }, 10000);[m
+ }[m
+ [m
+ export function stopGlobalFgInterval() {[m
+   if (_globalFgInterval) {[m
+     clearInterval(_globalFgInterval);[m
+     _globalFgInterval = null;[m
+   }[m
+ }[m
+ [m
+ export async function resumeTrackingIfActive() {[m
+   const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);[m
+   if (isActive === "true") {[m
+     startGlobalFgInterval();[m
+   }[m
+ }[m
+ [m
+ // ─── 백그라운드 태스크 정의 (전역 스코프 — 컴포넌트 밖) ───────────────────[m
+ // ⚠️ 이 블록은 반드시 모듈 최상위에 있어야 함[m
+ // 앱이 백그라운드에서 재시작될 때 태스크를 찾을 수 있도록 전역 등록[m
+ if (Platform.OS !== "web") {[m
+   try {[m
+     // 동기 require — 백그라운드 재시작 시 import() 비동기 불가[m
+     // eslint-disable-next-line @typescript-eslint/no-var-requires[m
+     const TaskManager = require("expo-task-manager");[m
+     if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {[m
+       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {[m
+         if (error) {[m
+           console.error("[LocationTask] 오류:", error.message);[m
+           return;[m
+         }[m
+         if (!data?.locations?.length) return;[m
+ [m
+         const token = await AsyncStorage.getItem(TRACKING_TOKEN_KEY);[m
+         const isActive = await AsyncStorage.getItem(TRACKING_ACTIVE_KEY);[m
+         if (!token || isActive !== "true") return;[m
+ [m
+         const { latitude, longitude, speed, heading, accuracy } = data.locations[0].coords;[m
+         const now = Date.now();[m
+         emitDebug({[m
+           lat: latitude, lng: longitude,[m
+           speed: speed ?? null, heading: heading ?? null, accuracy: accuracy ?? null,[m
+           lastSentAt: now, source: "background-task",[m
+         });[m
+ [m
+         try {[m
+[31m-          const resp = await fetch(`${API_BASE_URL}/api/location/update`, {[m
+[32m+[m[32m          const resp = await fetch(`${getApiBaseUrl()}/api/location/update`, {[m
+             method: "POST",[m
+             headers: { "Content-Type": "application/json" },[m
+             body: JSON.stringify({[m
+               token,[m
+               lat: latitude, lng: longitude,[m
+               speed: speed ?? null, heading: heading ?? null, accuracy: accuracy ?? null,[m
+             }),[m
+           });[m
+           const ok = resp.ok;[m
+           emitDebug({ serverOk: ok, lastSuccessAt: ok ? now : _debugState.lastSuccessAt, serverError: ok ? null : `HTTP ${resp.status}`, sendCount: _debugState.sendCount + 1 });[m
+         } catch (e: any) {[m
+           emitDebug({ serverOk: false, serverError: e?.message || "네트워크 오류" });[m
+         }[m
+       });[m
+     }[m
+   } catch (e) {[m
+     console.warn("[LocationTracking] 백그라운드 태스크 전역 등록 실패:", e);[m
+   }[m
+ }[m
+ [m
+ // ─── 위치 권한 요청 ────────────────────────────────────────────────────────[m
+ export async function requestLocationPermissions(): Promise<{[m
+   granted: boolean;[m
+   backgroundGranted: boolean;[m
+   message?: string;[m
+ }> {[m
+   if (Platform.OS === "web") return { granted: true, backgroundGranted: false };[m
+ [m
+   try {[m
+     // eslint-disable-next-line @typescript-eslint/no-var-requires[m
+     const Location = require("expo-location");[m
+     const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();[m
+     if (fgStatus !== "granted") {[m
+       return { granted: false, backgroundGranted: false, message: "위치 권한을 허용해 주세요." };[m
+     }[m
+     let bgGranted = false;[m
+     try {[m
+       const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();[m
+       bgGranted = bgStatus === "granted";[m
+     } catch (e) {[m
+       console.warn("[LocationTracking] 백그라운드 권한 요청 실패:", e);[m
+     }[m
+     return { granted: true, backgroundGranted: bgGranted };[m
+   } catch (e) {[m
+     console.error("[LocationTracking] 권한 요청 오류:", e);[m
+     return { granted: false, backgroundGranted: false, message: "위치 권한 요청 중 오류가 발생했습니다." };[m
+   }[m
+ }[m
+ [m
+ // ─── 위치 추적 시작 ────────────────────────────────────────────────────────[m
+ export async function startLocationTracking(token: string): Promise<void> {[m
+   await AsyncStorage.setItem(TRACKING_TOKEN_KEY, token);[m
+   await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "true");[m
+   emitDebug({ sendCount: 0, serverOk: null, serverError: null });[m
+ [m
+   // 포그라운드 인터벌 시작 (화면 켜진 상태 백업)[m
+   startGlobalFgInterval();[m
+ [m
+   if (Platform.OS === "web") return;[m
+ [m
+   try {[m
+     // eslint-disable-next-line @typescript-eslint/no-var-requires[m
+     const Location = require("expo-location");[m
+     const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME);[m
+     if (isRunning) await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);[m
+ [m
+     await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {[m
+       accuracy: Location.Accuracy.High,[m
+       timeInterval: 10000,          // 10초 간격[m
+       distanceInterval: 5,          // 5m 이동 시 즉시[m
+       foregroundService: {[m
+         notificationTitle: "퓨처에너지테크 기사 앱",[m
+         notificationBody: "고객 방문 중 위치를 공유하고 있습니다.",[m
+         notificationColor: "#FF6B35",[m
+       },[m
+       showsBackgroundLocationIndicator: true,[m
+       pausesUpdatesAutomatically: false,[m
+     });[m
+     console.log("[LocationTracking] Foreground Service 시작 완료");[m
+   } catch (e) {[m
+     console.error("[LocationTracking] Foreground Service 시작 실패 (포그라운드 폴백):", e);[m
+   }[m
+ }[m
+ [m
+ // ─── 위치 추적 중단 ────────────────────────────────────────────────────────[m
+ export async function stopLocationTracking(): Promise<void> {[m
+   await AsyncStorage.setItem(TRACKING_ACTIVE_KEY, "false");[m
+   await AsyncStorage.removeItem(TRACKING_TOKEN_KEY);[m
+   stopGlobalFgInterval();[m
+ [m
+   if (Platform.OS === "web") return;[m
+   try {[m
+     // eslint-disable-next-line @typescript-eslint/no-var-requires[m
+     const Location = require("expo-location");[m
+     const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME);[m
+     if (isRunning) await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);[m
+   } catch (e) {[m
+     console.error("[LocationTracking] 위치 추적 중단 실패:", e);[m
+   }[m
+ }[m
+ [m
+ // ─── 추적 상태 확인 ────────────────────────────────────────────────────────[m
+ export async function isTrackingActive(): Promise<boolean> {[m
+   try {[m
+     return (await AsyncStorage.getItem(TRACKING_ACTIVE_KEY)) === "true";[m
+   } catch { return false; }[m
+ }[m
+ [m
+ export async function getActiveTrackingToken(): Promise<string | null> {[m
+   try { return AsyncStorage.getItem(TRACKING_TOKEN_KEY); }[m
+   catch { return null; }[m
+ }[m
+ [m
+ // ─── 현재 위치 1회 조회 ────────────────────────────────────────────────────[m
+ export async function getCurrentLocationFull(): Promise<{[m
+   lat: number; lng: number; speed: number | null; heading: number | null; accuracy: number | null;[m
+ } | null> {[m
+   if (Platform.OS === "web") {[m
+     return new Promise((resolve) => {[m
+       if (!navigator.geolocation) { resolve(null); return; }[m
+       navigator.geolocation.getCurrentPosition([m
+         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed ?? null, heading: pos.coords.heading ?? null, accuracy: pos.coords.accuracy ?? null }),[m
+         () => resolve(null),[m
+         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }[m
+       );[m
+     });[m
+   }[m
+   try {[m
+     // eslint-disable-next-line @typescript-eslint/no-var-requires[m
+     const Location = require("expo-location");[m
+     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });[m
+     return { lat: loc.coords.latitude, lng: loc.coords.longitude, speed: loc.coords.speed ?? null, heading: loc.coords.heading ?? null, accuracy: loc.coords.accuracy ?? null };[m
+   } catch { return null; }[m
+ }[m
+ [m
+ export async function getCurrentLocation(): Promise<{ lat: number; lng: number } | null> {[m
+   const r = await getCurrentLocationFull();[m
+   return r ? { lat: r.lat, lng: r.lng } : null;[m
+ }[m
+ [m
+ // ─── 서버에 위치 전송 ──────────────────────────────────────────────────────[m
+ export async function sendLocationToServer([m
+   token: string, lat: number, lng: number,[m
+   speed?: number | null, heading?: number | null, accuracy?: number | null[m
+ ): Promise<void> {[m
+   try {[m
+[31m-    const resp = await fetch(`${API_BASE_URL}/api/location/update`, {[m
+[32m+[m[32m    const resp = await fetch(`${getApiBaseUrl()}/api/location/update`, {[m
+       method: "POST",[m
+       headers: { "Content-Type": "application/json" },[m
+       body: JSON.stringify({ token, lat, lng, speed: speed ?? null, heading: heading ?? null, accuracy: accuracy ?? null }),[m
+     });[m
+     const now = Date.now();[m
+     emitDebug({ serverOk: resp.ok, lastSuccessAt: resp.ok ? now : _debugState.lastSuccessAt, serverError: resp.ok ? null : `HTTP ${resp.status}`, sendCount: _debugState.sendCount + 1 });[m
+   } catch (e: any) {[m
+     emitDebug({ serverOk: false, serverError: e?.message || "네트워크 오류" });[m
+     console.error("[LocationTracking] 위치 전송 실패:", e);[m
+   }[m
+ }[m
+ [m
+ // ─── 세션 종료 서버 알림 ───────────────────────────────────────────────────[m
+ export async function notifySessionStop(token: string, reason: "도착완료" | "업무취소"): Promise<void> {[m
+   try {[m
+[31m-    await fetch(`${API_BASE_URL}/api/location/stop`, {[m
+[32m+[m[32m    await fetch(`${getApiBaseUrl()}/api/location/stop`, {[m
+       method: "POST",[m
+       headers: { "Content-Type": "application/json" },[m
+       body: JSON.stringify({ token, reason }),[m
+     });[m
+   } catch (e) {[m
+     console.error("[LocationTracking] 세션 종료 알림 실패:", e);[m
+   }[m
+ }[m
+[1mdiff --git a/review-server/api/location/stop.js b/review-server/api/location/stop.js[m
+[1mnew file mode 100644[m
+[1mindex 0000000..f6a9ba1[m
+[1m--- /dev/null[m
+[1m+++ b/review-server/api/location/stop.js[m
+[36m@@ -0,0 +1,7 @@[m
+[32m+[m[32m// 합성 preview 전용 위치 종료 endpoint. 운영 위치 서버·DB를 호출하지 않는다.[m
+[32m+[m[32mexport default function handler(req, res) {[m
+[32m+[m[32m  if (req.method !== "POST") return res.status(405).json({ success: false, code: "METHOD_NOT_SUPPORTED" });[m
+[32m+[m[32m  const token = String(req.body?.token || "");[m
+[32m+[m[32m  if (!/^review-location-\d+-\d+$/.test(token)) return res.status(401).json({ success: false, code: "UNAUTHORIZED" });[m
+[32m+[m[32m  return res.status(200).json({ success: true, synthetic: true });[m
+[32m+[m[32m}[m
+[1mdiff --git a/review-server/api/location/update.js b/review-server/api/location/update.js[m
+[1mnew file mode 100644[m
+[1mindex 0000000..93bb543[m
+[1m--- /dev/null[m
+[1m+++ b/review-server/api/location/update.js[m
+[36m@@ -0,0 +1,7 @@[m
+[32m+[m[32m// 합성 preview 전용 위치 update endpoint. 운영 위치 서버·DB를 호출하지 않는다.[m
+[32m+[m[32mexport default function handler(req, res) {[m
+[32m+[m[32m  if (req.method !== "POST") return res.status(405).json({ success: false, code: "METHOD_NOT_SUPPORTED" });[m
+[32m+[m[32m  const token = String(req.body?.token || "");[m
+[32m+[m[32m  if (!/^review-location-\d+-\d+$/.test(token)) return res.status(401).json({ success: false, code: "UNAUTHORIZED" });[m
+[32m+[m[32m  return res.status(200).json({ success: true, synthetic: true });[m
+[32m+[m[32m}[m
+[1mdiff --git a/review-server/api/trpc/[procedure].js b/review-server/api/trpc/[procedure].js[m
+[1mindex 0375c58..bc4aec5 100644[m
+[1m--- a/review-server/api/trpc/[procedure].js[m
+[1m+++ b/review-server/api/trpc/[procedure].js[m
+[36m@@ -1,97 +1,202 @@[m
+ // Vercel preview 전용: 운영 DB, 고객 접수, SMS/알림 provider를 사용하지 않는다.[m
+ // 모든 값은 preview process memory에만 존재하는 합성 검수 fixture다.[m
+[31m-// 운영 기사·고객·접수·DB와 연결하지 않는다.[m
+ const reviewTechnicians = [[m
+[31m-  { userId: 910001, technicianId: 910001, loginId: "review-tech", password: "review-only", token: "review-tech-token-v1", request: { id: 810001, name: "검수용 합성 고객 A", phone: "010-0000-0001" } },[m
+[31m-  { userId: 910002, technicianId: 910002, loginId: "review-tech-2", password: "review-only-2", token: "review-tech-token-v2", request: { id: 810002, name: "검수용 합성 고객 B", phone: "010-0000-0002" } },[m
+[32m+[m[32m  {[m
+[32m+[m[32m    userId: 910001,[m
+[32m+[m[32m    technicianId: 910001,[m
+[32m+[m[32m    loginId: "review-tech",[m
+[32m+[m[32m    password: "review-only",[m
+[32m+[m[32m    token: "review-tech-token-v1",[m
+[32m+[m[32m    request: {[m
+[32m+[m[32m      id: 810001,[m
+[32m+[m[32m      name: "검수용 합성 고객 A",[m
+[32m+[m[32m      phone: "010-0000-0001",[m
+[32m+[m[32m      apartmentName: "합성 검수 아파트",[m
+[32m+[m[32m      dong: "101동",[m
+[32m+[m[32m      ho: "1001호",[m
+[32m+[m[32m      symptom: "방 일부 난방 점검",[m
+[32m+[m[32m      detailContent: "합성 검수용 접수입니다. 운영 고객 데이터와 연결되지 않습니다.",[m
+[32m+[m[32m    },[m
+[32m+[m[32m  },[m
+[32m+[m[32m  {[m
+[32m+[m[32m    userId: 910002,[m
+[32m+[m[32m    technicianId: 910002,[m
+[32m+[m[32m    loginId: "review-tech-2",[m
+[32m+[m[32m    password: "review-only-2",[m
+[32m+[m[32m    token: "review-tech-token-v2",[m
+[32m+[m[32m    request: {[m
+[32m+[m[32m      id: 810002,[m
+[32m+[m[32m      name: "검수용 합성 고객 B",[m
+[32m+[m[32m      phone: "010-0000-0002",[m
+[32m+[m[32m      apartmentName: "합성 검수 아파트",[m
+[32m+[m[32m      dong: "102동",[m
+[32m+[m[32m      ho: "1202호",[m
+[32m+[m[32m      symptom: "온도조절기 점검",[m
+[32m+[m[32m      detailContent: "두 번째 합성 기사 권한 분리 검수용 접수입니다.",[m
+[32m+[m[32m    },[m
+[32m+[m[32m  },[m
+ ];[m
+[32m+[m
+ let sequence = 1;[m
+ const reports = [];[m
+[32m+[m[32mconst consentedTechnicians = new Set();[m
+[32m+[m[32mconst trackingSessions = new Map();[m
+ [m
+ const ports = [[m
+   [1, 2, 581000, 515000], [2, 3, 612000, 565000], [3, 4, 645000, 597000],[m
+   [4, 5, 678000, 629000], [5, 6, 710000, 662000], [6, 7, 790000, 742000],[m
+   [7, 8, 823000, 774000], [8, 9, 855000, 806000], [9, 10, 906000, 838000],[m
+ ];[m
+ [m
+ export const reviewPrices = [[m
+   ...ports.map(([id, port, stdPrice, discPrice]) => ({ id, category: "분배기교체", name: `분배기 교체 (${port}구)`, unit: "식", stdPrice, discPrice, isActive: true })),[m
+   { id: 30001, category: "밸브/배관", name: "스트레이너 25A", unit: "개", stdPrice: 81000, discPrice: 64000, isActive: true },[m
+   { id: 60001, category: "밸브/배관", name: "유량밸브 15A", unit: "개", stdPrice: 29000, discPrice: 29000, isActive: true },[m
+   { id: 60002, category: "제어/조절", name: "디지털 온도조절기", unit: "개", stdPrice: 106000, discPrice: 91000, isActive: true },[m
+   { id: 60003, category: "제어/조절", name: "아날로그 조절기", unit: "개", stdPrice: 39000, discPrice: 30000, isActive: true },[m
+   { id: 60004, category: "제어/조절", name: "제어기", unit: "개", stdPrice: 141000, discPrice: 141000, isActive: true },[m
+   { id: 60005, category: "제어/조절", name: "와이파이형 제어기", unit: "개", stdPrice: 220000, discPrice: 220000, isActive: true },[m
+   { id: 60006, category: "제어/조절", name: "조절기 V타입", unit: "개", stdPrice: 110000, discPrice: 110000, isActive: true },[m
+   { id: 60007, category: "제어/조절", name: "구동기 파라핀", unit: "개", stdPrice: 39000, discPrice: 30000, isActive: true },[m
+   { id: 60008, category: "제어/조절", name: "구동기 모터타입", unit: "개", stdPrice: 74000, discPrice: 50000, isActive: true },[m
+   { id: -1001, category: "밸브/배관", name: "유량밸브 15A / 부분수리", unit: "개", stdPrice: 74000, discPrice: 58000, isActive: true },[m
+   { id: -1002, category: "밸브/배관", name: "유량밸브 20A / 부분수리", unit: "개", stdPrice: 82000, discPrice: 65000, isActive: true },[m
+   { id: -1003, category: "밸브/배관", name: "유량밸브 25A / 부분수리", unit: "개", stdPrice: 114000, discPrice: 94000, isActive: true },[m
+ ];[m
+ [m
+[32m+[m[32mconst JSON_RPC_CODES = { BAD_REQUEST: -32600, UNAUTHORIZED: -32001, FORBIDDEN: -32003, NOT_FOUND: -32004, PRECONDITION_FAILED: -32012, INTERNAL_SERVER_ERROR: -32603 };[m
+[32m+[m
+ function normalizePhone(value) { return String(value || "").replace(/[^0-9]/g, ""); }[m
+[31m-function envelope(json) { return { result: { data: { json } } }; }[m
+[31m-function fail(res, message) { return res.status(400).json({ error: { json: { message } } }); }[m
+[31m-function unauthorized(res) { return res.status(401).json({ error: { json: { message: "검수 기사 인증이 필요합니다." } } }); }[m
+[31m-function reviewActor(req, res) {[m
+[32m+[m[32mfunction isBatch(req) { return String(req.query?.batch || "") === "1"; }[m
+[32m+[m[32mfunction resultEnvelope(value) { return { result: { data: { json: value } } }; }[m
+[32m+[m[32mfunction respond(res, req, value) { return res.status(200).json(isBatch(req) ? [resultEnvelope(value)] : resultEnvelope(value)); }[m
+[32m+[m[32mfunction trpcError(res, req, { message, code = "BAD_REQUEST", status = 400, path }) {[m
+[32m+[m[32m  const body = { error: { json: { message, code: JSON_RPC_CODES[code] ?? -32603, data: { code, httpStatus: status, path } } } };[m
+[32m+[m[32m  return res.status(status).json(isBatch(req) ? [body] : body);[m
+[32m+[m[32m}[m
+[32m+[m[32mfunction requestFor(actor) {[m
+[32m+[m[32m  return {[m
+[32m+[m[32m    id: actor.request.id,[m
+[32m+[m[32m    requestNumber: `REVIEW-${actor.request.id}`,[m
+[32m+[m[32m    customerName: actor.request.name,[m
+[32m+[m[32m    phoneNumber: actor.request.phone,[m
+[32m+[m[32m    technicianId: actor.technicianId,[m
+[32m+[m[32m    technicianName: `검수 기사 ${actor.technicianId}`,[m
+[32m+[m[32m    apartmentName: actor.request.apartmentName,[m
+[32m+[m[32m    dong: actor.request.dong,[m
+[32m+[m[32m    ho: actor.request.ho,[m
+[32m+[m[32m    address: "서울특별시 검수구 합성로 36",[m
+[32m+[m[32m    addressFull: `서울특별시 검수구 합성로 36 ${actor.request.apartmentName} ${actor.request.dong} ${actor.request.ho}`,[m
+[32m+[m[32m    symptom: actor.request.symptom,[m
+[32m+[m[32m    requestType: "난방점검",[m
+[32m+[m[32m    detailContent: actor.request.detailContent,[m
+[32m+[m[32m    preferredDate: "2026-09-13",[m
+[32m+[m[32m    preferredTime: "10:00",[m
+[32m+[m[32m    scheduledDate: "2026-09-13",[m
+[32m+[m[32m    scheduledTime: "10:00",[m
+[32m+[m[32m    branchId: 9100,[m
+[32m+[m[32m    branchName: "합성 검수 지사",[m
+[32m+[m[32m    customerLat: null,[m
+[32m+[m[32m    customerLng: null,[m
+[32m+[m[32m    isDeleted: false,[m
+[32m+[m[32m    status: "방문예정",[m
+[32m+[m[32m  };[m
+[32m+[m[32m}[m
+[32m+[m[32mfunction readInput(req) {[m
+[32m+[m[32m  const raw = req.method === "GET" ? req.query?.input : req.body;[m
+[32m+[m[32m  const parsed = typeof raw === "string" ? JSON.parse(raw) : (raw || {});[m
+[32m+[m[32m  const node = isBatch(req) ? parsed?.["0"] : parsed;[m
+[32m+[m[32m  return node?.json ?? {};[m
+[32m+[m[32m}[m
+[32m+[m[32mfunction reviewActor(req, res, procedure) {[m
+   const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");[m
+   const actor = reviewTechnicians.find((candidate) => candidate.token === token);[m
+   if (!actor) {[m
+[31m-    unauthorized(res);[m
+[32m+[m[32m    trpcError(res, req, { message: "검수 기사 인증이 필요합니다.", code: "UNAUTHORIZED", status: 401, path: procedure });[m
+     return null;[m
+   }[m
+   return actor;[m
+ }[m
+[31m-function readInput(req) {[m
+[31m-  if (req.method === "GET") {[m
+[31m-    const raw = req.query?.input;[m
+[31m-    return raw ? JSON.parse(raw).json : {};[m
+[32m+[m[32mfunction requireOwnRequest(res, req, actor, requestId, procedure) {[m
+[32m+[m[32m  if (Number(requestId) !== actor.request.id) {[m
+[32m+[m[32m    trpcError(res, req, { message: "본인에게 배정된 합성 검수 접수만 조회·처리할 수 있습니다.", code: "FORBIDDEN", status: 403, path: procedure });[m
+[32m+[m[32m    return false;[m
+   }[m
+[31m-  const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});[m
+[31m-  return body.json || {};[m
+[32m+[m[32m  return true;[m
+ }[m
+ [m
+[31m-export function resetReviewReportsForTest() { reports.splice(0, reports.length); sequence = 1; }[m
+[32m+[m[32mexport function resetReviewReportsForTest() {[m
+[32m+[m[32m  reports.splice(0, reports.length);[m
+[32m+[m[32m  consentedTechnicians.clear();[m
+[32m+[m[32m  trackingSessions.clear();[m
+[32m+[m[32m  sequence = 1;[m
+[32m+[m[32m}[m
+ [m
+ export default function handler(req, res) {[m
+   res.setHeader("cache-control", "no-store");[m
+[31m-  let input;[m
+[31m-  try { input = readInput(req); } catch { return fail(res, "검수 요청 형식이 올바르지 않습니다."); }[m
+   const procedure = String(req.query?.procedure || "");[m
+[32m+[m[32m  let input;[m
+[32m+[m[32m  try { input = readInput(req); } catch {[m
+[32m+[m[32m    return trpcError(res, req, { message: "검수 요청 형식이 올바르지 않습니다.", path: procedure });[m
+[32m+[m[32m  }[m
+[32m+[m
+   if (procedure === "auth.login" && req.method === "POST") {[m
+     const actor = reviewTechnicians.find((candidate) => candidate.loginId === input.loginId && candidate.password === input.password);[m
+     const valid = Boolean(actor) && input.source === "app";[m
+[31m-    return res.status(200).json(envelope(valid[m
+[32m+[m[32m    return respond(res, req, valid[m
+       ? { success: true, userId: actor.userId, technicianId: actor.technicianId, appRole: "technician", loginId: actor.loginId, name: `검수 기사 ${actor.technicianId}`, phoneNumber: actor.request.phone, token: actor.token, mustChangePassword: false }[m
+[31m-      : { success: false, error: "검수 기사 계정 정보를 확인하세요." }));[m
+[32m+[m[32m      : { success: false, error: "검수 기사 계정 정보를 확인하세요." });[m
+   }[m
+   if (procedure === "auth.verifyToken" && req.method === "POST") {[m
+     const valid = reviewTechnicians.some((candidate) => candidate.userId === input.userId && candidate.token === input.token);[m
+[31m-    return res.status(200).json(envelope({ success: valid }));[m
+[32m+[m[32m    return respond(res, req, { success: valid });[m
+   }[m
+[31m-  const actor = reviewActor(req, res);[m
+[32m+[m
+[32m+[m[32m  const actor = reviewActor(req, res, procedure);[m
+   if (!actor) return;[m
+[31m-  if (procedure === "prices.listActive" && req.method === "GET") return res.status(200).json(envelope(reviewPrices));[m
+[31m-  if ((procedure === "estimates.reviewMyAssignedRequests" || procedure === "repair.listMySchedule") && req.method === "GET") {[m
+[31m-    return res.status(200).json(envelope([{[m
+[31m-      id: actor.request.id,[m
+[31m-      requestNumber: `REVIEW-${actor.request.id}`,[m
+[31m-      customerName: actor.request.name,[m
+[31m-      phoneNumber: actor.request.phone,[m
+[31m-      technicianId: actor.technicianId,[m
+[31m-      isDeleted: false,[m
+[31m-      status: "방문예정",[m
+[31m-    }]));[m
+[32m+[m
+[32m+[m[32m  if (procedure === "prices.listActive" && req.method === "GET") return respond(res, req, reviewPrices);[m
+[32m+[m[32m  if ((procedure === "estimates.reviewMyAssignedRequests" || procedure === "repair.listMySchedule") && req.method === "GET") return respond(res, req, [requestFor(actor)]);[m
+[32m+[m[32m  if (procedure === "repair.getById" && req.method === "GET") {[m
+[32m+[m[32m    if (!requireOwnRequest(res, req, actor, input.id, procedure)) return;[m
+[32m+[m[32m    return respond(res, req, requestFor(actor));[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "workReport.getByRequest" && req.method === "GET") {[m
+[32m+[m[32m    if (!requireOwnRequest(res, req, actor, input.requestId, procedure)) return;[m
+[32m+[m[32m    return respond(res, req, null);[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "location.getConsent" && req.method === "GET") {[m
+[32m+[m[32m    if (Number(input.technicianId) !== actor.technicianId) return trpcError(res, req, { message: "본인 위치 동의만 조회할 수 있습니다.", code: "FORBIDDEN", status: 403, path: procedure });[m
+[32m+[m[32m    return respond(res, req, { hasConsented: consentedTechnicians.has(actor.technicianId), technicianId: actor.technicianId });[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "location.saveConsent" && req.method === "POST") {[m
+[32m+[m[32m    if (Number(input.technicianId) !== actor.technicianId) return trpcError(res, req, { message: "본인 위치 동의만 저장할 수 있습니다.", code: "FORBIDDEN", status: 403, path: procedure });[m
+[32m+[m[32m    consentedTechnicians.add(actor.technicianId);[m
+[32m+[m[32m    return respond(res, req, { success: true, hasConsented: true, technicianId: actor.technicianId, synthetic: true });[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "location.startTracking" && req.method === "POST") {[m
+[32m+[m[32m    if (!requireOwnRequest(res, req, actor, input.requestId, procedure)) return;[m
+[32m+[m[32m    if (!consentedTechnicians.has(actor.technicianId)) return trpcError(res, req, { message: "위치정보 동의 저장이 확인되지 않았습니다.", code: "PRECONDITION_FAILED", status: 412, path: procedure });[m
+[32m+[m[32m    const token = `review-location-${actor.technicianId}-${actor.request.id}`;[m
+[32m+[m[32m    const session = { success: true, token, requestId: actor.request.id, trackingUrl: "https://review.invalid/synthetic-location", smsSent: false, synthetic: true };[m
+[32m+[m[32m    trackingSessions.set(actor.request.id, session);[m
+[32m+[m[32m    return respond(res, req, session);[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "location.getSessionByRequest" && req.method === "GET") {[m
+[32m+[m[32m    if (!requireOwnRequest(res, req, actor, input.requestId, procedure)) return;[m
+[32m+[m[32m    return respond(res, req, trackingSessions.get(actor.request.id) ?? null);[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (procedure === "estimates.listMyTechRequests" && req.method === "GET") return respond(res, req, reports.filter((report) => report.technicianId === actor.technicianId));[m
+[32m+[m[32m  if (procedure === "estimates.techRequest" && req.method === "POST") {[m
+[32m+[m[32m    if (!requireOwnRequest(res, req, actor, input.requestId, procedure)) return;[m
+[32m+[m[32m    if (input.customerName?.trim() !== actor.request.name || normalizePhone(input.phoneNumber) !== normalizePhone(actor.request.phone)) return trpcError(res, req, { message: "본인에게 배정된 검수용 합성 접수 정보와 일치하지 않습니다.", code: "FORBIDDEN", status: 403, path: procedure });[m
+[32m+[m[32m    if (!Number.isSafeInteger(input.amount) || input.amount <= 0) return trpcError(res, req, { message: "견적 총액은 정수 원화여야 합니다.", path: procedure });[m
+[32m+[m[32m    let lines;[m
+[32m+[m[32m    try { lines = JSON.parse(input.autoEstimateItems); } catch { return trpcError(res, req, { message: "견적 항목 형식이 올바르지 않습니다.", path: procedure }); }[m
+[32m+[m[32m    if (!Array.isArray(lines) || !lines.length || lines.some((line) => !Number.isInteger(line.qty) || line.qty < 1 || !Number.isSafeInteger(line.unitPrice) || line.unitPrice <= 0 || !Number.isSafeInteger(line.subtotal) || line.subtotal !== line.qty * line.unitPrice) || lines.reduce((sum, line) => sum + line.subtotal, 0) !== input.amount) return trpcError(res, req, { message: "견적 품목 수량·단가·금액은 정수 원화로 일치해야 합니다.", path: procedure });[m
+[32m+[m[32m    const estimateNumber = `REVIEW-${String(sequence++).padStart(4, "0")}`;[m
+[32m+[m[32m    reports.unshift({ id: estimateNumber, estimateNumber, requestId: actor.request.id, technicianId: actor.technicianId, customerName: actor.request.name, customerPhone: actor.request.phone, title: input.title || "합성 검수 견적", amount: input.amount, autoEstimateItems: input.autoEstimateItems, sourceType: "tech_request", techRequestStatus: "pending", smsSubstituted: true, status: "review_test_pending" });[m
+[32m+[m[32m    return respond(res, req, { success: true, estimateId: estimateNumber, estimateNumber, smsSubstituted: true });[m
+   }[m
+[31m-  if (procedure === "estimates.listMyTechRequests" && req.method === "GET") return res.status(200).json(envelope(reports.filter((report) => report.technicianId === actor.technicianId)));[m
+[31m-  if (procedure !== "estimates.techRequest" || req.method !== "POST") return res.status(404).json({ error: { json: { message: "검수 endpoint를 찾을 수 없습니다." } } });[m
+[31m-  if (input.requestId !== actor.request.id || input.customerName?.trim() !== actor.request.name || normalizePhone(input.phoneNumber) !== normalizePhone(actor.request.phone)) return fail(res, "본인에게 배정된 검수용 합성 접수 정보와 일치하지 않습니다.");[m
+[31m-  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) return fail(res, "견적 총액은 정수 원화여야 합니다.");[m
+[31m-  let lines;[m
+[31m-  try { lines = JSON.parse(input.autoEstimateItems); } catch { return fail(res, "견적 항목 형식이 올바르지 않습니다."); }[m
+[31m-  if (!Array.isArray(lines) || !lines.length || lines.some((line) => !Number.isInteger(line.qty) || line.qty < 1 || !Number.isSafeInteger(line.unitPrice) || line.unitPrice <= 0 || !Number.isSafeInteger(line.subtotal) || line.subtotal !== line.qty * line.unitPrice) || lines.reduce((sum, line) => sum + line.subtotal, 0) !== input.amount) return fail(res, "견적 품목 수량·단가·금액은 정수 원화로 일치해야 합니다.");[m
+[31m-  const estimateNumber = `REVIEW-${String(sequence++).padStart(4, "0")}`;[m
+[31m-  reports.unshift({ id: estimateNumber, estimateNumber, requestId: actor.request.id, technicianId: actor.technicianId, customerName: actor.request.name, customerPhone: actor.request.phone, title: input.title || "합성 검수 견적", amount: input.amount, autoEstimateItems: input.autoEstimateItems, sourceType: "tech_request", techRequestStatus: "pending", smsSubstituted: true, status: "review_test_pending" });[m
+[31m-  return res.status(200).json(envelope({ success: true, estimateId: estimateNumber, estimateNumber, smsSubstituted: true }));[m
+[32m+[m[32m  return trpcError(res, req, { message: "검수 endpoint를 찾을 수 없습니다.", code: "NOT_FOUND", status: 404, path: procedure });[m
+ }[m
+[1mdiff --git a/scripts/verify-review-preview.mjs b/scripts/verify-review-preview.mjs[m
+[1mindex fea1101..78bf7b4 100644[m
+[1m--- a/scripts/verify-review-preview.mjs[m
+[1m+++ b/scripts/verify-review-preview.mjs[m
+[36m@@ -1,82 +1,141 @@[m
+ const base = String(process.env.REVIEW_API_BASE_URL || "").replace(/\/$/, "");[m
+ [m
+ if (!/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(base)) {[m
+   throw new Error("REVIEW_API_BASE_URL must be the approved HTTPS Vercel preview origin.");[m
+ }[m
+ [m
+ async function call(procedure, method, input, token) {[m
+   const isGet = method === "GET";[m
+   const url = isGet[m
+     ? `${base}/api/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify({ json: input ?? null }))}`[m
+     : `${base}/api/trpc/${procedure}`;[m
+   const response = await fetch(url, {[m
+     method,[m
+     headers: {[m
+       ...(isGet ? {} : { "content-type": "application/json" }),[m
+       ...(token ? { authorization: `Bearer ${token}` } : {}),[m
+     },[m
+     ...(isGet ? {} : { body: JSON.stringify({ json: input }) }),[m
+   });[m
+   return { status: response.status, json: await response.json() };[m
+ }[m
+ [m
+[32m+[m[32masync function rest(path, input) {[m
+[32m+[m[32m  const response = await fetch(`${base}${path}`, {[m
+[32m+[m[32m    method: "POST",[m
+[32m+[m[32m    headers: { "content-type": "application/json" },[m
+[32m+[m[32m    body: JSON.stringify(input),[m
+[32m+[m[32m  });[m
+[32m+[m[32m  return { status: response.status, json: await response.json() };[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction resultOf(reply) {[m
+[32m+[m[32m  return reply.json?.result?.data?.json;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction errorOf(reply) {[m
+[32m+[m[32m  return reply.json?.error?.json;[m
+[32m+[m[32m}[m
+[32m+[m
+ function assert(condition, label) {[m
+   if (!condition) throw new Error(`Review preview assertion failed: ${label}`);[m
+ }[m
+ [m
+[32m+[m[32mfunction assertTrpcError(reply, expectedStatus, expectedCode, label) {[m
+[32m+[m[32m  const error = errorOf(reply);[m
+[32m+[m[32m  assert(reply.status === expectedStatus, `${label}: HTTP ${expectedStatus}`);[m
+[32m+[m[32m  assert(typeof error?.code === "number", `${label}: JSON-RPC numeric code`);[m
+[32m+[m[32m  assert(error?.data?.code === expectedCode && error?.data?.httpStatus === expectedStatus && typeof error?.data?.path === "string", `${label}: tRPC error metadata`);[m
+[32m+[m[32m}[m
+[32m+[m
+ const [unauthPrice, unauthSubmit, unauthList] = await Promise.all([[m
+   call("prices.listActive", "GET"),[m
+   call("estimates.techRequest", "POST", { requestId: 0 }),[m
+   call("estimates.listMyTechRequests", "GET"),[m
+ ]);[m
+[31m-assert(unauthPrice.status === 401, "unauthenticated price lookup is blocked");[m
+[31m-assert(unauthSubmit.status === 401, "unauthenticated report submission is blocked");[m
+[31m-assert(unauthList.status === 401, "unauthenticated report lookup is blocked");[m
+[32m+[m[32massertTrpcError(unauthPrice, 401, "UNAUTHORIZED", "unauthenticated price lookup is blocked");[m
+[32m+[m[32massertTrpcError(unauthSubmit, 401, "UNAUTHORIZED", "unauthenticated report submission is blocked");[m
+[32m+[m[32massertTrpcError(unauthList, 401, "UNAUTHORIZED", "unauthenticated report lookup is blocked");[m
+ [m
+ const loginOne = await call("auth.login", "POST", { loginId: "review-tech", password: "review-only", source: "app" });[m
+ const loginTwo = await call("auth.login", "POST", { loginId: "review-tech-2", password: "review-only-2", source: "app" });[m
+[31m-const primary = loginOne.json?.result?.data?.json;[m
+[31m-const secondary = loginTwo.json?.result?.data?.json;[m
+[32m+[m[32mconst primary = resultOf(loginOne);[m
+[32m+[m[32mconst secondary = resultOf(loginTwo);[m
+ assert(loginOne.status === 200 && primary?.success && primary?.appRole === "technician", "primary synthetic technician login");[m
+ assert(loginTwo.status === 200 && secondary?.success && secondary?.appRole === "technician", "secondary synthetic technician login");[m
+ [m
+ const authorizedPrice = await call("prices.listActive", "GET", undefined, primary.token);[m
+ const primaryAssigned = await call("estimates.reviewMyAssignedRequests", "GET", undefined, primary.token);[m
+ const secondaryAssigned = await call("estimates.reviewMyAssignedRequests", "GET", undefined, secondary.token);[m
+[31m-const primaryRequest = primaryAssigned.json?.result?.data?.json?.[0];[m
+[31m-const secondaryRequest = secondaryAssigned.json?.result?.data?.json?.[0];[m
+[32m+[m[32mconst primaryRequest = resultOf(primaryAssigned)?.[0];[m
+[32m+[m[32mconst secondaryRequest = resultOf(secondaryAssigned)?.[0];[m
+ assert(primaryAssigned.status === 200 && primaryRequest?.id && primaryRequest?.technicianId === primary.technicianId, "primary sees only an assigned synthetic request");[m
+ assert(secondaryAssigned.status === 200 && secondaryRequest?.id && secondaryRequest?.technicianId === secondary.technicianId, "secondary sees only an assigned synthetic request");[m
+[32m+[m
+[32m+[m[32mconst primarySchedule = await call("repair.listMySchedule", "GET", undefined, primary.token);[m
+[32m+[m[32mconst consentBefore = await call("location.getConsent", "GET", { technicianId: primary.technicianId }, primary.token);[m
+[32m+[m[32mconst trackingBeforeConsent = await call("location.startTracking", "POST", { requestId: primaryRequest.id }, primary.token);[m
+[32m+[m[32mconst consentSaved = await call("location.saveConsent", "POST", { technicianId: primary.technicianId }, primary.token);[m
+[32m+[m[32mconst trackingStarted = await call("location.startTracking", "POST", { requestId: primaryRequest.id }, primary.token);[m
+[32m+[m[32mconst checklistRequest = await call("repair.getById", "GET", { id: primaryRequest.id }, primary.token);[m
+[32m+[m[32mconst checklistReport = await call("workReport.getByRequest", "GET", { requestId: primaryRequest.id }, primary.token);[m
+[32m+[m[32mconst crossChecklist = await call("repair.getById", "GET", { id: primaryRequest.id }, secondary.token);[m
+[32m+[m[32mconst crossConsent = await call("location.getConsent", "GET", { technicianId: primary.technicianId }, secondary.token);[m
+[32m+[m
+[32m+[m[32massert(primarySchedule.status === 200 && resultOf(primarySchedule)?.[0]?.id === primaryRequest.id, "primary schedule supplies own synthetic work");[m
+[32m+[m[32massert(consentBefore.status === 200 && resultOf(consentBefore)?.hasConsented === false, "consent begins unset for synthetic technician");[m
+[32m+[m[32massertTrpcError(trackingBeforeConsent, 412, "PRECONDITION_FAILED", "tracking is blocked before authenticated consent save");[m
+[32m+[m[32massert(consentSaved.status === 200 && resultOf(consentSaved)?.hasConsented === true, "authenticated consent save succeeds");[m
+[32m+[m[32massert(trackingStarted.status === 200 && resultOf(trackingStarted)?.requestId === primaryRequest.id && resultOf(trackingStarted)?.synthetic === true, "tracking starts only for own synthetic request");[m
+[32m+[m[32massert(checklistRequest.status === 200 && resultOf(checklistRequest)?.apartmentName && resultOf(checklistRequest)?.symptom, "checklist request has synthetic apartment and symptom fields");[m
+[32m+[m[32massert(checklistReport.status === 200 && resultOf(checklistReport) === null, "empty synthetic checklist report is represented safely");[m
+[32m+[m[32massertTrpcError(crossChecklist, 403, "FORBIDDEN", "other technician cannot load primary checklist");[m
+[32m+[m[32massertTrpcError(crossConsent, 403, "FORBIDDEN", "other technician cannot read primary consent");[m
+[32m+[m
+[32m+[m[32mconst locationToken = resultOf(trackingStarted)?.token;[m
+[32m+[m[32mconst [unauthLocationUpdate, locationUpdate, locationStop] = await Promise.all([[m
+[32m+[m[32m  rest("/api/location/update", { token: "invalid" }),[m
+[32m+[m[32m  rest("/api/location/update", { token: locationToken, latitude: 37.5, longitude: 127.0 }),[m
+[32m+[m[32m  rest("/api/location/stop", { token: locationToken }),[m
+[32m+[m[32m]);[m
+[32m+[m[32massert(unauthLocationUpdate.status === 401 && unauthLocationUpdate.json?.code === "UNAUTHORIZED", "unauthenticated review location update is blocked");[m
+[32m+[m[32massert(locationUpdate.status === 200 && locationUpdate.json?.synthetic === true, "review location update is isolated and synthetic");[m
+[32m+[m[32massert(locationStop.status === 200 && locationStop.json?.synthetic === true, "review location stop is isolated and synthetic");[m
+[32m+[m
+ const ownInput = {[m
+   requestId: primaryRequest.id,[m
+   customerName: primaryRequest.customerName,[m
+   phoneNumber: primaryRequest.phoneNumber,[m
+   amount: 220000,[m
+   autoEstimateItems: JSON.stringify([[m
+     { name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 },[m
+   ]),[m
+ };[m
+ const ownSubmit = await call("estimates.techRequest", "POST", ownInput, primary.token);[m
+ const crossSubmit = await call("estimates.techRequest", "POST", ownInput, secondary.token);[m
+ assert(authorizedPrice.status === 200, "authenticated price snapshot is available");[m
+[31m-assert(authorizedPrice.json?.result?.data?.json?.find((item) => item.id === -1001)?.discPrice === 58000, "partial-repair flow-valve price snapshot");[m
+[31m-assert(ownSubmit.status === 200 && ownSubmit.json?.result?.data?.json?.smsSubstituted === true, "own synthetic report uses SMS substitution");[m
+[31m-assert(crossSubmit.status === 400, "other technician cannot submit the primary synthetic request");[m
+[32m+[m[32massert(resultOf(authorizedPrice)?.find((item) => item.id === -1001)?.discPrice === 58000, "partial-repair flow-valve price snapshot");[m
+[32m+[m[32massert(ownSubmit.status === 200 && resultOf(ownSubmit)?.smsSubstituted === true, "own synthetic report uses SMS substitution");[m
+[32m+[m[32massertTrpcError(crossSubmit, 403, "FORBIDDEN", "other technician cannot submit the primary synthetic request");[m
+ [m
+ const primaryReports = await call("estimates.listMyTechRequests", "GET", undefined, primary.token);[m
+ const secondaryReports = await call("estimates.listMyTechRequests", "GET", undefined, secondary.token);[m
+[31m-assert(primaryReports.status === 200 && primaryReports.json?.result?.data?.json?.length >= 1 && primaryReports.json?.result?.data?.json?.every((report) => report.requestId === primaryRequest.id && report.technicianId === primary.technicianId), "primary sees only own synthetic reports");[m
+[31m-assert(secondaryReports.status === 200 && secondaryReports.json?.result?.data?.json?.length === 0, "secondary cannot read primary synthetic reports");[m
+[32m+[m[32massert(primaryReports.status === 200 && resultOf(primaryReports)?.length >= 1 && resultOf(primaryReports)?.every((report) => report.requestId === primaryRequest.id && report.technicianId === primary.technicianId), "primary sees only own synthetic reports");[m
+[32m+[m[32massert(secondaryReports.status === 200 && resultOf(secondaryReports)?.length === 0, "secondary cannot read primary synthetic reports");[m
+ [m
+ console.log(JSON.stringify({[m
+   apiOrigin: base,[m
+   unauthenticated: { prices: unauthPrice.status, submit: unauthSubmit.status, reportList: unauthList.status },[m
+   logins: { primary: primary.technicianId, secondary: secondary.technicianId },[m
+   assignments: { primaryRequestId: primaryRequest.id, secondaryRequestId: secondaryRequest.id },[m
+[32m+[m[32m  schedule: primarySchedule.status,[m
+[32m+[m[32m  consent: { before: resultOf(consentBefore)?.hasConsented, save: consentSaved.status, blockedStart: trackingBeforeConsent.status, started: trackingStarted.status },[m
+[32m+[m[32m  checklist: { request: checklistRequest.status, report: checklistReport.status, crossActor: crossChecklist.status },[m
+[32m+[m[32m  locationRest: { unauth: unauthLocationUpdate.status, update: locationUpdate.status, stop: locationStop.status },[m
+   authenticatedPrice: authorizedPrice.status,[m
+   ownSubmit: ownSubmit.status,[m
+   crossSubmit: crossSubmit.status,[m
+[31m-  ownReportCount: primaryReports.json?.result?.data?.json?.length,[m
+[31m-  otherReportCount: secondaryReports.json?.result?.data?.json?.length,[m
+[31m-  smsSubstituted: ownSubmit.json?.result?.data?.json?.smsSubstituted,[m
+[32m+[m[32m  ownReportCount: resultOf(primaryReports)?.length,[m
+[32m+[m[32m  otherReportCount: resultOf(secondaryReports)?.length,[m
+[32m+[m[32m  smsSubstituted: resultOf(ownSubmit)?.smsSubstituted,[m
+ }));[m
+[1mdiff --git a/tests/isolated-review-api.test.ts b/tests/isolated-review-api.test.ts[m
+[1mindex cbf0592..db76ac4 100644[m
+[1m--- a/tests/isolated-review-api.test.ts[m
+[1m+++ b/tests/isolated-review-api.test.ts[m
+[36m@@ -1,47 +1,73 @@[m
+ import { beforeEach, describe, expect, it } from "vitest";[m
+ import handler, { resetReviewReportsForTest } from "../review-server/api/trpc/[procedure].js";[m
+ [m
+ const REVIEW_TOKEN = "review-tech-token-v1";[m
+ const SECOND_REVIEW_TOKEN = "review-tech-token-v2";[m
+ [m
+[31m-function call({ method, procedure, input, token }: { method: "GET" | "POST"; procedure: string; input?: unknown; token?: string }) {[m
+[32m+[m[32mfunction call({ method, procedure, input, token, batch = false }: { method: "GET" | "POST"; procedure: string; input?: unknown; token?: string; batch?: boolean }) {[m
+   let statusCode = 0; let payload: any;[m
+   const res = { setHeader: () => undefined, status: (status: number) => { statusCode = status; return res; }, json: (value: unknown) => { payload = value; return value; } };[m
+[31m-  handler({ method, headers: token ? { authorization: `Bearer ${token}` } : {}, query: { procedure, ...(method === "GET" ? { input: JSON.stringify({ json: input ?? null }) } : {}) }, body: method === "POST" ? { json: input } : undefined }, res);[m
+[32m+[m[32m  const encoded = batch ? { "0": { json: input ?? null } } : { json: input ?? null };[m
+[32m+[m[32m  handler({ method, headers: token ? { authorization: `Bearer ${token}` } : {}, query: { procedure, ...(batch ? { batch: "1" } : {}), ...(method === "GET" ? { input: JSON.stringify(encoded) } : {}) }, body: method === "POST" ? encoded : undefined }, res);[m
+   return { statusCode, payload };[m
+ }[m
+ [m
+ describe("Vercel isolated review API", () => {[m
+   beforeEach(() => resetReviewReportsForTest());[m
+ [m
+   it("requires the synthetic technician login before serving the static price snapshot", () => {[m
+     expect(call({ method: "GET", procedure: "prices.listActive" }).statusCode).toBe(401);[m
+     expect(call({ method: "POST", procedure: "auth.login", input: { loginId: "review-tech", password: "review-only", source: "app" } }).payload.result.data.json).toMatchObject({ success: true, appRole: "technician", technicianId: 910001 });[m
+     const response = call({ method: "GET", procedure: "prices.listActive", token: REVIEW_TOKEN });[m
+     expect(response.statusCode).toBe(200);[m
+     expect(response.payload.result.data.json.find((item: any) => item.name === "유량밸브 15A / 부분수리").discPrice).toBe(58000);[m
+   });[m
+ [m
+   it("stores only a synthetic review report and marks SMS substitution", () => {[m
+     const input = { requestId: 810001, customerName: "검수용 합성 고객 A", phoneNumber: "010-0000-0001", amount: 220000, autoEstimateItems: JSON.stringify([{ name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 }]) };[m
+     expect(call({ method: "POST", procedure: "estimates.techRequest", input }).statusCode).toBe(401);[m
+     expect(call({ method: "POST", procedure: "estimates.techRequest", input, token: REVIEW_TOKEN }).payload.result.data.json).toMatchObject({ estimateNumber: "REVIEW-0001", smsSubstituted: true });[m
+     expect(call({ method: "GET", procedure: "estimates.reviewMyAssignedRequests", token: REVIEW_TOKEN }).payload.result.data.json).toMatchObject([{ id: 810001, technicianId: 910001 }]);[m
+     expect(call({ method: "GET", procedure: "estimates.listMyTechRequests", token: REVIEW_TOKEN }).payload.result.data.json).toMatchObject([{ customerPhone: "010-0000-0001", techRequestStatus: "pending", smsSubstituted: true }]);[m
+   });[m
+ [m
+   it("rejects another technician's synthetic request and never reveals the first technician's report", () => {[m
+     const firstInput = { requestId: 810001, customerName: "검수용 합성 고객 A", phoneNumber: "010-0000-0001", amount: 220000, autoEstimateItems: JSON.stringify([{ name: "와이파이형 제어기", qty: 1, unitPrice: 220000, subtotal: 220000 }]) };[m
+     expect(call({ method: "POST", procedure: "estimates.techRequest", input: firstInput, token: REVIEW_TOKEN }).statusCode).toBe(200);[m
+[31m-    expect(call({ method: "POST", procedure: "estimates.techRequest", input: firstInput, token: SECOND_REVIEW_TOKEN }).statusCode).toBe(400);[m
+[32m+[m[32m    expect(call({ method: "POST", procedure: "estimates.techRequest", input: firstInput, token: SECOND_REVIEW_TOKEN }).statusCode).toBe(403);[m
+     expect(call({ method: "GET", procedure: "estimates.listMyTechRequests", token: SECOND_REVIEW_TOKEN }).payload.result.data.json).toEqual([]);[m
+   });[m
+ [m
+   it("rejects fractional-won totals and line prices before storing a synthetic report", () => {[m
+     const fractional = { requestId: 810001, customerName: "검수용 합성 고객 A", phoneNumber: "010-0000-0001", amount: 32000.5, autoEstimateItems: JSON.stringify([{ name: "소수 단가", qty: 1, unitPrice: 32000.5, subtotal: 32000.5 }]) };[m
+     const result = call({ method: "POST", procedure: "estimates.techRequest", input: fractional, token: REVIEW_TOKEN });[m
+     expect(result.statusCode).toBe(400);[m
+     expect(result.payload.error.json.message).toContain("정수 원화");[m
+     expect(call({ method: "GET", procedure: "estimates.listMyTechRequests", token: REVIEW_TOKEN }).payload.result.data.json).toEqual([]);[m
+   });[m
+[32m+[m
+[32m+[m[32m  it("returns complete own synthetic work data and supports consent, departure and checklist lookups", () => {[m
+[32m+[m[32m    const schedule = call({ method: "GET", procedure: "repair.listMySchedule", token: REVIEW_TOKEN });[m
+[32m+[m[32m    expect(schedule.statusCode).toBe(200);[m
+[32m+[m[32m    expect(schedule.payload.result.data.json[0]).toMatchObject({[m
+[32m+[m[32m      id: 810001,[m
+[32m+[m[32m      apartmentName: "합성 검수 아파트",[m
+[32m+[m[32m      symptom: "방 일부 난방 점검",[m
+[32m+[m[32m      requestType: "난방점검",[m
+[32m+[m[32m    });[m
+[32m+[m[32m    expect(call({ method: "GET", procedure: "repair.getById", input: { id: 810001 }, token: REVIEW_TOKEN }).payload.result.data.json.id).toBe(810001);[m
+[32m+[m[32m    expect(call({ method: "GET", procedure: "workReport.getByRequest", input: { requestId: 810001 }, token: REVIEW_TOKEN }).payload.result.data.json).toBeNull();[m
+[32m+[m[32m    expect(call({ method: "GET", procedure: "location.getConsent", input: { technicianId: 910001 }, token: REVIEW_TOKEN }).payload.result.data.json.hasConsented).toBe(false);[m
+[32m+[m[32m    expect(call({ method: "POST", procedure: "location.saveConsent", input: { technicianId: 910001 }, token: REVIEW_TOKEN }).payload.result.data.json).toMatchObject({ success: true, hasConsented: true });[m
+[32m+[m[32m    expect(call({ method: "POST", procedure: "location.startTracking", input: { requestId: 810001 }, token: REVIEW_TOKEN }).payload.result.data.json).toMatchObject({ success: true, requestId: 810001, synthetic: true });[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("rejects a different synthetic technician's checklist and consent requests with standard tRPC error metadata", () => {[m
+[32m+[m[32m    const rejected = call({ method: "GET", procedure: "repair.getById", input: { id: 810001 }, token: SECOND_REVIEW_TOKEN, batch: true });[m
+[32m+[m[32m    expect(rejected.statusCode).toBe(403);[m
+[32m+[m[32m    expect(rejected.payload[0].error.json.data).toMatchObject({ code: "FORBIDDEN", httpStatus: 403, path: "repair.getById" });[m
+[32m+[m[32m    const anonymous = call({ method: "GET", procedure: "location.getConsent", input: { technicianId: 910001 }, batch: true });[m
+[32m+[m[32m    expect(anonymous.statusCode).toBe(401);[m
+[32m+[m[32m    expect(anonymous.payload[0].error.json.data).toMatchObject({ code: "UNAUTHORIZED", httpStatus: 401, path: "location.getConsent" });[m
+[32m+[m[32m  });[m
+ });[m
+[1mdiff --git a/tests/review-workflow-screen-contract.verify.mjs b/tests/review-workflow-screen-contract.verify.mjs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..53c12c3[m
+[1m--- /dev/null[m
+[1m+++ b/tests/review-workflow-screen-contract.verify.mjs[m
+[36m@@ -0,0 +1,22 @@[m
+[32m+[m[32mimport fs from "node:fs";[m
+[32m+[m[32mimport assert from "node:assert/strict";[m
+[32m+[m
+[32m+[m[32mconst root = new URL("..", import.meta.url).pathname;[m
+[32m+[m[32mconst schedule = fs.readFileSync(`${root}/app/(tabs)/tech-schedule.tsx`, "utf8");[m
+[32m+[m[32mconst works = fs.readFileSync(`${root}/app/(tabs)/tech-works.tsx`, "utf8");[m
+[32m+[m[32mconst report = fs.readFileSync(`${root}/app/work-report.tsx`, "utf8");[m
+[32m+[m[32mconst tracking = fs.readFileSync(`${root}/lib/location-tracking.ts`, "utf8");[m
+[32m+[m
+[32m+[m[32mconst checks = [[m
+[32m+[m[32m  ["동의 저장은 인증 tRPC mutation", /saveConsentMutation\.mutateAsync\(\{ technicianId: effectiveTechId \}\)/.test(schedule)],[m
+[32m+[m[32m  ["동의 저장 실패 시 출발 중단", /동의 저장 실패/.test(schedule) && /return;/.test(schedule.slice(schedule.indexOf("const savedConsent"), schedule.indexOf("대기 중인 방문 건 출발 처리")))],[m
+[32m+[m[32m  ["위치 전송은 review API helper", tracking.includes("getApiBaseUrl()}/api/location/update") && !/const API_BASE_URL\s*=/.test(tracking)],[m
+[32m+[m[32m  ["전체 목록 빈 아파트 검색 방어", /String\(w\.apartmentName \?\? ""\)\.includes\(search\)/.test(works)],[m
+[32m+[m[32m  ["점검표 빈 고객·전화 방어", /request\.customerName \?\? "고객 정보 미확인"/.test(report) && /request\.phoneNumber \?\? ""/.test(report)],[m
+[32m+[m[32m];[m
+[32m+[m
+[32m+[m[32mfor (const [label, passed] of checks) {[m
+[32m+[m[32m  assert.equal(passed, true, label);[m
+[32m+[m[32m  console.log(`PASS: ${label}`);[m
+[32m+[m[32m}[m
+[32m+[m[32mconsole.log(`SUMMARY: ${checks.length} PASS`);[m

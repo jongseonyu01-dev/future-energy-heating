@@ -1,0 +1,48 @@
+{
+  "id": "7a5289b0-9f21-4f64-ae7b-5f05a7f3bb0b",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/f6fpzVhZfGtt_h3_ZCwfwI4DgMirnArmqNlDNi3FJ5Q.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/f6fpzVhZfGtt_h3_ZCwfwI4DgMirnArmqNlDNi3FJ5Q.apk"
+  },
+  "fingerprint": {
+    "id": "01a09a48-3773-79e6-b0d5-17f1dce46e7c",
+    "hash": "9b3804f2efa7131920f5bf7552b0867fa8b76a16"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/7a5289b0-9f21-4f64-ae7b-5f05a7f3bb0b/2026-09-13T10%3A20%3A21Z-72e222f7-9b16-480d-9772-fa8b4acd48aa.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T104101Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=0ad7baf9e36b17f93d6f64435b599f7d7e8652c6bc853e51ffcd7085ebfbcd0e9d808246d61f233d9ffb681ad6a7f3398b14b272a42f53a4fc54c465a44740fc7bc1c6a3454c17c7d4e8ffd491a2a62f67fcf706c1945ab7bb0a2db1856977e865d304b02280f4c8314abe28ae102a9d4c072d0b0aa55a2159d769bd1f8f0d4a54388a854308b613c8aa1ec1af7e86ad57a58518b32ff8c42f8e67e29cd1f7d53c7a1564521d9c8d00b156f5c0dba23ccfcbc981a7ee13cc6d6f497623dd1795e1c2796c29a7585c770cb816522fdd6a0db2d0b89812617d3536ee06ad93b1a41d2efa46f234e9ab0c6ebcc8cc6ad12654f6e47c013ded4cf3206cf246b5349d"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.36",
+  "appBuildVersion": "36",
+  "gitCommitHash": "61151468b45aff57c1d7d6059ba742aa012a23b1",
+  "gitCommitMessage": "Checkpoint: Codex가 직접 검수한 7bfe7418 자동견적 source의 기능 코드는 유지하고, 기존 설치본 위 업데이트 가능한 review APK를 위해 app.config.ts version 1.1.36, Android versionCode 36, iOS buildNumber 36만 조정한 build 준비 checkpoint. 기존 package com.futureenergy.heatingcare, remote Android signing key, review API profile을 유지한다. 운영 게시·홈페이지 견적·공용 단가·고객 문자·TestFlight·실기기 검증은 미실시/보류.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-13T10:20:19.148Z",
+  "updatedAt": "2026-09-13T10:37:32.840Z",
+  "completedAt": "2026-09-13T10:37:32.615Z",
+  "expirationDate": "2026-09-27T10:20:19.179Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 2069,
+    "buildQueueTime": 4956,
+    "buildDuration": 1026442
+  }
+}

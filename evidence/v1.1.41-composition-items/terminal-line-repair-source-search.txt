@@ -1,0 +1,8 @@
+app/tech-estimate.tsx:614:                <TouchableOpacity style={s.supplyButton} onPress={() => { advanceWorkGeneration(); setLines(addSupplyLineRepair(lines, priceMode)); }}><Text style={s.supplyButtonText}>+ 공급측 라인보수 추가</Text></TouchableOpacity>
+lib/tech-estimate-engine.ts:204:/** 현재 홈페이지의 공급측 라인보수 단가 분기: 라인보수 동시 70,000원, 단독 120,000원. */
+lib/tech-estimate-engine.ts:209:  const hasLineRepair = lines.some((line) => line.name.startsWith("라인보수 20A") || line.name.startsWith("라인보수 25A"));
+lib/tech-estimate-engine.ts:211:  const name = hasLineRepair ? "공급측 라인보수 (라인보수 동시)" : "공급측 라인보수 (공급측만 단독)";
+lib/tech-estimate-engine.ts:212:  const next = lines.filter((line) => !line.name.startsWith("공급측 라인보수"));
+tests/tech-estimate-engine.test.ts:195:    expect(alone[0]).toMatchObject({ name: "공급측 라인보수 (공급측만 단독)", unitPrice: 120000 });
+tests/tech-estimate-engine.test.ts:198:        line.name === "제어기 교체" ? { ...line, name: "라인보수 20A" } : line,
+tests/tech-estimate-engine.test.ts:202:    expect(withLine[1]).toMatchObject({ name: "공급측 라인보수 (라인보수 동시)", unitPrice: 70000 });

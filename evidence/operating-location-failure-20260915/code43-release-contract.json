@@ -1,0 +1,49 @@
+[1;37m{[m
+  [1;34m"assets"[m[1;37m:[m [1;37m[[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/564875217"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/vnd.android.package-archive"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T04:24:34Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:71184600b1a9290a8ec6bed195d0333e7fd3ed0b09e4bad671d4daf96f4d2ac5"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 7[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hq0_R"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"future-energy-heating.apk"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 94077422[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T04:24:42Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.43-43/future-energy-heating.apk"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/564874351"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/vnd.android.package-archive"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T04:24:00Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:71184600b1a9290a8ec6bed195d0333e7fd3ed0b09e4bad671d4daf96f4d2ac5"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hq0xv"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m"future-energy-heating.apk"[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"futureenergytech-v1.1.43-code43.apk"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 94077422[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T04:24:08Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.43-43/futureenergytech-v1.1.43-code43.apk"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/564874353"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"text/plain; charset=utf-8"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T04:24:00Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:6c89582685b0d3987f04d33100831fa78c117e94a473f650b9d12f9c74d22fb6"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hq0xx"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"SHA256SUMS.txt"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 130[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T04:24:00Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.43-43/SHA256SUMS.txt"[m
+    [1;37m}[m
+  [1;37m][m[1;37m,[m
+  [1;34m"body"[m[1;37m:[m [32m"{\n  \"schemaVersion\": 1,\n  \"appId\": \"driver\",\n  \"versionName\": \"1.1.43\",\n  \"versionCode\": 43,\n  \"minSupportedVersionCode\": 1,\n  \"sha256\": \"71184600b1a9290a8ec6bed195d0333e7fd3ed0b09e4bad671d4daf96f4d2ac5\",\n  \"fileSize\": 94077422,\n  \"sourceSha\": \"0f0b6763d01142210e9e97cd06eae1464fa95ae5\",\n  \"releaseNotes\": \"운영 위치 전송 Bearer 인증 보완. 기존 앱을 삭제하지 않고 업데이트 설치하십시오.\",\n  \"publishedAt\": \"2026-09-15T03:39:31.000Z\"\n}\n"[m[1;37m,[m
+  [1;34m"name"[m[1;37m:[m [32m"기사용 Android v1.1.43 (code 43)"[m[1;37m,[m
+  [1;34m"tagName"[m[1;37m:[m [32m"android-v1.1.43-43"[m
+[1;37m}[m

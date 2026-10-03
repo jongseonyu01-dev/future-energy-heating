@@ -1,0 +1,48 @@
+{
+  "id": "57fa4b32-42a8-4d1f-80e3-438f402faaa3",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/hSWj8WsWkhly4v728L8kCzBaVdbBrm4nTTkTibyuAmo.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/hSWj8WsWkhly4v728L8kCzBaVdbBrm4nTTkTibyuAmo.apk"
+  },
+  "fingerprint": {
+    "id": "01a09f94-273c-7e9c-8cea-ddc7c25fc013",
+    "hash": "7ec6dfe4c525cef4fa4ff3fc3070e71ec510fdb2"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/57fa4b32-42a8-4d1f-80e3-438f402faaa3/2026-09-14T11%3A01%3A28Z-a79f2619-0f1c-4320-b018-154f945b03a7.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T111924Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5e732427d84c6dca4fb4753b1a1fa071d630f3de1ed4f55b4532596389ea932868aa31e95d30f43651138ee6a0f159eb17db78a1c2a14f225131b211e4e2f9d041e49b8c028fbc6abefc5038c7fac05b5698fb49504cc2e3c5ddccfaf22ddbb3a6fbd92baccc5e18354f1da9d2ae681bfb73ee4e136ec92bce473060568c3335afc6e020a58d9618fdbb465b0bfd430fcfe18f70e23ab1599888f071489616eabcd5aaeae1c67e9ad185c3895b0b64e4dc0a21e6491076b5ae642a36d5caaf9c98fb9ac709c9edc68559792b48a09c9af7330f5daa041aaf12d42b8b31303e8a11adc9c9ba9657b302c96f630ea1584df88d2c846f4295d9ddd53277c341887b"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.41",
+  "appBuildVersion": "41",
+  "gitCommitHash": "d1f59b3c3d79bd3f62989935c51e783e009541a3",
+  "gitCommitMessage": "Checkpoint: 기사앱 자동견적 code 41 review 후보: 운영 홈페이지와 공용 price_items는 read-only 대조만 수행. 기존 버튼/선택 흐름을 재사용해 분배기·각방 구성에서 제어기·조절기 V타입·와이파이형 제어기·단자함을 독립 선택하고, 단독보수에 단자함·라인보수 20A·라인보수 25A를 추가함. 공급측만 단독보수 120,000원 승인 분기는 유지. 합성 review API는 단자함(38,000/30,000), 라인보수20A(166,000/143,000), 라인보수25A(203,000/194,000) snapshot만 제공하며 운영 DB/SMS 미연결. 새 단일 preview URL만 review profile에 주입하고 이전 exception은 재보호함. focused 회귀·server bundle·Expo config·preview HTTP 통과. Android 실제 기기 및 사진 첨부 검증은 미실시, 운영 게시·고객 문자·TestFlight 제출 보류.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-14T11:01:21.802Z",
+  "updatedAt": "2026-09-14T11:15:53.803Z",
+  "completedAt": "2026-09-14T11:15:53.618Z",
+  "expirationDate": "2026-09-28T11:01:21.844Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 4448,
+    "buildQueueTime": 23927,
+    "buildDuration": 843441
+  }
+}

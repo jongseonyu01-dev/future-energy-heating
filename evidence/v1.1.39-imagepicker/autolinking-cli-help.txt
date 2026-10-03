@@ -1,0 +1,16 @@
+Usage: autolinking [options] [command]
+
+CLI command that searches for native modules to autolink them.
+
+Options:
+  -V, --version                                         output the version number
+  -h, --help                                            display help for command
+
+Commands:
+  verify [options]
+  search [options] [searchPaths...]
+  resolve [options] [searchPaths...]
+  generate-package-list [options] [searchPaths...]
+  generate-modules-provider [options] [searchPaths...]
+  react-native-config [options] [searchPaths...]
+  help [command]                                        display help for command

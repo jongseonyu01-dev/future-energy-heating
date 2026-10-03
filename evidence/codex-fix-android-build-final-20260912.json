@@ -1,0 +1,146 @@
+[
+  {
+    "id": "99092ddf-15d7-4cd7-bb95-35d9ed9a20d8",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/Wm-Dp0th0A3k7CRVyOB8Rh43mlm68nDu7w2h9l3vQDg.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/Wm-Dp0th0A3k7CRVyOB8Rh43mlm68nDu7w2h9l3vQDg.apk"
+    },
+    "fingerprint": {
+      "id": "01a097eb-7181-70db-8a80-c0a57d2a1346",
+      "hash": "051209c5a98543ab6601b0ab586f38d5763fac77"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/99092ddf-15d7-4cd7-bb95-35d9ed9a20d8/2026-09-12T23%3A19%3A46Z-17d4ee38-91dc-4b97-9d61-d1440d0ae6d1.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T233132Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=65e756100bddcc7c9b391095a3add460a9dca2bc2cd9cea557237134d01506727e1cb306e8e84b966fc106d1525872816850a22d6b2ad62680dd71ccd2013d89a19410515e5f4cc701f1e4ae2ea5737ca6a8106b174beb66696b1d58b58c0cb8b72031e2b0d341d2dab9d0b15886994ee191a099cbd7a5d51199f279e824c57439d69747511616e2416524bdd44c97a88ccd8db1492bf7712a9e9098c78300dad272569f92b45cb1547285b1f9c23d4a004fe805c4b8ad4532ab6d4d2930463a4352d5d1559912e9165948a7c422ca7f996c6ff0b47b87e040622a65fe6c32981098502bf9498f4651bf471b358ce4395a689c5e9a3e3f4868199914400eb265"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.24",
+    "appBuildVersion": "24",
+    "gitCommitHash": "6a4e162398686da073737c2b94ffc9630af7979c",
+    "gitCommitMessage": "Checkpoint: Codex 재검수 보완 후보: 29,000원 유량밸브 고정값을 활성 단체가 fail-closed로 전환하고 스트레이너 36,000원 정책을 보존함. 와이파이/V타입 제어기 선택이 각방 디지털·아날로그 조절기 수량을 추가하지 않도록 보정함. 검수 기사·배정 접수 고정을 제거하여 인증 actor별 합성 접수·초안·보고를 분리함. 제출 상태를 schema 허용 pending으로 통일하고 SQLite 격리 저장소에서 저장 후 본인 조회를 재현함. approveTechRequest가 익명·기사·다른 지사를 알림 전 차단하며 본사·담당 지사 정상 경로를 유지함. 실제 운영 다운로드 페이지는 Android /download/driver/latest 링크를 보존한 iPhone 준비 문구만 별도 production commit으로 반영함. review Android/iOS profile은 새 인증 preview URL과 version 1.1.24 / Android code 24 / iOS build 24를 사용하며 TestFlight 제출·운영 게시·실기기 검증은 보류함.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T23:19:44.738Z",
+    "updatedAt": "2026-09-12T23:34:42.207Z",
+    "completedAt": "2026-09-12T23:34:42.042Z",
+    "expirationDate": "2026-09-26T23:19:44.762Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 1446,
+      "buildQueueTime": 4458,
+      "buildDuration": 891400
+    }
+  },
+  {
+    "id": "2ef29c96-193e-4413-a584-77cdf0ad60db",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk"
+    },
+    "fingerprint": {
+      "id": "01a096b6-345c-7b5f-9e25-a2dcc00c158e",
+      "hash": "d1fad232e88cc37c0252ef0e5f496340c7fe03cf"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/2ef29c96-193e-4413-a584-77cdf0ad60db/2026-09-12T17%3A42%3A03Z-ee9e72ec-4f06-4453-817f-5f548b1aced4.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T233132Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=0c4fac6b62350389c47f52ed7f5782eb79c02a53167c5dc2d11c0b73e97958155f22653d05a9089a677da67000bc1ddcc4aa956c28ef78398d1d46e2b49d6cb257d06446e820a35906830516b04eadfa15dd4c51b05f14659594320d7e629346f53c8b84988b875fa4085072d975e3611841bca7325da1a1965d9f91a7bb86a4f3b69dbb291438e00c17a1f737de27dd6b057f8921d7cd47212c560f8cdefbe4b372bbd5d2b70189bcb43f75626307fd53cc15b1aa212c87f355c975f16f2c1dfb7a2bc4eca9eaaec6855e253a77a7410066197dd81e7c365f06ffa5650e8053ae3b5897dc29a99488b278784fa3ff62478fb14446aff77756df280add4ed646"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.23",
+    "appBuildVersion": "23",
+    "gitCommitHash": "e8ebcf13d39a750c6640cdb3daadc97189838508",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 검수 후보: 9941dbf8 기준 운영 홈페이지의 조절기 수량·종류 전환과 유량밸브 가격 정합화, estimates.customerPhone 실제 mapping 및 초안 수량 fail-closed 보완, 합성 기사·접수·메모리 보고·SMS 대체만 사용하는 인증 preview API 추가. 기존 preview 예외는 재보호했고 새 Vercel preview URL 한 건만 예외 적용. 미로그인 401, 본인 접수 200, 타 기사 접근 400/0건 실제 HTTP 확인. app v1.1.23 / Android versionCode 23 / iOS buildNumber 23, review profile은 새 preview URL만 사용. 운영 홈페이지·공용 단가 DB·운영 게시·TestFlight 제출 미변경.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T17:41:58.443Z",
+    "updatedAt": "2026-09-12T17:56:47.953Z",
+    "completedAt": "2026-09-12T17:56:47.784Z",
+    "expirationDate": "2026-09-26T17:41:58.481Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2769,
+      "buildQueueTime": 6641,
+      "buildDuration": 879931
+    }
+  },
+  {
+    "id": "6c484635-585b-4dc2-9e11-f4cd8ae59270",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/CEqWYYHHPLeUYPuLxxvrZtb3mG6oaMqhDstHXkQ2ftw.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/CEqWYYHHPLeUYPuLxxvrZtb3mG6oaMqhDstHXkQ2ftw.apk"
+    },
+    "fingerprint": {
+      "id": "019fcefe-4ebd-7f0e-a519-10494d9f6342",
+      "hash": "7ff5255bc00b18412d7641e75467a4702c87691c"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/6c484635-585b-4dc2-9e11-f4cd8ae59270/2026-09-12T12%3A22%3A31Z-0f93a3c9-dea4-4251-8761-a868158c0441.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T233517Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=188fed2cb644ebd654384f058c6ef59a7953188d8517cd220cd4e617f033a8b46de38985537048f4491c3de20e6eb7d7a09f1ebe5b443c8cd8addacf2674b041b0b17e9c1d5e4846e76e50d9ffa210e12ddc9e15a34e31be65f955fd9e233957e44895238ff799c26519acca67e2f42fc14968529dcb90d53b5e8e406dd4bf600a382f595a9d0f1db1c3a6e968787eb7c8b6d724bddc4c14cc95238d033582e70c0d35e11007e5c40eb9a6e6a7b5efc98970034dcd7a2b36c0b94cc122c74edad31ed1bcea9938881238ea4b8f613c7fd19631cc2f9980bf86f8f52b8aada3b3e87a149a737f2005e4cc246c53d2d9deac1c4fbd2df8bdf6aa34bcfea520a991"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "preview",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.8",
+    "appBuildVersion": "19",
+    "gitCommitHash": "9941dbf8e7937aeec1759435598cd95b2b1702b5",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 Codex findings 보완 후보\n- 기준: d17debf2 보존, 운영 게시/홈페이지 배포/공용 단가 DB 변경 없음\n- 견적 엔진: 분배기 전용 유량밸브 29,000원 고정가, 구수 실패/삭제 상태 동기화, 디지털·아날로그·파라핀·모터 자동수량, Wi-Fi/V타입 독립 선택\n- 초안: 기사·접수 scoped key, requestId 일치 복원, 저장/보고 전 수량·단가·소계 fail-closed\n- 서버: requestId 필수, 본인 배정·고객 일치, malformed JSON/0원/총액 불일치 저장 전 차단, 본인 보고 조회 mapping\n- 검증: 엔진 11 PASS, 권한 계약 2 PASS, 서버 fail-closed 8 PASS, homepage boundary PASS, server build 및 Android/iOS Expo export PASS\n- 실제 APK/IPA 및 iPhone/Android 실기기 시험은 미실시",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T12:22:27.673Z",
+    "updatedAt": "2026-09-12T12:36:45.827Z",
+    "completedAt": "2026-09-12T12:36:45.633Z",
+    "expirationDate": "2026-09-26T12:22:27.697Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3541,
+      "buildQueueTime": 4725,
+      "buildDuration": 849694
+    }
+  }
+]

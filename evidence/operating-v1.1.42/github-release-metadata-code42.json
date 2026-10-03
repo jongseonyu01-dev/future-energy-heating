@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "appId": "driver",
+  "versionName": "1.1.42",
+  "versionCode": 42,
+  "minSupportedVersionCode": 28,
+  "fileSize": 94025225,
+  "sha256": "5cb1a2cf1274f450d923977a46ec0c7bbd9ba264b176e00f05731e331670b086",
+  "sourceSha": "7c0ee02de77e5d2150ce730ab75f634c96744710",
+  "releaseNotes": "기사 자동견적 구성·수량 입력 가독성·현장 사진 모듈 안정성 보완",
+  "publishedAt": "2026-09-14T14:03:22Z"
+}

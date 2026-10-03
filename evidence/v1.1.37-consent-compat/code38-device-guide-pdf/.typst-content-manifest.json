@@ -1,0 +1,11 @@
+{
+  "task_kind": "new-document",
+  "output": "pdf",
+  "signals": [],
+  "hard_constraints": ["Two-page Korean real-device test guide", "Keep each logcat command entirely within a code block", "Require synthetic request 810001 in the all-work list"],
+  "content_features": {
+    "code_blocks": 3,
+    "defined_terms": 2,
+    "portrait_images": 0
+  }
+}

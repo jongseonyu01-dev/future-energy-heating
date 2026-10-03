@@ -1,0 +1,49 @@
+[1;37m{[m
+  [1;34m"assets"[m[1;37m:[m [1;37m[[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/565018724"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/vnd.android.package-archive"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T05:58:44Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:480f821c6086c7756a4f4e759487b0f138d18fdae17c73269459f9e740e4a083"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hrYBk"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"future-energy-heating.apk"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 94777838[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T05:58:53Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.44-44/future-energy-heating.apk"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/565018725"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/json"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T05:58:44Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:b40cfaad22e9031e81a2695f6515db807bc68447da1f8b7196a68f9e8dc7ab2b"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hrYBl"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"release-metadata.json"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 492[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T05:58:44Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.44-44/release-metadata.json"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/565018726"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"text/plain; charset=utf-8"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-15T05:58:44Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:79db659633a9b7278d45075ca61cc9ce48b4a91b07d5fe4c24bfa07ace1a10de"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hrYBm"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"SHA256SUMS.txt"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 92[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-15T05:58:44Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.44-44/SHA256SUMS.txt"[m
+    [1;37m}[m
+  [1;37m][m[1;37m,[m
+  [1;34m"body"[m[1;37m:[m [32m"{\n  \"schemaVersion\": 1,\n  \"appId\": \"driver\",\n  \"versionName\": \"1.1.44\",\n  \"versionCode\": 44,\n  \"minSupportedVersionCode\": 1,\n  \"sha256\": \"480f821c6086c7756a4f4e759487b0f138d18fdae17c73269459f9e740e4a083\",\n  \"fileSize\": 94777838,\n  \"sourceSha\": \"5b2486119f3c076667cac1fc68ad96df0100f998\",\n  \"releaseNotes\": \"APK 16KB 정렬 보완 및 운영 위치 전송 Bearer 인증 보완. 기존 앱을 삭제하지 않고 업데이트 설치하십시오.\",\n  \"publishedAt\": \"2026-09-15T05:00:00.000Z\"\n}\n"[m[1;37m,[m
+  [1;34m"name"[m[1;37m:[m [32m"기사용 Android v1.1.44 (code 44)"[m[1;37m,[m
+  [1;34m"tagName"[m[1;37m:[m [32m"android-v1.1.44-44"[m
+[1;37m}[m

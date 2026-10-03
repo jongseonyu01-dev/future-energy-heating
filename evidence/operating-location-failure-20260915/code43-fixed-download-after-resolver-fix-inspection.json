@@ -1,0 +1,27 @@
+{
+  "file": "downloaded-futureenergytech-v1.1.43-code43-final.apk",
+  "sha256": "71184600b1a9290a8ec6bed195d0333e7fd3ed0b09e4bad671d4daf96f4d2ac5",
+  "package": "com.futureenergy.heatingcare",
+  "versionName": "1.1.43",
+  "versionCode": "43",
+  "signing": {
+    "v1": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    },
+    "v2": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    },
+    "v3": {
+      "present": true,
+      "certificateSha256": [
+        "7556ed5104e3419b6ce3e4e54f944ca615d37802e5ccf21ba8581779f2f62788"
+      ]
+    }
+  }
+}

@@ -1,0 +1,400 @@
+{
+  extraDependencies: [],
+  coreFeatures: [],
+  modules: [
+    {
+      packageName: [32m'expo'[39m,
+      projects: [
+        {
+          name: [32m'expo'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo/android'[39m,
+          modules: [ [32m'expo.modules.fetch.ExpoFetchModule'[39m ]
+        }
+      ],
+      packageVersion: [32m'54.0.29'[39m
+    },
+    {
+      packageName: [32m'expo-application'[39m,
+      projects: [
+        {
+          name: [32m'expo-application'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-application/android'[39m,
+          modules: [ [32m'expo.modules.application.ApplicationModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.application'[39m,
+            version: [32m'7.0.8'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'7.0.8'[39m
+    },
+    {
+      packageName: [32m'expo-asset'[39m,
+      projects: [
+        {
+          name: [32m'expo-asset'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-asset/android'[39m,
+          modules: [ [32m'expo.modules.asset.AssetModule'[39m ],
+          publication: {
+            groupId: [32m'expo.modules.asset'[39m,
+            artifactId: [32m'expo.modules.asset'[39m,
+            version: [32m'12.0.11'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'12.0.11'[39m
+    },
+    {
+      packageName: [32m'expo-audio'[39m,
+      projects: [
+        {
+          name: [32m'expo-audio'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-audio/android'[39m,
+          modules: [ [32m'expo.modules.audio.AudioModule'[39m ],
+          publication: {
+            groupId: [32m'expo.modules.audio'[39m,
+            artifactId: [32m'expo.modules.audio'[39m,
+            version: [32m'1.1.0'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'1.1.0'[39m
+    },
+    {
+      packageName: [32m'expo-constants'[39m,
+      projects: [
+        {
+          name: [32m'expo-constants'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-constants/android'[39m,
+          modules: [ [32m'expo.modules.constants.ConstantsModule'[39m ]
+        }
+      ],
+      packageVersion: [32m'18.0.12'[39m
+    },
+    {
+      packageName: [32m'expo-document-picker'[39m,
+      projects: [
+        {
+          name: [32m'expo-document-picker'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-document-picker/android'[39m,
+          modules: [ [32m'expo.modules.documentpicker.DocumentPickerModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.documentpicker'[39m,
+            version: [32m'14.0.8'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'14.0.8'[39m
+    },
+    {
+      packageName: [32m'expo-file-system'[39m,
+      projects: [
+        {
+          name: [32m'expo-file-system'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-file-system/android'[39m,
+          modules: [
+            [32m'expo.modules.filesystem.FileSystemModule'[39m,
+            [32m'expo.modules.filesystem.legacy.FileSystemLegacyModule'[39m
+          ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.filesystem'[39m,
+            version: [32m'19.0.21'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'19.0.21'[39m
+    },
+    {
+      packageName: [32m'expo-font'[39m,
+      projects: [
+        {
+          name: [32m'expo-font'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-font/android'[39m,
+          modules: [
+            [32m'expo.modules.font.FontLoaderModule'[39m,
+            [32m'expo.modules.font.FontUtilsModule'[39m
+          ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.font'[39m,
+            version: [32m'14.0.10'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'14.0.10'[39m
+    },
+    {
+      packageName: [32m'expo-haptics'[39m,
+      projects: [
+        {
+          name: [32m'expo-haptics'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-haptics/android'[39m,
+          modules: [ [32m'expo.modules.haptics.HapticsModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.haptics'[39m,
+            version: [32m'15.0.8'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'15.0.8'[39m
+    },
+    {
+      packageName: [32m'expo-image'[39m,
+      projects: [
+        {
+          name: [32m'expo-image'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-image/android'[39m,
+          modules: [ [32m'expo.modules.image.ExpoImageModule'[39m ],
+          publication: {
+            groupId: [32m'BareExpo'[39m,
+            artifactId: [32m'expo.modules.image'[39m,
+            version: [32m'3.0.11'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'3.0.11'[39m
+    },
+    {
+      packageName: [32m'expo-image-loader'[39m,
+      projects: [
+        {
+          name: [32m'expo-image-loader'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-image-loader/android'[39m,
+          modules: []
+        }
+      ],
+      packageVersion: [32m'5.0.0'[39m
+    },
+    {
+      packageName: [32m'expo-image-picker'[39m,
+      projects: [
+        {
+          name: [32m'expo-image-picker'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-image-picker/android'[39m,
+          modules: []
+        }
+      ],
+      packageVersion: [32m'16.0.6'[39m
+    },
+    {
+      packageName: [32m'expo-keep-awake'[39m,
+      projects: [
+        {
+          name: [32m'expo-keep-awake'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-keep-awake/android'[39m,
+          modules: [ [32m'expo.modules.keepawake.KeepAwakeModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.keepawake'[39m,
+            version: [32m'15.0.8'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'15.0.8'[39m
+    },
+    {
+      packageName: [32m'expo-linking'[39m,
+      projects: [
+        {
+          name: [32m'expo-linking'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-linking/android'[39m,
+          modules: [ [32m'expo.modules.linking.ExpoLinkingModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.linking'[39m,
+            version: [32m'8.0.10'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'8.0.10'[39m
+    },
+    {
+      packageName: [32m'expo-location'[39m,
+      projects: [
+        {
+          name: [32m'expo-location'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-location/android'[39m,
+          modules: [ [32m'expo.modules.location.LocationModule'[39m ],
+          aarProjects: [
+            {
+              name: [32m'expo-location$io.nlopez.smartlocation-jetified-aar'[39m,
+              aarFilePath: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-location/android/libs/io.nlopez.smartlocation-3.3.3-jetified.aar'[39m,
+              projectDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-location/android/build/expo-location$io.nlopez.smartlocation-jetified-aar'[39m
+            }
+          ]
+        }
+      ],
+      packageVersion: [32m'18.0.10'[39m
+    },
+    {
+      packageName: [32m'expo-modules-core'[39m,
+      projects: [
+        {
+          name: [32m'expo-modules-core'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-modules-core/android'[39m,
+          modules: []
+        }
+      ],
+      plugins: [
+        {
+          id: [32m'expo-module-gradle-plugin'[39m,
+          group: [32m'expo.modules'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-modules-core/expo-module-gradle-plugin'[39m,
+          applyToRootProject: [33mfalse[39m
+        }
+      ],
+      packageVersion: [32m'3.0.29'[39m
+    },
+    {
+      packageName: [32m'expo-notifications'[39m,
+      projects: [
+        {
+          name: [32m'expo-notifications'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-notifications/android'[39m,
+          modules: [
+            [32m'expo.modules.notifications.badge.BadgeModule'[39m,
+            [32m'expo.modules.notifications.notifications.background.ExpoBackgroundNotificationTasksModule'[39m,
+            [32m'expo.modules.notifications.notifications.categories.ExpoNotificationCategoriesModule'[39m,
+            [32m'expo.modules.notifications.notifications.channels.NotificationChannelGroupManagerModule'[39m,
+            [32m'expo.modules.notifications.notifications.channels.NotificationChannelManagerModule'[39m,
+            [32m'expo.modules.notifications.notifications.emitting.NotificationsEmitter'[39m,
+            [32m'expo.modules.notifications.notifications.handling.NotificationsHandler'[39m,
+            [32m'expo.modules.notifications.permissions.NotificationPermissionsModule'[39m,
+            [32m'expo.modules.notifications.notifications.presentation.ExpoNotificationPresentationModule'[39m,
+            [32m'expo.modules.notifications.notifications.scheduling.NotificationScheduler'[39m,
+            [32m'expo.modules.notifications.serverregistration.ServerRegistrationModule'[39m,
+            [32m'expo.modules.notifications.tokens.PushTokenModule'[39m
+          ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.notifications'[39m,
+            version: [32m'0.32.15'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'0.32.15'[39m
+    },
+    {
+      packageName: [32m'expo-secure-store'[39m,
+      projects: [
+        {
+          name: [32m'expo-secure-store'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-secure-store/android'[39m,
+          modules: [ [32m'expo.modules.securestore.SecureStoreModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.securestore'[39m,
+            version: [32m'15.0.8'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'15.0.8'[39m
+    },
+    {
+      packageName: [32m'expo-splash-screen'[39m,
+      projects: [
+        {
+          name: [32m'expo-splash-screen'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-splash-screen/android'[39m,
+          modules: [ [32m'expo.modules.splashscreen.SplashScreenModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.splashscreen'[39m,
+            version: [32m'31.0.12'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'31.0.12'[39m
+    },
+    {
+      packageName: [32m'expo-system-ui'[39m,
+      projects: [
+        {
+          name: [32m'expo-system-ui'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-system-ui/android'[39m,
+          modules: [ [32m'expo.modules.systemui.SystemUIModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.systemui'[39m,
+            version: [32m'6.0.9'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'6.0.9'[39m
+    },
+    {
+      packageName: [32m'expo-task-manager'[39m,
+      projects: [
+        {
+          name: [32m'expo-task-manager'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-task-manager/android'[39m,
+          modules: [ [32m'expo.modules.taskManager.TaskManagerModule'[39m ]
+        }
+      ],
+      packageVersion: [32m'13.0.0'[39m
+    },
+    {
+      packageName: [32m'expo-video'[39m,
+      projects: [
+        {
+          name: [32m'expo-video'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-video/android'[39m,
+          modules: [ [32m'expo.modules.video.VideoModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.video'[39m,
+            version: [32m'3.0.15'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'3.0.15'[39m
+    },
+    {
+      packageName: [32m'expo-web-browser'[39m,
+      projects: [
+        {
+          name: [32m'expo-web-browser'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/expo-web-browser/android'[39m,
+          modules: [ [32m'expo.modules.webbrowser.WebBrowserModule'[39m ],
+          publication: {
+            groupId: [32m'host.exp.exponent'[39m,
+            artifactId: [32m'expo.modules.webbrowser'[39m,
+            version: [32m'15.0.10'[39m,
+            repository: [32m'local-maven-repo'[39m
+          }
+        }
+      ],
+      packageVersion: [32m'15.0.10'[39m
+    },
+    {
+      packageName: [32m'unimodules-app-loader'[39m,
+      projects: [
+        {
+          name: [32m'unimodules-app-loader'[39m,
+          sourceDir: [32m'/home/ubuntu/future-energy-heating/node_modules/unimodules-app-loader/android'[39m,
+          modules: []
+        }
+      ],
+      packageVersion: [32m'5.0.1'[39m
+    }
+  ]
+}

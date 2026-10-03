@@ -1,0 +1,46 @@
+[1mdiff --git a/public/web/download.html b/public/web/download.html[m
+[1mindex 258495a..3311e59 100644[m
+[1m--- a/public/web/download.html[m
+[1m+++ b/public/web/download.html[m
+[36m@@ -101,6 +101,7 @@[m
+       <a href="#" id="androidBtn" class="download-btn android-btn" onclick="downloadApk(event)">[m
+         📥 APK 다운로드[m
+       </a>[m
+[32m+[m[32m      <p style="margin-top:12px;font-size:13px;line-height:1.55;color:#166534;font-weight:600;">기존 기사앱을 삭제하지 않고, 아래 APK를 설치하여 업데이트하세요.</p>[m
+       <div id="playStoreLink" style="display:none;margin-top:10px;font-size:12px;color:#6b7280">[m
+         <a href="#" style="color:#34a853;font-weight:600">설치 링크 확인 후 제공</a>[m
+       </div>[m
+[1mdiff --git a/public/web/index.html b/public/web/index.html[m
+[1mindex 9dfd71c..547c4de 100644[m
+[1m--- a/public/web/index.html[m
+[1m+++ b/public/web/index.html[m
+[36m@@ -292,7 +292,7 @@[m
+       <a href="/web/heating-diagnosis.html">난방불량 원인 점검</a>[m
+       <a href="/web/faq.html">FAQ</a>[m
+       <a href="/web/contact.html">고객센터</a>[m
+[31m-      <a href="/app/driver-download" class="nav-cta">기사앱 다운로드</a>[m
+[32m+[m[32m      <a href="/app/driver-download" class="nav-cta">기사용 앱 다운로드</a>[m
+     </nav>[m
+     <button class="hamburger" onclick="toggleMenu()" aria-label="메뉴">[m
+       <span></span><span></span><span></span>[m
+[36m@@ -306,7 +306,7 @@[m
+     <a href="/web/heating-diagnosis.html">🌡️ 난방불량 원인 점검</a>[m
+     <a href="/web/faq.html">❓ 자주 묻는 질문</a>[m
+     <a href="/web/contact.html">📞 고객센터</a>[m
+[31m-    <a href="/app/driver-download" class="mobile-login">📱 기사앱 다운로드</a>[m
+[32m+[m[32m    <a href="/app/driver-download" class="mobile-login">📱 기사용 앱 다운로드</a>[m
+   </div>[m
+ </header>[m
+ [m
+[1mdiff --git a/server/web-routes.ts b/server/web-routes.ts[m
+[1mindex a9ee6a4..7dc7a72 100644[m
+[1m--- a/server/web-routes.ts[m
+[1m+++ b/server/web-routes.ts[m
+[36m@@ -2421,6 +2421,7 @@[m [mexport function registerWebRoutes(app: Express) {[m
+       <div class="version-row"><span class="version-label">파일 크기</span><span class="version-value">${fileSize}</span></div>[m
+       <div class="version-row"><span class="version-label">배포일</span><span class="version-value">${publishedAt}</span></div>[m
+     </div>[m
+[32m+[m[32m    ${!isIOS ? `<div class="android-guide"><strong>🔄 Android 업데이트 안내</strong><br>기존 기사앱을 삭제하지 않고, 아래 APK를 설치하여 업데이트하세요.</div>` : ""}[m
+     ${isIOS ? `[m
+     <!-- iOS 기기 감지 -->[m
+     <p class="platform-label">iPhone / iPad</p>[m

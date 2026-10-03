@@ -1,0 +1,1173 @@
+/**
+ * 본사 관리자 전용 대시보드
+ * - 모바일/웹 반응형 레이아웃
+ * - 전국 지사 현황, 접수 관리, 계정 관리, 지사 설정, 자재 주문, 공지 작성
+ */
+import React, { useState } from "react";
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  ActivityIndicator, TextInput, Modal, Alert, Platform, useWindowDimensions,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { ScreenContainer } from "@/components/screen-container";
+import { useColors } from "@/hooks/use-colors";
+import { useAppAuth } from "@/lib/auth-context";
+import { trpc } from "@/lib/trpc";
+import { formatFullAddress } from "@/constants/address-data";
+import { HQFlowRate } from "@/components/hq-flow-rate";
+
+type HQTab = "dashboard" | "requests" | "branches" | "accounts" | "sensors" | "flowrate" | "notices" | "materials" | "sms";
+
+const TAB_LABELS: { id: HQTab; label: string; icon: string }[] = [
+  { id: "dashboard", label: "대시보드", icon: "📊" },
+  { id: "requests", label: "전국 접수", icon: "📋" },
+  { id: "branches", label: "지사 관리", icon: "🏢" },
+  { id: "accounts", label: "계정 관리", icon: "👤" },
+  { id: "sensors", label: "누수센서", icon: "💧" },
+  { id: "flowrate", label: "유량 관리", icon: "🌡️" },
+  { id: "notices", label: "공지 작성", icon: "📢" },
+  { id: "materials", label: "자재 주문", icon: "📦" },
+  { id: "sms", label: "SMS 설정", icon: "📱" },
+];
+
+const STATUS_COLOR: Record<string, string> = {
+  "신규접수": "#6B7280", "본사배정": "#FF6B35", "지사배정": "#8B5CF6",
+  "기사배정대기": "#F59E0B", "방문예정": "#3B82F6",
+  "작업진행중": "#FF6B35", "견적승인대기": "#8B5CF6", "작업완료": "#22C55E", "재방문필요": "#EF4444",
+};
+
+export default function HQAdminScreen() {
+  const colors = useColors();
+  const router = useRouter();
+  const { user } = useAppAuth();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
+  const [activeTab, setActiveTab] = useState<HQTab>("dashboard");
+
+  if (!user || user.appRole !== "hq_admin") {
+    return (
+      <ScreenContainer className="p-6">
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <Text style={{ fontSize: 48 }}>🔒</Text>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>본사 관리자 전용</Text>
+          <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center" }}>
+            이 화면은 본사 관리자 계정으로만 접근할 수 있습니다.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, paddingHorizontal: 28 }}
+            onPress={() => router.push("/login")}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>로그인하기</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  const s = styles(colors, isWide);
+
+  return (
+    <ScreenContainer>
+      <View style={s.layout}>
+        {/* 사이드바 (웹 와이드) / 상단 탭 (모바일) */}
+        {isWide ? (
+          <View style={s.sidebar}>
+            <View style={s.sidebarHeader}>
+              <Text style={s.sidebarTitle}>퓨처에너지테크</Text>
+              <Text style={s.sidebarSub}>본사 관리자</Text>
+            </View>
+            {TAB_LABELS.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[s.sidebarItem, activeTab === tab.id && s.sidebarItemActive]}
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.sidebarIcon}>{tab.icon}</Text>
+                <Text style={[s.sidebarLabel, activeTab === tab.id && s.sidebarLabelActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabRow} contentContainerStyle={s.tabContent}>
+            {TAB_LABELS.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[s.tabItem, activeTab === tab.id && s.tabItemActive]}
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={s.tabIcon}>{tab.icon}</Text>
+                <Text style={[s.tabLabel, activeTab === tab.id && s.tabLabelActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* 메인 콘텐츠 */}
+        <View style={s.content}>
+          {activeTab === "dashboard" && <HQDashboard colors={colors} />}
+          {activeTab === "requests" && <HQRequests colors={colors} />}
+          {activeTab === "branches" && <HQBranches colors={colors} />}
+          {activeTab === "accounts" && <HQAccounts colors={colors} />}
+          {activeTab === "sensors" && <HQSensors colors={colors} />}
+          {activeTab === "flowrate" && <HQFlowRate colors={colors} />}
+          {activeTab === "notices" && <HQNotices colors={colors} userId={user.userId} />}
+          {activeTab === "materials" && <HQMaterials colors={colors} />}
+          {activeTab === "sms" && <HQSmsSettings colors={colors} />}
+        </View>
+      </View>
+    </ScreenContainer>
+  );
+}
+
+// ─── 대시보드 ────────────────────────────────────────────────────
+function HQDashboard({ colors }: { colors: any }) {
+  const { data: requests = [], isLoading } = trpc.repair.listAll.useQuery();
+  const { data: branches = [] } = trpc.branch.listAll.useQuery();
+  const { data: sensors = [] } = trpc.sensor.listAll.useQuery();
+
+  const total = requests.length;
+  const pending = requests.filter(r => r.status === "신규접수" || r.status === "기사배정대기").length;
+  const inProgress = requests.filter(r => r.status === "방문예정" || r.status === "작업진행중").length;
+  const completed = requests.filter(r => r.status === "작업완료").length;
+  const revisit = requests.filter(r => r.status === "재방문필요").length;
+  const leakAlert = sensors.filter(s => s.status === "누수감지").length;
+  const activeBranches = branches.filter(b => b.isActive).length;
+
+  const stats = [
+    { label: "전체 접수", value: total, color: "#6B7280", bg: "#F9FAFB" },
+    { label: "대기 중", value: pending, color: "#F59E0B", bg: "#FFFBEB" },
+    { label: "진행 중", value: inProgress, color: "#3B82F6", bg: "#EFF6FF" },
+    { label: "완료", value: completed, color: "#22C55E", bg: "#F0FDF4" },
+    { label: "재방문", value: revisit, color: "#EF4444", bg: "#FEF2F2" },
+    { label: "누수 경보", value: leakAlert, color: "#0284C7", bg: "#EFF6FF" },
+    { label: "활성 지사", value: activeBranches, color: "#8B5CF6", bg: "#F5F3FF" },
+  ];
+
+  // 지사별 통계
+  const branchStats = branches.map(b => {
+    const bRequests = requests.filter(r => r.branchId === b.id);
+    return {
+      ...b,
+      total: bRequests.length,
+      completed: bRequests.filter(r => r.status === "작업완료").length,
+      pending: bRequests.filter(r => r.status === "신규접수" || r.status === "기사배정대기").length,
+    };
+  });
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <Text style={{ fontSize: 20, fontWeight: "800", color: colors.foreground, marginBottom: 4 }}>전국 현황</Text>
+
+      {/* 통계 그리드 */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {stats.map((stat) => (
+          <View key={stat.label} style={{ minWidth: 100, flex: 1, backgroundColor: stat.bg, borderRadius: 12, padding: 14, alignItems: "center", borderWidth: 1, borderColor: stat.color + "30" }}>
+            <Text style={{ fontSize: 26, fontWeight: "800", color: stat.color }}>{stat.value}</Text>
+            <Text style={{ fontSize: 11, fontWeight: "600", color: stat.color, textAlign: "center", marginTop: 2 }}>{stat.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* 지사별 현황 */}
+      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>지사별 현황</Text>
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : (
+        branchStats.length === 0 ? (
+          <Text style={{ color: colors.muted, textAlign: "center", padding: 16 }}>등록된 지사가 없습니다.</Text>
+        ) : (
+          branchStats.map((b) => (
+            <View key={b.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 6 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>{b.name}</Text>
+                <View style={{ backgroundColor: b.isActive ? "#F0FDF4" : "#FEF2F2", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: b.isActive ? "#22C55E" : "#EF4444" }}>{b.isActive ? "운영중" : "중지"}</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 13, color: colors.muted }}>{b.region}</Text>
+              <View style={{ flexDirection: "row", gap: 16 }}>
+                <Text style={{ fontSize: 13, color: "#6B7280" }}>전체 {b.total}건</Text>
+                <Text style={{ fontSize: 13, color: "#F59E0B" }}>대기 {b.pending}건</Text>
+                <Text style={{ fontSize: 13, color: "#22C55E" }}>완료 {b.completed}건</Text>
+              </View>
+            </View>
+          ))
+        )
+      )}
+    </ScrollView>
+  );
+}
+
+// ─── 전국 접수 ────────────────────────────────────────────────────
+function HQRequests({ colors }: { colors: any }) {
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("전체");
+  const [filterBranch, setFilterBranch] = useState<number | null>(null);
+  const [reassignId, setReassignId] = useState<number | null>(null);
+  const [targetBranchId, setTargetBranchId] = useState<number | null>(null);
+
+  const { user } = useAppAuth();
+  const utils = trpc.useUtils();
+  const { data: requests = [], isLoading } = trpc.repair.listAll.useQuery();
+  const { data: branches = [] } = trpc.branch.listActive.useQuery();
+
+  const deleteReqMutation = trpc.repair.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.success) { utils.repair.listAll.invalidate(); Alert.alert("삭제 완료", "접수가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteReq = (id: number, name: string) => {
+    if (!user) return;
+    Alert.alert("접수 삭제", `「${name}」 접수를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteReqMutation.mutate({ id, actorRole: user.appRole as any, actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
+
+  const reassignMutation = trpc.repair.reassignBranch.useMutation({
+    onSuccess: () => { utils.repair.listAll.invalidate(); setReassignId(null); Alert.alert("완료", "지사가 재배정되었습니다."); },
+  });
+
+  const statusMutation = trpc.repair.updateStatus.useMutation({
+    onSuccess: () => utils.repair.listAll.invalidate(),
+  });
+
+  const filtered = requests.filter(r => {
+    const matchStatus = filterStatus === "전체" || r.status === filterStatus;
+    const matchBranch = filterBranch === null || r.branchId === filterBranch;
+    const matchSearch = !search || r.customerName.includes(search) || r.requestNumber.includes(search) || r.apartmentName.includes(search);
+    return matchStatus && matchBranch && matchSearch;
+  });
+
+  const STATUS_TABS = ["전체", "신규접수", "기사배정대기", "방문예정", "작업진행중", "작업완료", "재방문필요"];
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ padding: 12, gap: 8 }}>
+        <TextInput
+          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground, backgroundColor: colors.surface }}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="고객명·접수번호·아파트 검색"
+          placeholderTextColor={colors.muted}
+          returnKeyType="search"
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {STATUS_TABS.map(s => (
+            <TouchableOpacity key={s} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 6, backgroundColor: filterStatus === s ? "#FF6B35" : colors.surface, borderWidth: 1, borderColor: filterStatus === s ? "#FF6B35" : colors.border }} onPress={() => setFilterStatus(s)} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: filterStatus === s ? "#fff" : colors.muted }}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TouchableOpacity style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 6, backgroundColor: filterBranch === null ? "#3B82F6" : colors.surface, borderWidth: 1, borderColor: filterBranch === null ? "#3B82F6" : colors.border }} onPress={() => setFilterBranch(null)} activeOpacity={0.7}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: filterBranch === null ? "#fff" : colors.muted }}>전체 지사</Text>
+          </TouchableOpacity>
+          {branches.map(b => (
+            <TouchableOpacity key={b.id} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 6, backgroundColor: filterBranch === b.id ? "#3B82F6" : colors.surface, borderWidth: 1, borderColor: filterBranch === b.id ? "#3B82F6" : colors.border }} onPress={() => setFilterBranch(b.id)} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: filterBranch === b.id ? "#fff" : colors.muted }}>{b.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {isLoading ? <ActivityIndicator color="#FF6B35" style={{ marginTop: 40 }} /> : (
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+          <Text style={{ fontSize: 13, color: colors.muted, marginBottom: 4 }}>총 {filtered.length}건</Text>
+          {filtered.map(r => (
+            <View key={r.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 4 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ backgroundColor: STATUS_COLOR[r.status] + "20", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: STATUS_COLOR[r.status] }}>{r.status}</Text>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{r.requestNumber}</Text>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>{r.customerName}</Text>
+              <Text style={{ fontSize: 13, color: colors.muted }}>{formatFullAddress(r)}</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 12, color: "#FF6B35", fontWeight: "600" }}>
+                  {r.branchId ? branches.find(b => b.id === r.branchId)?.name ?? "지사" : "본사"}
+                </Text>
+                {r.technicianName && <Text style={{ fontSize: 12, color: "#3B82F6" }}>👷 {r.technicianName}</Text>}
+              </View>
+              {/* 재배정 */}
+              {reassignId === r.id ? (
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {branches.map(b => (
+                      <TouchableOpacity key={b.id} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 6, backgroundColor: targetBranchId === b.id ? "#3B82F6" : colors.background, borderWidth: 1, borderColor: colors.border }} onPress={() => setTargetBranchId(b.id)} activeOpacity={0.7}>
+                        <Text style={{ fontSize: 12, color: targetBranchId === b.id ? "#fff" : colors.foreground }}>{b.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: "#3B82F6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { if (targetBranchId !== null) reassignMutation.mutate({ id: r.id, branchId: targetBranchId }); }} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>확인</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: "#6B7280", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => setReassignId(null)} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>취소</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => { setReassignId(r.id); setTargetBranchId(r.branchId ?? null); }} activeOpacity={0.8}>
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>지사 재배정</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 10, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteReq(r.id, r.customerName)} activeOpacity={0.8}>
+                      <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "700" }}>삭제</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+    </View>
+  );
+}
+
+// ─── 지사 관리 ────────────────────────────────────────────────────
+function HQBranches({ colors }: { colors: any }) {
+  const { user } = useAppAuth();
+  const [addModal, setAddModal] = useState(false);
+  const [name, setName] = useState(""); const [code, setCode] = useState(""); const [region, setRegion] = useState("");
+  const [managerName, setManagerName] = useState(""); const [phone, setPhone] = useState(""); const [address, setAddress] = useState("");
+  const [keyword, setKeyword] = useState(""); const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+
+  const utils = trpc.useUtils();
+  const { data: branches = [], isLoading } = trpc.branch.listAll.useQuery();
+  const { data: mappings = [] } = trpc.branch.getRegionMappings.useQuery();
+
+  const deleteBranchMutation = trpc.branch.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      setDeleteTarget(null);
+      if (r?.success) {
+        utils.branch.listAll.invalidate();
+        utils.repair.listAll.invalidate();
+        Alert.alert("삭제 완료", r.mode === "cascade" ? "지사와 소속 데이터가 함께 삭제되었습니다." : "지사가 삭제되고 소속 데이터는 본사로 이관되었습니다.");
+      } else {
+        Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+      }
+    },
+    onError: () => { setDeleteTarget(null); Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."); },
+  });
+
+  const runDeleteBranch = (mode: "transfer" | "cascade") => {
+    if (!deleteTarget || !user) return;
+    deleteBranchMutation.mutate({ id: deleteTarget.id, actorRole: user.appRole as any, actorUserId: user.userId, mode });
+  };
+
+  const createMutation = trpc.branch.create.useMutation({
+    onSuccess: () => { utils.branch.listAll.invalidate(); setAddModal(false); setName(""); setCode(""); setRegion(""); setManagerName(""); setPhone(""); setAddress(""); Alert.alert("완료", "지사가 등록되었습니다."); },
+  });
+  const updateMutation = trpc.branch.update.useMutation({
+    onSuccess: () => utils.branch.listAll.invalidate(),
+  });
+  const addMappingMutation = trpc.branch.addRegionMapping.useMutation({
+    onSuccess: () => { utils.branch.getRegionMappings.invalidate(); setKeyword(""); },
+  });
+  const deleteMappingMutation = trpc.branch.deleteRegionMapping.useMutation({
+    onSuccess: () => utils.branch.getRegionMappings.invalidate(),
+  });
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>지사 목록</Text>
+        <TouchableOpacity style={{ backgroundColor: "#FF6B35", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }} onPress={() => setAddModal(true)} activeOpacity={0.8}>
+          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>+ 지사 등록</Text>
+        </TouchableOpacity>
+      </View>
+
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : branches.map(b => (
+        <View key={b.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 6 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>{b.name}</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity style={{ backgroundColor: b.isActive ? "#FEF2F2" : "#F0FDF4", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }} onPress={() => updateMutation.mutate({ id: b.id, isActive: !b.isActive })} activeOpacity={0.8}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: b.isActive ? "#EF4444" : "#22C55E" }}>{b.isActive ? "중지" : "활성화"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }} onPress={() => setDeleteTarget({ id: b.id, name: b.name })} activeOpacity={0.8}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>삭제</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={{ fontSize: 13, color: colors.muted }}>{b.region}</Text>
+          {b.managerName && <Text style={{ fontSize: 13, color: colors.foreground }}>관리자: {b.managerName}</Text>}
+          {b.phoneNumber && <Text style={{ fontSize: 13, color: "#3B82F6" }}>📞 {b.phoneNumber}</Text>}
+
+          {/* 지역 매핑 */}
+          <View style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 8, gap: 6 }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>담당 지역 키워드</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {mappings.filter(m => m.branchId === b.id).map(m => (
+                <TouchableOpacity key={m.id} style={{ backgroundColor: "#EFF6FF", borderRadius: 16, paddingHorizontal: 10, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 4 }} onPress={() => deleteMappingMutation.mutate({ id: m.id })} activeOpacity={0.7}>
+                  <Text style={{ fontSize: 12, color: "#3B82F6", fontWeight: "600" }}>{m.keyword}</Text>
+                  <Text style={{ fontSize: 12, color: "#EF4444" }}>✕</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {selectedBranchId === b.id ? (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TextInput style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8, fontSize: 13, color: colors.foreground }} value={keyword} onChangeText={setKeyword} placeholder="예: 강남구, 서초동" placeholderTextColor={colors.muted} returnKeyType="done" />
+                <TouchableOpacity style={{ backgroundColor: "#3B82F6", borderRadius: 8, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }} onPress={() => { if (keyword.trim()) addMappingMutation.mutate({ branchId: b.id, keyword: keyword.trim(), priority: 0 }); setSelectedBranchId(null); }} activeOpacity={0.8}>
+                  <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>추가</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ backgroundColor: "#6B7280", borderRadius: 8, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }} onPress={() => setSelectedBranchId(null)} activeOpacity={0.8}>
+                  <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>취소</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={{ backgroundColor: colors.background, borderRadius: 8, padding: 8, alignItems: "center", borderWidth: 1, borderColor: colors.border }} onPress={() => setSelectedBranchId(b.id)} activeOpacity={0.7}>
+                <Text style={{ fontSize: 12, color: colors.muted }}>+ 지역 키워드 추가</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      ))}
+
+      {/* 지사 등록 모달 */}
+      <Modal visible={addModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 8, maxHeight: "90%" }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, marginBottom: 8 }}>지사 등록</Text>
+            {[
+              { label: "지사명 *", value: name, onChange: setName, placeholder: "예: 강남지사" },
+              { label: "지사 코드 *", value: code, onChange: setCode, placeholder: "예: GN01" },
+              { label: "담당 지역 *", value: region, onChange: setRegion, placeholder: "예: 서울 강남구·서초구" },
+              { label: "지사장 이름", value: managerName, onChange: setManagerName, placeholder: "지사장 성함" },
+              { label: "대표 전화", value: phone, onChange: setPhone, placeholder: "02-0000-0000" },
+              { label: "주소", value: address, onChange: setAddress, placeholder: "지사 주소" },
+            ].map(f => (
+              <View key={f.label}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, marginBottom: 4 }}>{f.label}</Text>
+                <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground }} value={f.value} onChangeText={f.onChange} placeholder={f.placeholder} placeholderTextColor={colors.muted} />
+              </View>
+            ))}
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+              <TouchableOpacity style={{ flex: 1, backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => { if (!name.trim() || !code.trim() || !region.trim()) { Alert.alert("오류", "필수 항목을 입력해주세요."); return; } createMutation.mutate({ name, code, region, managerName: managerName || undefined, phoneNumber: phone || undefined, address: address || undefined }); }} activeOpacity={0.8} disabled={createMutation.isPending}>
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{createMutation.isPending ? "등록 중..." : "등록"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ flex: 1, backgroundColor: "#6B7280", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setAddModal(false)} activeOpacity={0.8}>
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>취소</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 지사 삭제 옵션 모달 */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 20, gap: 12 }}>
+            <Text style={{ fontSize: 17, fontWeight: "800", color: colors.foreground }}>지사 삭제</Text>
+            <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }}>
+              「{deleteTarget?.name}」 지사를 삭제하시겠습니까? 해당 지사의 기사, 고객, 접수 데이터를 본사로 이관하거나 함께 삭제할 수 있습니다.
+            </Text>
+            <TouchableOpacity style={{ backgroundColor: "#FFF7ED", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#FB923C" }} onPress={() => runDeleteBranch("transfer")} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#EA580C" }}>지사만 삭제 (소속 데이터 본사로 이관)</Text>
+              <Text style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>기사/고객/접수는 유지되며 본사 관리로 전환됩니다.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => runDeleteBranch("cascade")} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#DC2626" }}>지사와 소속 데이터 함께 삭제</Text>
+              <Text style={{ fontSize: 12, color: "#991B1B", marginTop: 2 }}>기사/고객/접수 데이터가 모두 삭제됩니다.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ backgroundColor: "#6B7280", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setDeleteTarget(null)} activeOpacity={0.8} disabled={deleteBranchMutation.isPending}>
+              <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{deleteBranchMutation.isPending ? "처리 중..." : "취소"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
+
+// ─── 계정 관리 ────────────────────────────────────────────────────
+function HQAccounts({ colors }: { colors: any }) {
+  const [addModal, setAddModal] = useState(false);
+  const [loginId, setLoginId] = useState(""); const [password, setPassword] = useState("");
+  const [appRole, setAppRole] = useState<"technician" | "branch_manager" | "hq_admin">("technician");
+  const [techName, setTechName] = useState(""); const [phone, setPhone] = useState("");
+  const [branchId, setBranchId] = useState<number | null>(null);
+
+  const { user } = useAppAuth();
+  const utils = trpc.useUtils();
+  const { data: accounts = [], isLoading } = trpc.auth.listAccounts.useQuery();
+  const { data: branches = [] } = trpc.branch.listActive.useQuery();
+  const { data: allTechs = [] } = trpc.technicians.listAll.useQuery();
+
+  const deleteTechMutation = trpc.technicians.softDelete.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.success) { utils.auth.listAccounts.invalidate(); Alert.alert("삭제 완료", "기사가 삭제되었습니다."); }
+      else Alert.alert("삭제 실패", r?.error || "삭제할 수 없습니다.");
+    },
+    onError: () => Alert.alert("오류", "삭제 처리 중 문제가 발생했습니다."),
+  });
+  const confirmDeleteTech = (techId: number, name: string) => {
+    if (!user) return;
+    Alert.alert("기사 삭제", `「${name}」 기사를 삭제하시겠습니까?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => deleteTechMutation.mutate({ id: techId, actorRole: (user.appRole as any), actorUserId: user.userId, actorBranchId: user.branchId ?? undefined }) },
+    ]);
+  };
+
+  const createMutation = trpc.auth.createAccount.useMutation({
+    onSuccess: (data) => {
+      if (data.success) { utils.auth.listAccounts.invalidate(); setAddModal(false); setLoginId(""); setPassword(""); setTechName(""); setPhone(""); Alert.alert("완료", "계정이 생성되었습니다."); }
+      else Alert.alert("오류", data.error ?? "계정 생성 실패");
+    },
+  });
+  const setActiveMutation = trpc.auth.setActive.useMutation({
+    onSuccess: () => utils.auth.listAccounts.invalidate(),
+  });
+
+  const ROLE_LABELS: Record<string, string> = { customer: "고객", technician: "현장 기사", branch_manager: "지사장", hq_admin: "본사 관리자" };
+  const ROLE_COLORS: Record<string, string> = { customer: "#6B7280", technician: "#3B82F6", branch_manager: "#8B5CF6", hq_admin: "#FF6B35" };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>계정 목록</Text>
+        <TouchableOpacity style={{ backgroundColor: "#FF6B35", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }} onPress={() => setAddModal(true)} activeOpacity={0.8}>
+          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>+ 계정 생성</Text>
+        </TouchableOpacity>
+      </View>
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+          {accounts.filter(a => a.appRole !== "customer").map(a => (
+            <View key={a.userId} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 4 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ backgroundColor: ROLE_COLORS[a.appRole] + "20", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: ROLE_COLORS[a.appRole] }}>{ROLE_LABELS[a.appRole]}</Text>
+                </View>
+                <View style={{ backgroundColor: a.isActive ? "#F0FDF4" : "#FEF2F2", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: a.isActive ? "#22C55E" : "#EF4444" }}>{a.isActive ? "활성" : "정지"}</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>ID: {a.loginId}</Text>
+              {a.phoneNumber && <Text style={{ fontSize: 13, color: colors.muted }}>📞 {a.phoneNumber}</Text>}
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: a.isActive ? "#FEF2F2" : "#F0FDF4", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => setActiveMutation.mutate({ userId: a.userId, isActive: !a.isActive })} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: a.isActive ? "#EF4444" : "#22C55E" }}>{a.isActive ? "계정 정지" : "계정 활성화"}</Text>
+                </TouchableOpacity>
+                {a.appRole === "technician" && (() => {
+                  const tech = allTechs.find((t: any) => t.userId === a.userId || (a.phoneNumber && t.phoneNumber === a.phoneNumber));
+                  return tech ? (
+                    <TouchableOpacity style={{ backgroundColor: "#FEF2F2", borderRadius: 8, padding: 8, alignItems: "center", paddingHorizontal: 14, borderWidth: 1, borderColor: "#F87171" }} onPress={() => confirmDeleteTech(tech.id, tech.name)} activeOpacity={0.8}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>기사 삭제</Text>
+                    </TouchableOpacity>
+                  ) : null;
+                })()}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* 계정 생성 모달 */}
+      <Modal visible={addModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
+          <ScrollView style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" }}>
+            <View style={{ padding: 20, gap: 8 }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, marginBottom: 8 }}>계정 생성</Text>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>권한</Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                {(["technician", "branch_manager", "hq_admin"] as const).map(r => (
+                  <TouchableOpacity key={r} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: appRole === r ? "#FF6B35" : colors.surface, borderWidth: 1, borderColor: appRole === r ? "#FF6B35" : colors.border }} onPress={() => setAppRole(r)} activeOpacity={0.7}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: appRole === r ? "#fff" : colors.muted }}>{ROLE_LABELS[r]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {[
+                { label: "아이디 *", value: loginId, onChange: setLoginId, placeholder: "로그인 아이디" },
+                { label: "비밀번호 *", value: password, onChange: setPassword, placeholder: "초기 비밀번호", secure: true },
+                { label: "전화번호", value: phone, onChange: setPhone, placeholder: "010-0000-0000" },
+              ].map(f => (
+                <View key={f.label}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, marginBottom: 4 }}>{f.label}</Text>
+                  <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground }} value={f.value} onChangeText={f.onChange} placeholder={f.placeholder} placeholderTextColor={colors.muted} secureTextEntry={f.secure} />
+                </View>
+              ))}
+              {appRole === "technician" && (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>기사 이름 *</Text>
+                  <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground }} value={techName} onChangeText={setTechName} placeholder="기사 성함" placeholderTextColor={colors.muted} />
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>소속 선택 *</Text>
+                  <Text style={{ fontSize: 11, color: colors.muted, marginTop: -4 }}>본사 선택 시 본사 직속 기사로 등록됩니다</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                    {/* 본사 옵션 (본사 직속 = branchId null) */}
+                    <TouchableOpacity
+                      key="hq"
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                        backgroundColor: branchId === null ? "#FF6B35" : colors.surface,
+                        borderWidth: branchId === null ? 2 : 1,
+                        borderColor: branchId === null ? "#FF6B35" : colors.border,
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                      }}
+                      onPress={() => setBranchId(null)}
+                      activeOpacity={0.7}
+                    >
+                      {branchId === null && <Text style={{ fontSize: 12, color: "#fff" }}>✓</Text>}
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: branchId === null ? "#fff" : colors.muted }}>본사{branchId === null ? " ✓ 선택됨" : ""}</Text>
+                    </TouchableOpacity>
+                    {/* 지사 목록 */}
+                    {branches.map(b => (
+                      <TouchableOpacity
+                        key={b.id}
+                        style={{
+                          paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, marginRight: 8,
+                          backgroundColor: branchId === b.id ? "#3B82F6" : colors.surface,
+                          borderWidth: branchId === b.id ? 2 : 1,
+                          borderColor: branchId === b.id ? "#3B82F6" : colors.border,
+                          flexDirection: "row", alignItems: "center", gap: 4,
+                        }}
+                        onPress={() => setBranchId(b.id)}
+                        activeOpacity={0.7}
+                      >
+                        {branchId === b.id && <Text style={{ fontSize: 12, color: "#fff" }}>✓</Text>}
+                        <Text style={{ fontSize: 13, fontWeight: branchId === b.id ? "700" : "400", color: branchId === b.id ? "#fff" : colors.muted }}>{b.name}{branchId === b.id ? " ✓ 선택됨" : ""}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  {/* 선택된 소속 표시 */}
+                  <View style={{ backgroundColor: branchId === null ? "#FFF7F0" : "#EFF6FF", borderRadius: 8, padding: 8, borderWidth: 1, borderColor: branchId === null ? "#FF6B35" : "#3B82F6" }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: branchId === null ? "#FF6B35" : "#3B82F6" }}>
+                      선택된 소속: {branchId === null ? "본사 (본사 직속 기사)" : (branches.find(b => b.id === branchId)?.name ?? "지사 미선택")}
+                    </Text>
+                  </View>
+                </>
+              )}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => { if (!loginId.trim() || !password.trim()) { Alert.alert("오류", "아이디와 비밀번호를 입력해주세요."); return; } if (appRole === "technician" && !techName.trim()) { Alert.alert("오류", "기사 이름을 입력해주세요."); return; } createMutation.mutate({ loginId, password, appRole, phoneNumber: phone || undefined, name: techName || undefined, branchId: branchId ?? undefined }); }} activeOpacity={0.8} disabled={createMutation.isPending}>
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{createMutation.isPending ? "생성 중..." : "생성"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: "#6B7280", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => setAddModal(false)} activeOpacity={0.8}>
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>취소</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+// ─── 누수센서 관제 ────────────────────────────────────────────────
+function HQSensors({ colors }: { colors: any }) {
+  const utils = trpc.useUtils();
+  const { data: sensors = [], isLoading } = trpc.sensor.listAll.useQuery();
+  const { data: alertPhonesData } = trpc.sensor.getAlertPhones.useQuery();
+  const { data: notifLogs = [], isLoading: logsLoading } = trpc.sensor.getNotificationLogs.useQuery({ limit: 50 });
+  const [alertPhoneInput, setAlertPhoneInput] = useState("");
+  const setAlertPhonesMutation = trpc.sensor.setAlertPhones.useMutation({
+    onSuccess: () => {
+      utils.sensor.getAlertPhones.invalidate();
+      Alert.alert("저장 완료", "알림 수신번호가 저장되었습니다.");
+      setAlertPhoneInput("");
+    },
+  });
+
+  const resolveMutation = trpc.sensor.resolve.useMutation({
+    onSuccess: () => { utils.sensor.listAll.invalidate(); Alert.alert("완료", "처리 완료로 변경되었습니다."); },
+  });
+
+  const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
+    "정상": { color: "#22C55E", bg: "#F0FDF4", icon: "✅" },
+    "누수감지": { color: "#EF4444", bg: "#FEF2F2", icon: "🚨" },
+    "배터리부족": { color: "#F59E0B", bg: "#FFFBEB", icon: "🔋" },
+    "통신끊김": { color: "#6B7280", bg: "#F9FAFB", icon: "📡" },
+    "점검필요": { color: "#8B5CF6", bg: "#F5F3FF", icon: "🔍" },
+  };
+
+  const alertSensors = sensors.filter(s => s.status !== "정상");
+  const normalSensors = sensors.filter(s => s.status === "정상");
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>전국 누수센서 관제</Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1, backgroundColor: "#FEF2F2", borderRadius: 12, padding: 12, alignItems: "center" }}>
+          <Text style={{ fontSize: 24, fontWeight: "800", color: "#EF4444" }}>{alertSensors.length}</Text>
+          <Text style={{ fontSize: 11, color: "#EF4444", fontWeight: "600" }}>경보 센서</Text>
+        </View>
+        <View style={{ flex: 1, backgroundColor: "#F0FDF4", borderRadius: 12, padding: 12, alignItems: "center" }}>
+          <Text style={{ fontSize: 24, fontWeight: "800", color: "#22C55E" }}>{normalSensors.length}</Text>
+          <Text style={{ fontSize: 11, color: "#22C55E", fontWeight: "600" }}>정상 센서</Text>
+        </View>
+        <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 12, padding: 12, alignItems: "center" }}>
+          <Text style={{ fontSize: 24, fontWeight: "800", color: "#3B82F6" }}>{sensors.length}</Text>
+          <Text style={{ fontSize: 11, color: "#3B82F6", fontWeight: "600" }}>전체</Text>
+        </View>
+      </View>
+
+      {/* 알림 수신번호 설정 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>📱 누수 알림 수신번호 설정</Text>
+        {alertPhonesData?.phones && alertPhonesData.phones.length > 0 ? (
+          <View style={{ gap: 4 }}>
+            {alertPhonesData.phones.map((p, i) => (
+              <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#EFF6FF", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ fontSize: 13, color: "#1D4ED8", fontWeight: "600" }}>{p}</Text>
+                <TouchableOpacity onPress={() => {
+                  const newPhones = alertPhonesData.phones.filter((_: string, idx: number) => idx !== i);
+                  setAlertPhonesMutation.mutate({ phones: newPhones });
+                }} activeOpacity={0.7}>
+                  <Text style={{ fontSize: 12, color: "#EF4444" }}>삭제</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ fontSize: 12, color: colors.muted }}>등록된 수신번호가 없습니다.</Text>
+        )}
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TextInput
+            style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, fontSize: 14, color: colors.foreground, backgroundColor: colors.background }}
+            value={alertPhoneInput}
+            onChangeText={setAlertPhoneInput}
+            placeholder="010-0000-0000"
+            placeholderTextColor={colors.muted}
+            keyboardType="phone-pad"
+            returnKeyType="done"
+          />
+          <TouchableOpacity
+            style={{ backgroundColor: "#3B82F6", borderRadius: 8, paddingHorizontal: 14, justifyContent: "center" }}
+            onPress={() => {
+              const phone = alertPhoneInput.replace(/[^0-9]/g, "");
+              if (phone.length < 10) { Alert.alert("오류", "올바른 전화번호를 입력하세요."); return; }
+              const existing = alertPhonesData?.phones ?? [];
+              if (existing.includes(phone)) { Alert.alert("알림", "이미 등록된 번호입니다."); return; }
+              setAlertPhonesMutation.mutate({ phones: [...existing, phone] });
+            }}
+            activeOpacity={0.8}
+            disabled={setAlertPhonesMutation.isPending}
+          >
+            <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>추가</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : sensors.map(sensor => {
+        const cfg = STATUS_CONFIG[sensor.status] ?? STATUS_CONFIG["정상"];
+        const lastSignal = sensor.lastCommAt ? new Date(sensor.lastCommAt).toLocaleString("ko-KR") : "-";
+        return (
+          <View key={sensor.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: sensor.status !== "정상" ? "#FECACA" : colors.border, gap: 6 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ backgroundColor: cfg.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Text style={{ fontSize: 12 }}>{cfg.icon}</Text>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: cfg.color }}>{sensor.status}</Text>
+              </View>
+              <Text style={{ fontSize: 11, color: colors.muted }}>{sensor.sensorUid}</Text>
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>{sensor.customerName}</Text>
+            <Text style={{ fontSize: 13, color: colors.muted }}>{sensor.apartmentName} {sensor.dong}동 {sensor.ho}호</Text>
+            {sensor.installLocation && <Text style={{ fontSize: 12, color: "#FF6B35" }}>📍 {sensor.installLocation}</Text>}
+            {sensor.batteryLevel !== null && <Text style={{ fontSize: 12, color: colors.muted }}>🔋 배터리 {sensor.batteryLevel}%</Text>}
+            <Text style={{ fontSize: 12, color: colors.muted }}>📶 마지막 신호: {lastSignal}</Text>
+            {sensor.status !== "정상" && (
+              <TouchableOpacity style={{ backgroundColor: "#22C55E", borderRadius: 8, padding: 8, alignItems: "center", marginTop: 4 }} onPress={() => resolveMutation.mutate({ id: sensor.id })} activeOpacity={0.8} disabled={resolveMutation.isPending}>
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>처리 완료</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      {/* 누수 알림 발송 내역 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 8 }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>📋 누수 알림 발송 내역</Text>
+        {logsLoading ? <ActivityIndicator color="#FF6B35" /> : notifLogs.length === 0 ? (
+          <Text style={{ fontSize: 13, color: colors.muted, textAlign: "center", paddingVertical: 12 }}>발송 내역이 없습니다</Text>
+        ) : notifLogs.map((log: any, i: number) => {
+          const sentAt = log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : (log.createdAt ? new Date(log.createdAt).toLocaleString("ko-KR") : "-");
+          const isSuccess = log.sendStatus === "SUCCESS" || log.sendStatus === "REQUESTED";
+          return (
+            <View key={log.id ?? i} style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border, paddingTop: i > 0 ? 8 : 0, gap: 3 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 12, color: isSuccess ? "#22C55E" : "#EF4444", fontWeight: "700" }}>{isSuccess ? "✅ 발송성공" : "❌ 발송실패"}</Text>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{sentAt}</Text>
+              </View>
+              <Text style={{ fontSize: 13, color: colors.foreground }}>{log.customerName ?? "-"} · {log.phoneNumber}</Text>
+              <Text style={{ fontSize: 11, color: colors.muted }}>{log.messageType} · {log.provider ?? "solapi"}</Text>
+              {log.sensorUid && <Text style={{ fontSize: 11, color: colors.muted }}>센서: {log.sensorUid}</Text>}
+              {log.groupId && <Text style={{ fontSize: 10, color: colors.muted }}>groupId: {log.groupId}</Text>}
+              {log.failReason && <Text style={{ fontSize: 11, color: "#EF4444" }}>실패: {log.failReason}</Text>}
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ─── 공지 작성 ────────────────────────────────────────────────────
+function HQNotices({ colors, userId }: { colors: any; userId: number }) {
+  const [title, setTitle] = useState(""); const [content, setContent] = useState("");
+  const [isPinned, setIsPinned] = useState(false); const [targetBranchId, setTargetBranchId] = useState<number | null>(null);
+
+  const utils = trpc.useUtils();
+  const { data: notices = [], isLoading } = trpc.notice.list.useQuery({});
+  const { data: branches = [] } = trpc.branch.listActive.useQuery();
+
+  const createMutation = trpc.notice.create.useMutation({
+    onSuccess: () => { utils.notice.list.invalidate(); setTitle(""); setContent(""); setIsPinned(false); Alert.alert("완료", "공지가 등록되었습니다."); },
+  });
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>공지 작성</Text>
+
+      {/* 작성 폼 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>제목</Text>
+        <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground }} value={title} onChangeText={setTitle} placeholder="공지 제목" placeholderTextColor={colors.muted} />
+        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>내용</Text>
+        <TextInput style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: colors.foreground, minHeight: 100, textAlignVertical: "top" }} value={content} onChangeText={setContent} placeholder="공지 내용을 입력하세요" placeholderTextColor={colors.muted} multiline />
+        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>대상 지사 (미선택 시 전체)</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TouchableOpacity style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 6, backgroundColor: targetBranchId === null ? "#FF6B35" : colors.background, borderWidth: 1, borderColor: targetBranchId === null ? "#FF6B35" : colors.border }} onPress={() => setTargetBranchId(null)} activeOpacity={0.7}>
+            <Text style={{ fontSize: 12, color: targetBranchId === null ? "#fff" : colors.muted }}>전체</Text>
+          </TouchableOpacity>
+          {branches.map(b => (
+            <TouchableOpacity key={b.id} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 6, backgroundColor: targetBranchId === b.id ? "#FF6B35" : colors.background, borderWidth: 1, borderColor: targetBranchId === b.id ? "#FF6B35" : colors.border }} onPress={() => setTargetBranchId(b.id)} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, color: targetBranchId === b.id ? "#fff" : colors.muted }}>{b.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", gap: 8 }} onPress={() => setIsPinned(!isPinned)} activeOpacity={0.7}>
+          <View style={{ width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: "#FF6B35", backgroundColor: isPinned ? "#FF6B35" : "transparent", alignItems: "center", justifyContent: "center" }}>
+            {isPinned && <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>}
+          </View>
+          <Text style={{ fontSize: 14, color: colors.foreground }}>📌 상단 고정</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ backgroundColor: "#FF6B35", borderRadius: 12, padding: 14, alignItems: "center" }} onPress={() => { if (!title.trim() || !content.trim()) { Alert.alert("오류", "제목과 내용을 입력해주세요."); return; } createMutation.mutate({ title, content, authorId: userId, targetBranchId: targetBranchId ?? undefined, isPinned }); }} activeOpacity={0.8} disabled={createMutation.isPending}>
+          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{createMutation.isPending ? "등록 중..." : "공지 등록"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 기존 공지 목록 */}
+      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>등록된 공지</Text>
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : notices.map(n => (
+        <View key={n.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 4 }}>
+          {n.isPinned && <Text style={{ fontSize: 11, color: "#FF6B35", fontWeight: "700" }}>📌 고정</Text>}
+          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>{n.title}</Text>
+          <Text style={{ fontSize: 12, color: colors.muted }}>{n.createdAt ? new Date(n.createdAt).toLocaleDateString("ko-KR") : ""}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ─── 자재 주문 ────────────────────────────────────────────────────
+function HQMaterials({ colors }: { colors: any }) {
+  const utils = trpc.useUtils();
+  const { data: orders = [], isLoading } = trpc.materialOrder.list.useQuery({});
+
+  const updateMutation = trpc.materialOrder.updateStatus.useMutation({
+    onSuccess: () => utils.materialOrder.list.invalidate(),
+  });
+
+  const STATUS_COLOR: Record<string, string> = {
+    "신청": "#F59E0B", "승인": "#3B82F6", "발송": "#8B5CF6", "완료": "#22C55E", "반려": "#EF4444",
+  };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>자재 주문 관리</Text>
+      {isLoading ? <ActivityIndicator color="#FF6B35" /> : orders.length === 0 ? (
+        <Text style={{ color: colors.muted, textAlign: "center", padding: 24 }}>자재 주문 내역이 없습니다.</Text>
+      ) : orders.map(o => (
+        <View key={o.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 6 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ backgroundColor: STATUS_COLOR[o.status] + "20", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: STATUS_COLOR[o.status] }}>{o.status}</Text>
+            </View>
+            <Text style={{ fontSize: 11, color: colors.muted }}>{o.createdAt ? new Date(o.createdAt).toLocaleDateString("ko-KR") : ""}</Text>
+          </View>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>{o.orderItems}</Text>
+          {o.memo && <Text style={{ fontSize: 13, color: colors.muted }}>{o.memo}</Text>}
+          {o.status === "신청" && (
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+              <TouchableOpacity style={{ flex: 1, backgroundColor: "#3B82F6", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => updateMutation.mutate({ id: o.id, status: "승인" })} activeOpacity={0.8}>
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>승인</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ flex: 1, backgroundColor: "#EF4444", borderRadius: 8, padding: 8, alignItems: "center" }} onPress={() => updateMutation.mutate({ id: o.id, status: "반려" })} activeOpacity={0.8}>
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>반려</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {o.status === "승인" && (
+            <TouchableOpacity style={{ backgroundColor: "#8B5CF6", borderRadius: 8, padding: 8, alignItems: "center", marginTop: 4 }} onPress={() => updateMutation.mutate({ id: o.id, status: "발송" })} activeOpacity={0.8}>
+              <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>발송 처리</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ─── SMS 설정 ────────────────────────────────────────────────────
+function HQSmsSettings({ colors }: { colors: any }) {
+  const utils = trpc.useUtils();
+  const { data: adminPhoneData, isLoading: phoneLoading } = trpc.admin.getAdminPhone.useQuery();
+  const { data: smsStatus } = trpc.admin.smsStatus.useQuery();
+  const { data: logs = [], isLoading: logsLoading } = trpc.admin.notificationLogs.useQuery({});
+
+  const [adminPhone, setAdminPhone] = useState("");
+  const [phoneEditing, setPhoneEditing] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [repairTestPhone, setRepairTestPhone] = useState("");
+  const [repairTestResult, setRepairTestResult] = useState<{
+    success: boolean;
+    customerResult?: { result: string; phone: string; error?: string } | null;
+    adminResult?: { result: string; phone: string; error?: string } | null;
+    adminPhoneSet?: boolean;
+    error?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (adminPhoneData?.phone) setAdminPhone(adminPhoneData.phone);
+  }, [adminPhoneData?.phone]);
+
+  const setPhoneMutation = trpc.admin.setAdminPhone.useMutation({
+    onSuccess: () => {
+      utils.admin.getAdminPhone.invalidate();
+      setPhoneEditing(false);
+      Alert.alert("저장 완료", "관리자 휴대폰 번호가 저장되었습니다.");
+    },
+    onError: () => Alert.alert("오류", "저장에 실패했습니다."),
+  });
+
+  const testMutation = trpc.admin.sendSmsTest.useMutation({
+    onSuccess: (data) => {
+      setTestResult(data);
+      utils.admin.notificationLogs.invalidate();
+    },
+    onError: () => setTestResult({ success: false, error: "서버 오류가 발생했습니다." }),
+  });
+
+  const repairTestMutation = trpc.admin.sendRepairSmsTest.useMutation({
+    onSuccess: (data) => {
+      setRepairTestResult(data);
+      utils.admin.notificationLogs.invalidate();
+    },
+    onError: () => setRepairTestResult({ success: false, error: "서버 오류가 발생했습니다." }),
+  });
+
+  const formatPhone = (v: string) => {
+    const d = v.replace(/[^0-9]/g, "").slice(0, 11);
+    if (d.length <= 3) return d;
+    if (d.length <= 7) return `${d.slice(0,3)}-${d.slice(3)}`;
+    return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`;
+  };
+
+  const LOG_RESULT_COLOR: Record<string, string> = { SUCCESS: "#22C55E", FAILED: "#EF4444", SKIPPED: "#F59E0B" };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>SMS 설정 및 발송 테스트</Text>
+
+      {/* SOLAPI 연동 상태 */}
+      <View style={{ backgroundColor: smsStatus?.configured ? "#F0FDF4" : "#FEF2F2", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: smsStatus?.configured ? "#22C55E" : "#EF4444" }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: smsStatus?.configured ? "#22C55E" : "#EF4444" }}>
+          {smsStatus?.configured ? "✅ SOLAPI 연동됨 (환경변수 정상)" : "❌ SOLAPI 미연동 — 환경변수 설정 필요"}
+        </Text>
+        {!smsStatus?.configured && (
+          <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
+            SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수를 설정해 주세요.
+          </Text>
+        )}
+        {smsStatus?.configured && (
+          <Text style={{ fontSize: 12, color: "#15803D", marginTop: 6 }}>
+            현재 서버 IP: 138.185.96.120{"\n"}
+            SOLAPI 콘솔(console.solapi.com) → 계정 설정 → IP 보안 설정에서 위 IP를 허용하거나 IP 제한을 해제하세요.
+          </Text>
+        )}
+      </View>
+
+      {/* 관리자 휴대폰 번호 설정 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📱 본사 관리자 휴대폰 번호</Text>
+        <Text style={{ fontSize: 12, color: colors.muted }}>신규 접수 시 이 번호로 SMS가 자동 발송됩니다.</Text>
+        {phoneLoading ? <ActivityIndicator color="#FF6B35" /> : (
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <TextInput
+              style={{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: phoneEditing ? "#FF6B35" : colors.border, paddingHorizontal: 12, fontSize: 16, color: colors.foreground, backgroundColor: colors.background }}
+              value={adminPhone}
+              onChangeText={(v) => { setAdminPhone(formatPhone(v)); setPhoneEditing(true); }}
+              placeholder="010-0000-0000"
+              placeholderTextColor={colors.muted}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: phoneEditing ? "#FF6B35" : colors.border, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 }}
+              onPress={() => {
+                if (phoneEditing) setPhoneMutation.mutate({ phone: adminPhone });
+                else setPhoneEditing(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: phoneEditing ? "#fff" : colors.foreground, fontWeight: "700", fontSize: 14 }}>
+                {setPhoneMutation.isPending ? "저장중..." : phoneEditing ? "저장" : "수정"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 테스트 문자 발송 (1) - 관리자 번호로 단순 테스트 */}
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📨 관리자 번호 테스트</Text>
+        <Text style={{ fontSize: 12, color: colors.muted }}>등록된 관리자 번호로 테스트 문자를 발송합니다.</Text>
+        <TouchableOpacity
+          style={{ backgroundColor: testMutation.isPending ? "#ccc" : "#FF6B35", borderRadius: 10, padding: 14, alignItems: "center" }}
+          onPress={() => { setTestResult(null); testMutation.mutate(); }}
+          disabled={testMutation.isPending}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+            {testMutation.isPending ? "발송 중..." : "테스트 문자 발송"}
+          </Text>
+        </TouchableOpacity>
+        {testResult && (
+          <View style={{ backgroundColor: testResult.success ? "#F0FDF4" : "#FEF2F2", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: testResult.success ? "#22C55E" : "#EF4444" }}>
+            <Text style={{ fontWeight: "700", color: testResult.success ? "#22C55E" : "#EF4444", fontSize: 14 }}>
+              {testResult.success ? "✅ 발송 성공!" : `❌ 발송 실패`}
+            </Text>
+            {!testResult.success && testResult.error && (
+              <Text style={{ color: "#EF4444", fontSize: 13, marginTop: 4 }}>실패 원인: {testResult.error}</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* 테스트 문자 발송 (2) - 고장접수 시뮬레이션 (고객+관리자 동시 발송) */}
+      <View style={{ backgroundColor: "#FFF7ED", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#FDBA74", gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: "#C2410C" }}>🔧 고장접수 SMS 시뮬레이션</Text>
+        <Text style={{ fontSize: 12, color: "#9A3412" }}>실제 고장접수 시 발송되는 문자를 시뮬레이션합니다.{"\n"}고객 번호로 고객용 SMS, 관리자 번호로 관리자용 SMS를 동시 발송합니다.</Text>
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: "#9A3412" }}>고객 테스트 수신 번호</Text>
+          <TextInput
+            style={{ height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: "#FDBA74", paddingHorizontal: 12, fontSize: 16, color: colors.foreground, backgroundColor: colors.background }}
+            value={repairTestPhone}
+            onChangeText={(v) => setRepairTestPhone(formatPhone(v))}
+            placeholder="010-0000-0000 (고객 테스트 번호)"
+            placeholderTextColor={colors.muted}
+            keyboardType="phone-pad"
+          />
+        </View>
+        <TouchableOpacity
+          style={{ backgroundColor: repairTestMutation.isPending ? "#ccc" : "#EA580C", borderRadius: 10, padding: 14, alignItems: "center" }}
+          onPress={() => {
+            if (!repairTestPhone || repairTestPhone.replace(/[^0-9]/g, "").length < 9) {
+              Alert.alert("입력 오류", "고객 테스트 번호를 입력해 주세요.");
+              return;
+            }
+            setRepairTestResult(null);
+            repairTestMutation.mutate({ customerPhone: repairTestPhone });
+          }}
+          disabled={repairTestMutation.isPending}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+            {repairTestMutation.isPending ? "발송 중..." : "🔧 고장접수 SMS 시뮬레이션 실행"}
+          </Text>
+        </TouchableOpacity>
+        {repairTestResult && (
+          <View style={{ gap: 8 }}>
+            {/* 고객 SMS 결과 */}
+            <View style={{
+              backgroundColor: repairTestResult.customerResult?.result === "SUCCESS" ? "#F0FDF4" : "#FEF2F2",
+              borderRadius: 10, padding: 12, borderWidth: 1,
+              borderColor: repairTestResult.customerResult?.result === "SUCCESS" ? "#22C55E" : "#EF4444"
+            }}>
+              <Text style={{ fontWeight: "700", fontSize: 13, color: repairTestResult.customerResult?.result === "SUCCESS" ? "#22C55E" : "#EF4444" }}>
+                고객 SMS: {repairTestResult.customerResult?.result === "SUCCESS" ? "✅ 발송 성공" : "❌ 발송 실패"}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>수신: {repairTestResult.customerResult?.phone}</Text>
+              {repairTestResult.customerResult?.error && (
+                <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>실패 원인: {repairTestResult.customerResult.error}</Text>
+              )}
+            </View>
+            {/* 관리자 SMS 결과 */}
+            {repairTestResult.adminResult ? (
+              <View style={{
+                backgroundColor: repairTestResult.adminResult.result === "SUCCESS" ? "#F0FDF4" : "#FEF2F2",
+                borderRadius: 10, padding: 12, borderWidth: 1,
+                borderColor: repairTestResult.adminResult.result === "SUCCESS" ? "#22C55E" : "#EF4444"
+              }}>
+                <Text style={{ fontWeight: "700", fontSize: 13, color: repairTestResult.adminResult.result === "SUCCESS" ? "#22C55E" : "#EF4444" }}>
+                  관리자 SMS: {repairTestResult.adminResult.result === "SUCCESS" ? "✅ 발송 성공" : "❌ 발송 실패"}
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>수신: {repairTestResult.adminResult.phone}</Text>
+                {repairTestResult.adminResult.error && (
+                  <Text style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>실패 원인: {repairTestResult.adminResult.error}</Text>
+                )}
+              </View>
+            ) : (
+              <View style={{ backgroundColor: "#FEF9C3", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#FDE047" }}>
+                <Text style={{ fontSize: 12, color: "#92400E" }}>⚠️ 관리자 SMS: 관리자 번호가 설정되지 않아 발송되지 않았습니다. 위의 관리자 번호를 먼저 등록해 주세요.</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* 문자 발송 이력 */}
+      <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>📊 문자 발송 이력</Text>
+      {logsLoading ? <ActivityIndicator color="#FF6B35" /> : logs.length === 0 ? (
+        <Text style={{ color: colors.muted, textAlign: "center", padding: 16 }}>발송 이력이 없습니다.</Text>
+      ) : (
+        logs.slice(0, 50).map((log, i) => (
+          <View key={log.id ?? i} style={{ backgroundColor: colors.surface, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 4 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                <View style={{ backgroundColor: (LOG_RESULT_COLOR[log.result ?? ""] ?? "#6B7280") + "20", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: LOG_RESULT_COLOR[log.result ?? ""] ?? "#6B7280" }}>{log.result ?? "-"}</Text>
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground }}>{log.messageType}</Text>
+              </View>
+              <Text style={{ fontSize: 11, color: colors.muted }}>{log.createdAt ? new Date(log.createdAt).toLocaleString("ko-KR") : ""}</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: colors.muted }}>수신: {log.phoneNumber}</Text>
+            {log.errorMessage && (
+              <Text style={{ fontSize: 12, color: "#EF4444" }}>오류: {log.errorMessage}</Text>
+            )}
+          </View>
+        ))
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = (colors: any, isWide: boolean) => StyleSheet.create({
+  layout: { flex: 1, flexDirection: isWide ? "row" : "column" },
+  sidebar: { width: 220, backgroundColor: "#1A1A2E", paddingTop: 20 },
+  sidebarHeader: { padding: 20, paddingBottom: 24, borderBottomWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
+  sidebarTitle: { fontSize: 16, fontWeight: "800", color: "#FF6B35" },
+  sidebarSub: { fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 },
+  sidebarItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
+  sidebarItemActive: { backgroundColor: "rgba(255,107,53,0.15)", borderRightWidth: 3, borderRightColor: "#FF6B35" },
+  sidebarIcon: { fontSize: 18 },
+  sidebarLabel: { fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: "600" },
+  sidebarLabelActive: { color: "#FF6B35" },
+  tabRow: { maxHeight: 56, backgroundColor: colors.surface, borderBottomWidth: 1, borderColor: colors.border },
+  tabContent: { paddingHorizontal: 8, alignItems: "center", gap: 4 },
+  tabItem: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 4 },
+  tabItemActive: { backgroundColor: "#FF6B35" },
+  tabIcon: { fontSize: 14 },
+  tabLabel: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  tabLabelActive: { color: "#fff" },
+  content: { flex: 1 },
+});

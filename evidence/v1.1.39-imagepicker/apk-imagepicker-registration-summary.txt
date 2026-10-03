@@ -1,0 +1,3 @@
+imagepicker_module_occurrences=39
+expo_modules_package_list_occurrences=4
+generated_package_list_reference=38:      expo.modules.imagepicker.ImagePickerModule.class,

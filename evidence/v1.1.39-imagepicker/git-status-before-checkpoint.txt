@@ -1,0 +1,7 @@
+ [31mM[m app.config.ts
+ [31mM[m app/work-report.tsx
+ [31mM[m package.json
+ [31mM[m pnpm-lock.yaml
+ [31mM[m todo.md
+[31m??[m evidence/v1.1.39-imagepicker/
+[31m??[m tests/imagepicker-screen-contract.verify.mjs

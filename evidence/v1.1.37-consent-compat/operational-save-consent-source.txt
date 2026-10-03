@@ -1,0 +1,25 @@
+1949-      .query(async ({ input }) => {
+1950-        const consent = await db.getLocationConsent(input.technicianId);
+1951-        return { hasConsented: !!consent };
+1952-      }),
+1953-
+1954-    // 동의 저장
+1955:    saveConsent: publicProcedure
+1956-      .input(z.object({ technicianId: z.number() }))
+1957-      .mutation(async ({ input }) => {
+1958-        await db.createLocationConsent(input.technicianId);
+1959-        return { success: true };
+1960-      }),
+1961-
+1962-    // 위치 세션 시작 (기사가 "고객 집으로 출발" 누를 때)
+1963-    startTracking: publicProcedure
+1964-      .input(z.object({
+1965-        requestId: z.number(),
+1966-        technicianId: z.number(),
+1967-        technicianName: z.string(),
+1968-        technicianPhone: z.string().optional(),
+1969-        customerName: z.string(),
+1970-        customerPhone: z.string(),
+1971-        customerAddress: z.string(),
+1972-        customerLat: z.number().optional(),
+1973-        customerLng: z.number().optional(),

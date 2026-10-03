@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "appId": "driver",
+  "versionName": "1.1.43",
+  "versionCode": 43,
+  "minSupportedVersionCode": 1,
+  "sha256": "71184600b1a9290a8ec6bed195d0333e7fd3ed0b09e4bad671d4daf96f4d2ac5",
+  "fileSize": 94077422,
+  "sourceSha": "0f0b6763d01142210e9e97cd06eae1464fa95ae5",
+  "releaseNotes": "운영 위치 전송 Bearer 인증 보완. 기존 앱을 삭제하지 않고 업데이트 설치하십시오.",
+  "publishedAt": "2026-09-15T03:39:31.000Z"
+}

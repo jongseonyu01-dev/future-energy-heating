@@ -1,0 +1,48 @@
+[1;37m{[m
+  [1;34m"assets"[m[1;37m:[m [1;37m[[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/563530979"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/vnd.android.package-archive"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-14T14:12:20Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:5cb1a2cf1274f450d923977a46ec0c7bbd9ba264b176e00f05731e331670b086"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hlszj"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m""[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"future-energy-heating.apk"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 94025225[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-14T14:12:28Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.42-42/future-energy-heating.apk"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/563512750"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"application/vnd.android.package-archive"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-14T14:02:42Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:5cb1a2cf1274f450d923977a46ec0c7bbd9ba264b176e00f05731e331670b086"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hloWu"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m"future-energy-heating.apk"[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"futureenergytech-v1.1.42-code42.apk"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 94025225[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-14T14:02:50Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.42-42/futureenergytech-v1.1.42-code42.apk"[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"apiUrl"[m[1;37m:[m [32m"https://api.github.com/repos/jongseonyu01-dev/future-energy-heating/releases/assets/563512747"[m[1;37m,[m
+      [1;34m"contentType"[m[1;37m:[m [32m"text/plain; charset=utf-8"[m[1;37m,[m
+      [1;34m"createdAt"[m[1;37m:[m [32m"2026-09-14T14:02:42Z"[m[1;37m,[m
+      [1;34m"digest"[m[1;37m:[m [32m"sha256:8a0571c384f8ef773ef7ae7a11b8fce805d9817406342b2dac0a42c48527a11a"[m[1;37m,[m
+      [1;34m"downloadCount"[m[1;37m:[m 0[1;37m,[m
+      [1;34m"id"[m[1;37m:[m [32m"RA_kwDOTADPXc4hloWr"[m[1;37m,[m
+      [1;34m"label"[m[1;37m:[m [32m"SHA256SUMS.txt"[m[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"SHA256SUMS.txt"[m[1;37m,[m
+      [1;34m"size"[m[1;37m:[m 102[1;37m,[m
+      [1;34m"state"[m[1;37m:[m [32m"uploaded"[m[1;37m,[m
+      [1;34m"updatedAt"[m[1;37m:[m [32m"2026-09-14T14:02:42Z"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://github.com/jongseonyu01-dev/future-energy-heating/releases/download/android-v1.1.42-42/SHA256SUMS.txt"[m
+    [1;37m}[m
+  [1;37m][m[1;37m,[m
+  [1;34m"body"[m[1;37m:[m [32m"{\n  \"schemaVersion\": 1,\n  \"appId\": \"driver\",\n  \"versionName\": \"1.1.42\",\n  \"versionCode\": 42,\n  \"minSupportedVersionCode\": 28,\n  \"fileSize\": 94025225,\n  \"sha256\": \"5cb1a2cf1274f450d923977a46ec0c7bbd9ba264b176e00f05731e331670b086\",\n  \"sourceSha\": \"7c0ee02de77e5d2150ce730ab75f634c96744710\",\n  \"releaseNotes\": \"기사 자동견적 구성·수량 입력 가독성·현장 사진 모듈 안정성 보완\",\n  \"publishedAt\": \"2026-09-14T14:03:22Z\"\n}\n"[m[1;37m,[m
+  [1;34m"tagName"[m[1;37m:[m [32m"android-v1.1.42-42"[m
+[1;37m}[m

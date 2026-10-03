@@ -1,0 +1,147 @@
+
+{
+  name: [32m'퓨처에너지테크'[39m,
+  slug: [32m'future-energy-heating'[39m,
+  owner: [32m'futureenergytech'[39m,
+  version: [32m'1.1.8'[39m,
+  orientation: [32m'portrait'[39m,
+  icon: [32m'./assets/images/icon.png'[39m,
+  scheme: [32m'manusheatingcare'[39m,
+  userInterfaceStyle: [32m'automatic'[39m,
+  newArchEnabled: [33mtrue[39m,
+  plugins: [
+    [32m'expo-router'[39m,
+    [
+      [32m'expo-location'[39m,
+      {
+        locationAlwaysAndWhenInUsePermission: [32m'퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.'[39m,
+        isIosBackgroundLocationEnabled: [33mtrue[39m,
+        isAndroidBackgroundLocationEnabled: [33mtrue[39m
+      }
+    ],
+    [
+      [32m'expo-audio'[39m,
+      {
+        microphonePermission: [32m'Allow $(PRODUCT_NAME) to access your microphone.'[39m
+      }
+    ],
+    [
+      [32m'expo-video'[39m,
+      {
+        supportsBackgroundPlayback: [33mtrue[39m,
+        supportsPictureInPicture: [33mtrue[39m
+      }
+    ],
+    [
+      [32m'expo-splash-screen'[39m,
+      {
+        image: [32m'./assets/images/splash-icon.png'[39m,
+        imageWidth: [33m200[39m,
+        resizeMode: [32m'contain'[39m,
+        backgroundColor: [32m'#ffffff'[39m,
+        dark: {
+          backgroundColor: [32m'#000000'[39m
+        }
+      }
+    ],
+    [
+      [32m'expo-image-picker'[39m,
+      {
+        photosPermission: [32m'$(PRODUCT_NAME)에서 고장 사진을 첨부하기 위해 사진 접근 권한이 필요합니다.'[39m
+      }
+    ],
+    [
+      [32m'expo-build-properties'[39m,
+      {
+        android: {
+          minSdkVersion: [33m24[39m
+        }
+      }
+    ]
+  ],
+  description: [90mundefined[39m,
+  sdkVersion: [32m'54.0.0'[39m,
+  platforms: [
+    [32m'ios'[39m,
+    [32m'android'[39m,
+    [32m'web'[39m
+  ],
+  ios: {
+    supportsTablet: [33mtrue[39m,
+    buildNumber: [32m'8'[39m,
+    bundleIdentifier: [32m'com.futureenergy.heatingcare'[39m,
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: [33mfalse[39m,
+      NSLocationWhenInUseUsageDescription: [32m'기사 방문 중 고객에게 위치를 공유하기 위해 위치 접근 권한이 필요합니다.'[39m,
+      NSLocationAlwaysAndWhenInUseUsageDescription: [32m'출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.'[39m,
+      NSLocationAlwaysUsageDescription: [32m'출발 버튼을 누를 때 고객에게 기사 위치를 실시간으로 공유합니다.'[39m,
+      NSCameraUsageDescription: [32m'고장 사진 첨부를 위해 카메라 접근 권한이 필요합니다.'[39m,
+      NSPhotoLibraryUsageDescription: [32m'고장 사진 첨부를 위해 사진 접근 권한이 필요합니다.'[39m,
+      NSPhotoLibraryAddUsageDescription: [32m'작업 완료 사진을 저장하기 위해 사진 저장 권한이 필요합니다.'[39m,
+      NSMicrophoneUsageDescription: [32m'음성 메모 기능을 위해 마이크 접근 권한이 필요합니다.'[39m
+    }
+  },
+  android: {
+    versionCode: [33m19[39m,
+    allowBackup: [33mfalse[39m,
+    edgeToEdgeEnabled: [33mtrue[39m,
+    predictiveBackGestureEnabled: [33mfalse[39m,
+    package: [32m'com.futureenergy.heatingcare'[39m,
+    permissions: [
+      [32m'android.permission.POST_NOTIFICATIONS'[39m,
+      [32m'android.permission.ACCESS_FINE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_COARSE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_BACKGROUND_LOCATION'[39m,
+      [32m'android.permission.FOREGROUND_SERVICE'[39m,
+      [32m'android.permission.FOREGROUND_SERVICE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_COARSE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_FINE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_BACKGROUND_LOCATION'[39m,
+      [32m'android.permission.FOREGROUND_SERVICE'[39m,
+      [32m'android.permission.FOREGROUND_SERVICE_LOCATION'[39m,
+      [32m'android.permission.RECORD_AUDIO'[39m,
+      [32m'android.permission.MODIFY_AUDIO_SETTINGS'[39m
+    ],
+    intentFilters: [
+      {
+        action: [32m'VIEW'[39m,
+        autoVerify: [33mtrue[39m,
+        data: [
+          {
+            scheme: [32m'manusheatingcare'[39m,
+            host: [32m'*'[39m
+          }
+        ],
+        category: [
+          [32m'BROWSABLE'[39m,
+          [32m'DEFAULT'[39m
+        ]
+      }
+    ],
+    adaptiveIcon: {
+      backgroundColor: [32m'#E6F4FE'[39m,
+      foregroundImage: [32m'./assets/images/android-icon-foreground.png'[39m,
+      backgroundImage: [32m'./assets/images/android-icon-background.png'[39m,
+      monochromeImage: [32m'./assets/images/android-icon-monochrome.png'[39m
+    }
+  },
+  web: {
+    bundler: [32m'metro'[39m,
+    output: [32m'static'[39m,
+    favicon: [32m'./assets/images/favicon.png'[39m
+  },
+  experiments: {
+    typedRoutes: [33mtrue[39m,
+    reactCompiler: [33mtrue[39m
+  },
+  extra: {
+    eas: {
+      projectId: [32m'd2a96663-3c56-4836-ab5a-1ce95421962c'[39m
+    },
+    router: {}
+  },
+  androidStatusBar: {
+    backgroundColor: [32m'#ffffff'[39m
+  }
+}
+

@@ -1,0 +1,739 @@
+import {
+  boolean,
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  decimal,
+} from "drizzle-orm/mysql-core";
+
+// ─── 사용자 테이블 (기본 제공) ──────────────────────────────────
+export const users = mysqlTable("users", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  name: text("name"),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+});
+
+// ─── 앱 권한 (4단계) ────────────────────────────────────────────
+// 별도 테이블로 관리하여 users 테이블을 건드리지 않음
+export const appRoles = mysqlTable("app_roles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(), // users.id
+  appRole: mysqlEnum("appRole", [
+    "customer",    // 고객
+    "technician",  // 현장 기사
+    "branch_manager", // 지사장
+    "hq_admin",    // 본사 관리자
+  ]).notNull().default("customer"),
+  // 비밀번호 기반 로그인 (Manus OAuth 미사용 시)
+  loginId: varchar("loginId", { length: 64 }),
+  passwordHash: varchar("passwordHash", { length: 128 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  name: varchar("name", { length: 50 }),
+  branchId: int("branchId"),
+  mustChangePassword: boolean("mustChangePassword").default(false).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 지사 테이블 ─────────────────────────────────────────────────
+export const branches = mysqlTable("branches", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),        // 예: 서울 강남지사
+  code: varchar("code", { length: 20 }).notNull().unique(), // 예: GN
+  region: varchar("region", { length: 100 }).notNull(),    // 예: 서울 강남구, 서초구
+  managerName: varchar("managerName", { length: 50 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  address: varchar("address", { length: 200 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  // 지사장 userId (app_roles.userId)
+  managerUserId: int("managerUserId"),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 지역 → 지사 매핑 테이블 ────────────────────────────────────
+// 고객 주소의 키워드(시/구/동)와 지사를 연결
+export const regionMappings = mysqlTable("region_mappings", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull(), // branches.id
+  keyword: varchar("keyword", { length: 100 }).notNull(), // 예: "강남구", "서초구"
+  priority: int("priority").default(0).notNull(), // 높을수록 우선
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 처리 상태 enum ──────────────────────────────────────────────
+export const repairStatusEnum = mysqlEnum("status", [
+  "신규접수",
+  "기사배정대기",
+  "방문예정",
+  "작업진행중",
+  "견적승인대기",
+  "작업완료",
+  "재방문필요",
+]);
+
+// ─── 증상 유형 enum ──────────────────────────────────────────────
+export const symptomEnum = mysqlEnum("symptom", [
+  "집전체가춥다",
+  "방일부만춥다",
+  "분배기에서물이샌다",
+  "온도조절기가작동하지않는다",
+  "난방비가많이나온다",
+  "배관청소가필요하다",
+  "기타문의",
+]);
+
+// ─── 접수 유형 enum ──────────────────────────────────────────────
+export const requestTypeEnum = mysqlEnum("requestType", [
+  "난방고장",
+  "배관청소",
+]);
+
+// ─── 난방 접수 테이블 ────────────────────────────────────────────
+export const repairRequests = mysqlTable("repair_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  requestNumber: varchar("requestNumber", { length: 30 }).notNull().unique(),
+  // 지사 배정 (null = 본사 직접 관리)
+  branchId: int("branchId"),
+  // 고객 정보
+  customerName: varchar("customerName", { length: 50 }).notNull(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  // 단계형 주소 (시/도 > 시/군/구 > 동/읍/면 > 아파트)
+  sido: varchar("sido", { length: 30 }),
+  sigungu: varchar("sigungu", { length: 40 }),
+  eupmyeondong: varchar("eupmyeondong", { length: 40 }),
+  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
+  dong: varchar("dong", { length: 20 }).notNull(),
+  ho: varchar("ho", { length: 20 }).notNull(),
+  // 네비게이션 목적지용 아파트 대표 도로명 주소 (동/호수 제외)
+  roadAddress: varchar("roadAddress", { length: 200 }),
+  // 아파트 대표 좌표 (고객 지도 목적지 마커 / ETA 계산용)
+  customerLat: decimal("customerLat", { precision: 10, scale: 7 }),
+  customerLng: decimal("customerLng", { precision: 10, scale: 7 }),
+  // 접수 유형 및 증상
+  requestType: requestTypeEnum.notNull().default("난방고장"),
+  symptom: symptomEnum.notNull(),
+  // 복수 증상 선택 (JSON 배열, 예: ["집전체가춥다","기타문의"])
+  symptoms: text("symptoms"),
+  detailContent: text("detailContent"),
+  photoUrl: text("photoUrl"),
+  // 방문 희망 일정
+  preferredDate: varchar("preferredDate", { length: 20 }),
+  preferredTime: varchar("preferredTime", { length: 20 }),
+  // 처리 주체 (unassigned=미배정, headquarters=본사처리, branch=지사배정)
+  ownerType: mysqlEnum("ownerType", [
+    "unassigned",
+    "headquarters",
+    "branch",
+  ]).notNull().default("unassigned"),
+  // 처리 상태
+  status: mysqlEnum("status", [
+    "신규접수",
+    "본사배정",
+    "지사배정",
+    "기사배정대기",
+    "방문예정",
+    "기사확인대기",
+    "기사확인완료",
+    "출발",
+    "도착",
+    "공사중",
+    "작업진행중",
+    "견적승인대기",
+    "작업완료",
+    "공사완료",
+    "재방문필요",
+  ]).notNull().default("신규접수"),
+  // 배정된 기사 정보
+  technicianId: int("technicianId"),
+  technicianName: varchar("technicianName", { length: 50 }),
+  // 방문 확정 일정
+  scheduledDate: varchar("scheduledDate", { length: 20 }),
+  scheduledTime: varchar("scheduledTime", { length: 20 }),
+  // 관리자 메모
+  adminMemo: text("adminMemo"),
+  // 점검 결과
+  inspectionResult: text("inspectionResult"),
+  // 견적 금액
+  estimateAmount: decimal("estimateAmount", { precision: 12, scale: 2 }),
+  estimateSentAt: timestamp("estimateSentAt"),       // 고객에게 견적 전달 시각
+  estimateApprovedAt: timestamp("estimateApprovedAt"), // 고객 견적 승인 시각
+  // 워크플로우 13단계 (enum status와 별개로 세부 진행단계 추적)
+  workflowStage: mysqlEnum("workflowStage", [
+    "접수완료",
+    "지사배정",
+    "현장확인",
+    "견적작성",
+    "견적전달",
+    "견적승인",
+    "기사배정",
+    "일정확정",
+    "기사출발",
+    "기사도착",
+    "작업진행",
+    "작업완료",
+    "결제완료",
+    "후기요청",
+  ]).notNull().default("접수완료"),
+  // 결제 완료 / 후기 요청
+  paidAt: timestamp("paidAt"),
+  reviewRequestedAt: timestamp("reviewRequestedAt"),
+  // 일정 변경 사유 (희망일정과 확정일정이 다를 때 기록)
+  scheduleChangeReason: text("scheduleChangeReason"),
+  // 기사 확인 / 공사 시작 타임스탬프
+  technicianConfirmedAt: timestamp("technicianConfirmedAt"),
+  workStartedAt: timestamp("workStartedAt"),
+  // 작업 완료 정보
+  completedAt: timestamp("completedAt"),
+  completionMemo: text("completionMemo"),
+  // 긴급출동 여부
+  isUrgent: boolean("isUrgent").default(false).notNull(),
+  // 재방문 여부
+  needsRevisit: boolean("needsRevisit").default(false).notNull(),
+  revisitReason: text("revisitReason"),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
+  // 타임스탬프
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 기사 테이블 ─────────────────────────────────────────────────
+export const technicians = mysqlTable("technicians", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 50 }).notNull(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  specialty: varchar("specialty", { length: 100 }),
+  // 소속 지사 (null = 본사 직속)
+  branchId: int("branchId"),
+  // 앱 로그인 userId 연결
+  userId: int("userId"),
+  isActive: boolean("isActive").default(true).notNull(),
+  // soft delete
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 현장 점검표 테이블 ──────────────────────────────────────────
+export const workReports = mysqlTable("work_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId").notNull(), // repair_requests.id
+  technicianId: int("technicianId").notNull(),
+  // 점검 내용
+  checkItems: text("checkItems"),        // JSON 배열
+  usedMaterials: text("usedMaterials"),  // JSON 배열
+  beforePhotoUrl: text("beforePhotoUrl"),
+  afterPhotoUrl: text("afterPhotoUrl"),
+  // 고객 서명 (base64 또는 S3 URL)
+  customerSignatureUrl: text("customerSignatureUrl"),
+  workMemo: text("workMemo"),
+  // 작업 완료 여부
+  isCompleted: boolean("isCompleted").default(false).notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 앱 설정 테이블 ──────────────────────────────────────────────
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 64 }).notNull().unique(),
+  settingValue: text("settingValue"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 알림 발송 로그 테이블 ───────────────────────────────────────
+export const notificationLogs = mysqlTable("notification_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId"),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  channel: mysqlEnum("channel", ["SMS", "ALIMTALK"]).notNull().default("SMS"),
+  messageType: varchar("messageType", { length: 50 }),
+  content: text("content"),
+  result: mysqlEnum("result", ["SUCCESS", "FAILED", "SKIPPED", "REQUESTED"]).notNull().default("SKIPPED"),
+  errorMessage: text("errorMessage"),
+  // 알림톡 시도 후 문자로 대체 발송되었는지 여부
+  fallbackUsed: boolean("fallbackUsed").notNull().default(false),
+  // SMS 발송 상세 필드 (누수감지 등)
+  sensorUid: varchar("sensorUid", { length: 64 }),
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  provider: varchar("provider", { length: 20 }).default("solapi"),
+  groupId: varchar("groupId", { length: 100 }),
+  messageId: varchar("messageId", { length: 100 }),
+  sendStatus: varchar("sendStatus", { length: 20 }),
+  failReason: text("failReason"),
+  responsePayload: text("responsePayload"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 누수센서 테이블 ─────────────────────────────────────────────
+export const leakSensors = mysqlTable("leak_sensors", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorUid: varchar("sensorUid", { length: 64 }).notNull().unique(),
+  // 소속 지사
+  branchId: int("branchId"),
+  // 고객 정보
+  customerName: varchar("customerName", { length: 50 }).notNull(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
+  dong: varchar("dong", { length: 20 }).notNull(),
+  ho: varchar("ho", { length: 20 }).notNull(),
+  // 센서 정보
+  sensorName: varchar("sensorName", { length: 100 }).notNull(),
+  installLocation: varchar("installLocation", { length: 100 }).notNull(),
+  // 현재 상태
+  status: mysqlEnum("status", [
+    "정상",
+    "누수감지",
+    "배터리부족",
+    "통신끊김",
+    "점검필요",
+  ]).notNull().default("정상"),
+  batteryLevel: int("batteryLevel").default(100).notNull(),
+  lastCommAt: timestamp("lastCommAt").defaultNow().notNull(),
+  leakDetectedAt: timestamp("leakDetectedAt"),
+  isResolved: boolean("isResolved").default(true).notNull(),
+  technicianId: int("technicianId"),
+  technicianName: varchar("technicianName", { length: 50 }),
+  adminMemo: text("adminMemo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 센서 이벤트 로그 테이블 ────────────────────────────────────
+export const sensorEvents = mysqlTable("sensor_events", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorUid: varchar("sensorUid", { length: 64 }).notNull(),
+  leakDetected: boolean("leakDetected").default(false).notNull(),
+  batteryLevel: int("batteryLevel"),
+  reportedAt: timestamp("reportedAt").defaultNow().notNull(),
+  source: mysqlEnum("source", ["DEMO_TEST", "WEBHOOK"]).notNull().default("WEBHOOK"),
+  rawPayload: text("rawPayload"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 본사 공지사항 테이블 ────────────────────────────────────────
+export const notices = mysqlTable("notices", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  authorId: int("authorId").notNull(),
+  // null = 전체 공지, branchId = 특정 지사 공지
+  targetBranchId: int("targetBranchId"),
+  isPinned: boolean("isPinned").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 교육 자료 테이블 ────────────────────────────────────────────
+export const trainingMaterials = mysqlTable("training_materials", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content"),
+  fileUrl: text("fileUrl"),
+  category: varchar("category", { length: 50 }),
+  authorId: int("authorId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 자재 주문 테이블 ────────────────────────────────────────────
+export const materialOrders = mysqlTable("material_orders", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull(),
+  orderItems: text("orderItems").notNull(), // JSON 배열
+  status: mysqlEnum("status", ["신청", "승인", "발송", "완료", "반려"])
+    .notNull().default("신청"),
+  requestedBy: int("requestedBy").notNull(), // userId
+  approvedBy: int("approvedBy"),
+  memo: text("memo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 세대별 유량 설정 테이블 ─────────────────────────────────────
+export const flowRateSettings = mysqlTable("flow_rate_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorId: varchar("sensorId", { length: 64 }).notNull().unique(), // ESP32 sensorId
+  // 지사 배정
+  branchId: int("branchId"),
+  // 세대 정보
+  apartmentName: varchar("apartmentName", { length: 100 }).notNull(),
+  buildingNumber: varchar("buildingNumber", { length: 20 }).notNull(), // 동
+  roomNumber: varchar("roomNumber", { length: 20 }).notNull(),          // 호
+  // 기준 유량 설정
+  baseFlowRateLpm: decimal("baseFlowRateLpm", { precision: 6, scale: 2 }).notNull().default("5.50"),
+  warningRangePercent: int("warningRangePercent").notNull().default(30), // 기준 대비 ±30% 초과 시 경고
+  cautionRangePercent: int("cautionRangePercent").notNull().default(15), // 기준 대비 ±15% 초과 시 주의
+  alertDurationMinutes: int("alertDurationMinutes").notNull().default(10), // 10분 이상 지속 시 SMS
+  // 마지막 측정 데이터 (캐시)
+  lastFlowRateLpm: decimal("lastFlowRateLpm", { precision: 6, scale: 2 }),
+  lastSupplyPressure: decimal("lastSupplyPressure", { precision: 6, scale: 3 }),
+  lastReturnPressure: decimal("lastReturnPressure", { precision: 6, scale: 3 }),
+  lastDifferentialPressure: decimal("lastDifferentialPressure", { precision: 6, scale: 3 }),
+  lastMeasuredAt: timestamp("lastMeasuredAt"),
+  lastStatus: mysqlEnum("lastStatus", ["정상", "주의", "경고"]).default("정상"),
+  // 경고 추적 (10분 이상 이탈 감지용)
+  alertStartedAt: timestamp("alertStartedAt"),   // 이탈 시작 시각
+  alertSentAt: timestamp("alertSentAt"),          // 마지막 SMS 발송 시각
+  // 고객 연결 (전화번호)
+  customerId: varchar("customerId", { length: 20 }),
+  // 점검 처리 상태
+  inspectionStatus: mysqlEnum("inspectionStatus", ["미처리", "처리중", "처리완료"]).default("미처리"),
+  inspectionMemo: text("inspectionMemo"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 유량 측정 로그 테이블 ──────────────────────────────────────
+export const flowRateLogs = mysqlTable("flow_rate_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  sensorId: varchar("sensorId", { length: 64 }).notNull(),
+  branchId: int("branchId"),
+  apartmentName: varchar("apartmentName", { length: 100 }),
+  buildingNumber: varchar("buildingNumber", { length: 20 }),
+  roomNumber: varchar("roomNumber", { length: 20 }),
+  flowRateLpm: decimal("flowRateLpm", { precision: 6, scale: 2 }).notNull(),
+  supplyPressure: decimal("supplyPressure", { precision: 6, scale: 3 }),
+  returnPressure: decimal("returnPressure", { precision: 6, scale: 3 }),
+  differentialPressure: decimal("differentialPressure", { precision: 6, scale: 3 }),
+  measuredAt: timestamp("measuredAt").defaultNow().notNull(),
+  status: mysqlEnum("status", ["정상", "주의", "경고"]).notNull().default("정상"),
+  source: mysqlEnum("source", ["WEBHOOK", "DEMO"]).notNull().default("WEBHOOK"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 기사 위치 추적 세션 테이블 ─────────────────────────────────
+export const locationSessions = mysqlTable("location_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  // 방문 건 연결
+  requestId: int("requestId").notNull(),          // repair_requests.id
+  // 기사 정보
+  technicianId: int("technicianId").notNull(),    // technicians.id
+  technicianName: varchar("technicianName", { length: 50 }),
+  technicianPhone: varchar("technicianPhone", { length: 20 }),
+  // 고객 정보 (위치 확인 페이지 표시용)
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  customerAddress: varchar("customerAddress", { length: 200 }),
+  customerLat: decimal("customerLat", { precision: 10, scale: 7 }),
+  customerLng: decimal("customerLng", { precision: 10, scale: 7 }),
+  // 지사 정보
+  branchId: int("branchId"),
+  branchName: varchar("branchName", { length: 100 }),
+  // 고객용 전용 링크 토큰 (UUID)
+  trackingToken: varchar("trackingToken", { length: 64 }).notNull().unique(),
+  // 현재 위치 (마지막 업데이트)
+  currentLat: decimal("currentLat", { precision: 10, scale: 7 }),
+  currentLng: decimal("currentLng", { precision: 10, scale: 7 }),
+  currentUpdatedAt: timestamp("currentUpdatedAt"),
+  // 세션 상태
+  status: mysqlEnum("status", [
+    "이동중",    // 출발 후 이동 중
+    "도착완료",  // 기사가 도착 처리
+    "업무취소",  // 기사가 취소 처리
+    "만료",      // 시간 초과 자동 만료
+  ]).notNull().default("이동중"),
+  // 출발 시각 / 도착 시각
+  departedAt: timestamp("departedAt").defaultNow().notNull(),
+  arrivedAt: timestamp("arrivedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  // 링크 만료 시각 (출발 후 4시간)
+  expiresAt: timestamp("expiresAt").notNull(),
+  // SMS 발송 여부
+  smsSentAt: timestamp("smsSentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 위치 추적 동의 기록 테이블 ──────────────────────────────────
+export const locationConsents = mysqlTable("location_consents", {
+  id: int("id").autoincrement().primaryKey(),
+  technicianId: int("technicianId").notNull(),
+  consentedAt: timestamp("consentedAt").defaultNow().notNull(),
+  consentVersion: varchar("consentVersion", { length: 10 }).notNull().default("1.0"),
+  isActive: boolean("isActive").default(true).notNull(),
+});
+
+// ─── 견적서 테이블 (토큰 기반 고객 승인/거절) ──────────────────────
+export const estimates = mysqlTable("estimates", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId"),
+  estimateNumber: varchar("estimateNumber", { length: 40 }),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  title: varchar("title", { length: 200 }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  description: text("description"),
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  fileUrl: text("fileUrl"),
+  fileName: varchar("fileName", { length: 255 }),
+  fileType: varchar("fileType", { length: 100 }),
+  fileSize: int("fileSize"),
+  ownerType: mysqlEnum("ownerType", ["unassigned", "headquarters", "branch"]).notNull().default("headquarters"),
+  branchId: int("branchId"),
+  branchName: varchar("branchName", { length: 100 }),
+  status: mysqlEnum("status", ["pending", "viewed", "approved", "rejected", "expired"]).notNull().default("pending"),
+  viewedAt: timestamp("viewedAt"),
+  addressFull: text("addressFull"),
+  sido: varchar("sido", { length: 50 }),
+  sigungu: varchar("sigungu", { length: 50 }),
+  eupmyeondong: varchar("eupmyeondong", { length: 50 }),
+  buildingName: varchar("buildingName", { length: 100 }),
+  buildingDong: varchar("buildingDong", { length: 20 }),
+  buildingHo: varchar("buildingHo", { length: 20 }),
+  visitDate: varchar("visitDate", { length: 20 }),
+  visitTime: varchar("visitTime", { length: 20 }),
+  requestMemo: text("requestMemo"),
+  orderId: int("orderId"),
+  rejectReason: text("rejectReason"),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+  validUntil: timestamp("validUntil").notNull(),
+  approvedAt: timestamp("approvedAt"),
+  rejectedAt: timestamp("rejectedAt"),
+  sentBy: int("sentBy"),
+  senderRole: varchar("senderRole", { length: 30 }),
+  // 기존 production 열: 기사 앱의 승인 전 보고 상태와 저장 당시 품목 snapshot.
+  // DB migration이 아니라 실제 열을 TypeScript mapping에만 반영한다.
+  sourceType: varchar("sourceType", { length: 40 }),
+  autoEstimateItems: text("autoEstimateItems"),
+  techRequestStatus: varchar("techRequestStatus", { length: 40 }),
+  techRequesterId: int("techRequesterId"),
+  techRequesterName: varchar("techRequesterName", { length: 100 }),
+  techRequestNote: text("techRequestNote"),
+  resendCount: int("resendCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── 견적/메시지 발송 기록 ───────────────────────────────
+export const estimateMessageLogs = mysqlTable("estimate_message_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  estimateId: int("estimateId"),
+  orderId: int("orderId"),
+  customerName: varchar("customerName", { length: 50 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  branchId: int("branchId"),
+  branchName: varchar("branchName", { length: 100 }),
+  senderRole: varchar("senderRole", { length: 30 }),
+  senderId: int("senderId"),
+  messageType: varchar("messageType", { length: 50 }).notNull(),
+  messageBody: text("messageBody"),
+  linkUrl: text("linkUrl"),
+  sendStatus: mysqlEnum("sendStatus", ["SUCCESS", "FAILED", "SKIPPED"]).notNull().default("SKIPPED"),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+});
+
+// ─── 휴대폰 인증코드 테이블 (고객 회원가입/비밀번호 재설정) ──────────
+export const phoneVerifications = mysqlTable("phone_verifications", {
+  id: int("id").autoincrement().primaryKey(),
+  phoneNumber: varchar("phoneNumber", { length: 20 }).notNull(),
+  code: varchar("code", { length: 6 }).notNull(),
+  purpose: varchar("purpose", { length: 20 }).notNull().default("signup"), // signup | reset
+  verified: boolean("verified").default(false).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 단가 항목 테이블 ───────────────────────────────────────────
+export const priceItems = mysqlTable("price_items", {
+  id: int("id").autoincrement().primaryKey(),
+  category: varchar("category", { length: 50 }).notNull(), // 분배기교체|밸브/배관|제어/조절|열량/계량|청소/점검|기타
+  name: varchar("name", { length: 100 }).notNull(),
+  stdPrice: int("stdPrice").notNull().default(0),   // 표준시공가
+  discPrice: int("discPrice").notNull().default(0), // 단체할인가
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 타입 내보내기 ───────────────────────────────────────────────
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+export type AppRole = typeof appRoles.$inferSelect;
+export type InsertAppRole = typeof appRoles.$inferInsert;
+export type PhoneVerification = typeof phoneVerifications.$inferSelect;
+export type InsertPhoneVerification = typeof phoneVerifications.$inferInsert;
+export type Branch = typeof branches.$inferSelect;
+export type InsertBranch = typeof branches.$inferInsert;
+export type RegionMapping = typeof regionMappings.$inferSelect;
+export type InsertRegionMapping = typeof regionMappings.$inferInsert;
+export type RepairRequest = typeof repairRequests.$inferSelect;
+export type InsertRepairRequest = typeof repairRequests.$inferInsert;
+export type Technician = typeof technicians.$inferSelect;
+export type InsertTechnician = typeof technicians.$inferInsert;
+export type WorkReport = typeof workReports.$inferSelect;
+export type InsertWorkReport = typeof workReports.$inferInsert;
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = typeof appSettings.$inferInsert;
+export type NotificationLog = typeof notificationLogs.$inferSelect;
+export type InsertNotificationLog = typeof notificationLogs.$inferInsert;
+export type LeakSensor = typeof leakSensors.$inferSelect;
+export type InsertLeakSensor = typeof leakSensors.$inferInsert;
+export type SensorEvent = typeof sensorEvents.$inferSelect;
+export type InsertSensorEvent = typeof sensorEvents.$inferInsert;
+export type Notice = typeof notices.$inferSelect;
+export type InsertNotice = typeof notices.$inferInsert;
+export type TrainingMaterial = typeof trainingMaterials.$inferSelect;
+export type InsertTrainingMaterial = typeof trainingMaterials.$inferInsert;
+export type MaterialOrder = typeof materialOrders.$inferSelect;
+export type InsertMaterialOrder = typeof materialOrders.$inferInsert;
+export type FlowRateSetting = typeof flowRateSettings.$inferSelect;
+export type InsertFlowRateSetting = typeof flowRateSettings.$inferInsert;
+export type FlowRateLog = typeof flowRateLogs.$inferSelect;
+export type InsertFlowRateLog = typeof flowRateLogs.$inferInsert;
+export type LocationSession = typeof locationSessions.$inferSelect;
+export type InsertLocationSession = typeof locationSessions.$inferInsert;
+export type LocationConsent = typeof locationConsents.$inferSelect;
+export type InsertLocationConsent = typeof locationConsents.$inferInsert;
+export type Estimate = typeof estimates.$inferSelect;
+export type InsertEstimate = typeof estimates.$inferInsert;
+export type EstimateMessageLog = typeof estimateMessageLogs.$inferSelect;
+export type InsertEstimateMessageLog = typeof estimateMessageLogs.$inferInsert;
+export type PriceItem = typeof priceItems.$inferSelect;
+export type InsertPriceItem = typeof priceItems.$inferInsert;
+
+// ─── 유량 이상 알림 이벤트 ────────────────────────────────────────────────────
+export const flowRateAlertEvents = mysqlTable("flow_rate_alert_events", {
+  id: int("id").primaryKey().autoincrement(),
+  sensorId: varchar("sensorId", { length: 64 }),
+  branchId: int("branchId"),
+  apartmentName: varchar("apartmentName", { length: 100 }),
+  buildingNumber: varchar("buildingNumber", { length: 20 }),
+  roomNumber: varchar("roomNumber", { length: 20 }),
+  meterType: mysqlEnum("meterType", ["적산열량계", "유량계"]),
+  registeredPyeong: decimal("registeredPyeong", { precision: 5, scale: 1 }),
+  alertType: mysqlEnum("alertType", ["저유량", "고유량", "통신끊김"]),
+  avgFlowRateLpm: decimal("avgFlowRateLpm", { precision: 6, scale: 2 }),
+  lowerLimitLpm: decimal("lowerLimitLpm", { precision: 6, scale: 2 }),
+  upperLimitLpm: decimal("upperLimitLpm", { precision: 6, scale: 2 }),
+  alertStartedAt: timestamp("alertStartedAt"),
+  smsSentAt: timestamp("smsSentAt"),
+  smsContent: text("smsContent"),
+  smsRecipient: varchar("smsRecipient", { length: 20 }),
+  normalReturnedAt: timestamp("normalReturnedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 업무 지시 (Job Orders) ───────────────────────────────────────────────────
+export const jobOrders = mysqlTable("job_orders", {
+  id: int("id").primaryKey().autoincrement(),
+  jobNo: varchar("jobNo", { length: 30 }),
+  receivedAt: timestamp("receivedAt"),
+  customerName: varchar("customerName", { length: 100 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  address: text("address"),
+  workType: varchar("workType", { length: 50 }),
+  urgency: varchar("urgency", { length: 20 }),
+  channel: varchar("channel", { length: 30 }),
+  branchName: varchar("branchName", { length: 100 }),
+  techName: varchar("techName", { length: 100 }),
+  visitDate: varchar("visitDate", { length: 10 }),
+  estimateAmount: int("estimateAmount"),
+  completeDate: varchar("completeDate", { length: 10 }),
+  billAmount: int("billAmount"),
+  payDate: varchar("payDate", { length: 10 }),
+  payAmount: int("payAmount"),
+  status: varchar("status", { length: 20 }),
+  memo: text("memo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── AS 이력 ──────────────────────────────────────────────────────────────────
+export const asRecords = mysqlTable("as_records", {
+  id: int("id").primaryKey().autoincrement(),
+  asNo: varchar("asNo", { length: 30 }),
+  origJobNo: varchar("origJobNo", { length: 30 }),
+  receivedAt: timestamp("receivedAt"),
+  customerName: varchar("customerName", { length: 100 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
+  symptom: text("symptom"),
+  techName: varchar("techName", { length: 100 }),
+  doneDate: varchar("doneDate", { length: 10 }),
+  status: varchar("status", { length: 20 }),
+  memo: text("memo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 일일 보고 ────────────────────────────────────────────────────────────────
+export const dailyReports = mysqlTable("daily_reports", {
+  id: int("id").primaryKey().autoincrement(),
+  reportDate: varchar("reportDate", { length: 10 }),
+  newRequests: int("newRequests"),
+  estIssued: int("estIssued"),
+  estApproved: int("estApproved"),
+  workPlanned: int("workPlanned"),
+  workDone: int("workDone"),
+  newAs: int("newAs"),
+  delayed: int("delayed"),
+  billed: int("billed"),
+  collected: int("collected"),
+  unpaid: int("unpaid"),
+  orderNeeded: text("orderNeeded"),
+  exceptions: text("exceptions"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 코드 설정 ────────────────────────────────────────────────────────────────
+export const codeSettings = mysqlTable("code_settings", {
+  id: int("id").primaryKey().autoincrement(),
+  codeType: varchar("codeType", { length: 50 }).notNull(),
+  codeValue: varchar("codeValue", { length: 100 }).notNull(),
+  sortOrder: int("sortOrder").default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── 지사 신청 ────────────────────────────────────────────────────────────────
+export const branchApplications = mysqlTable("branch_applications", {
+  id: int("id").primaryKey().autoincrement(),
+  applicantName: varchar("applicantName", { length: 50 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  consultStatus: mysqlEnum("consultStatus", ["신규접수", "연락완료", "상담진행", "보류", "계약완료"]).default("신규접수"),
+  adminMemo: text("adminMemo"),
+  privacyAgreed: boolean("privacyAgreed").default(false),
+  applyChannel: varchar("applyChannel", { length: 50 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── 추가 타입 내보내기 ────────────────────────────────────────────────────────
+export type FlowRateAlertEvent = typeof flowRateAlertEvents.$inferSelect;
+export type InsertFlowRateAlertEvent = typeof flowRateAlertEvents.$inferInsert;
+export type JobOrder = typeof jobOrders.$inferSelect;
+export type InsertJobOrder = typeof jobOrders.$inferInsert;
+export type AsRecord = typeof asRecords.$inferSelect;
+export type InsertAsRecord = typeof asRecords.$inferInsert;
+export type DailyReport = typeof dailyReports.$inferSelect;
+export type InsertDailyReport = typeof dailyReports.$inferInsert;
+export type CodeSetting = typeof codeSettings.$inferSelect;
+export type InsertCodeSetting = typeof codeSettings.$inferInsert;
+export type BranchApplication = typeof branchApplications.$inferSelect;
+export type InsertBranchApplication = typeof branchApplications.$inferInsert;

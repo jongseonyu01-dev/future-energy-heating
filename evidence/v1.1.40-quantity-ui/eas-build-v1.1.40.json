@@ -1,0 +1,48 @@
+{
+  "id": "dd8acff2-b1d5-44c3-8b16-22d14b042b0c",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/AojcqgsG-lYMdfRddqr5XVVCkSCQKD8Ew2sys8DAf0E.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/AojcqgsG-lYMdfRddqr5XVVCkSCQKD8Ew2sys8DAf0E.apk"
+  },
+  "fingerprint": {
+    "id": "01a09f52-113b-7321-b68f-7ddb81226693",
+    "hash": "44046f62a8a2084c42268ee3f1119a24018cddaf"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/dd8acff2-b1d5-44c3-8b16-22d14b042b0c/2026-09-14T09%3A49%3A12Z-6f06a2fb-c133-4190-8652-bd18114cc868.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T095536Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=84b6094551dd27749fefe2da8317479a1f57e2d5133df1d5a491821b9f6618e619236586ad2f01259b19c476e56389ec4857412c7afd9966e09639eca49c25e83deeb8832568a37d09c36c5e2c09c6ea3c76f6f4e86f87cbb275660dcff80479b6a331f5cb5d80d30cc3f25a600d504d0dada0a9eab1f99598051363683961e01ef0aa4dc530cb706890ae251e8d38384047834642ab991c98aafd3013c22ce450e4a2c27f72de29e482d99272a2d3f6cff6f493266a58808ef97e6710e7d1814485d694be89bd178c65f08e10ae228c2a0bbb5c19d9f3e59b6c1343bce5e907b1b56485182eb0dcc4ab76f04445b7e7c155f87befa87f42588cff5c26441b92"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.40",
+  "appBuildVersion": "40",
+  "gitCommitHash": "ea3f22e6c5fc97bdb34feab85657e1a3f14400c4",
+  "gitCommitMessage": "Checkpoint: code 39 ImagePicker native registration 보완은 유지하면서 app/tech-estimate.tsx의 수량 컨트롤만 조정했다. 수량 TextInput은 64pt(최소 60pt) × 48pt(최소 48pt), 18pt/800 숫자, paddingVertical 0, includeFontPadding false, textAlign/textAlignVertical center로 변경했다. ± 버튼은 48×48pt, 22pt/900 기호와 130% 확대 글꼴을 위한 lineHeight 여유를 적용했다. engine 기반 수량 변경 및 actor/request scoped 초안 저장 코드는 유지했다. static quantity contract PASS, 130%에서 1·2·3·7·10 기하 검증 PASS, engine/actor Vitest 25 PASS, ImagePicker screen contract 8 PASS, Android Expo export PASS. version 1.1.40 / Android code 40 / iOS build 40, package com.futureenergy.heatingcare, review profile의 단일 합성 API와 기존 remote signing key를 유지한다. 전체 TypeScript는 기존 88 오류가 남아 무오류 주장하지 않는다. Android 실기기 화면·수량 입력·ImagePicker 사진 첨부는 아직 미검증이며, 운영 게시·홈페이지 견적/단가·운영 고객/SMS·TestFlight 제출은 보류한다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-14T09:49:10.799Z",
+  "updatedAt": "2026-09-14T10:02:58.760Z",
+  "completedAt": "2026-09-14T10:02:58.571Z",
+  "expirationDate": "2026-09-28T09:49:10.833Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 406,
+    "buildQueueTime": 6106,
+    "buildDuration": 821260
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "id": "98ebaf04-c626-48de-bdcf-f1fba8e78ab7",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/u1WiIkZgvR7yg113CbsW6e_x8WPGhIRvU7kMmP2bbxw.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/u1WiIkZgvR7yg113CbsW6e_x8WPGhIRvU7kMmP2bbxw.apk"
+  },
+  "fingerprint": {
+    "id": "01a0988a-720a-7d3a-8ec5-c7f1f87063d6",
+    "hash": "2118964257f3fcc36af3aa9717626ea92162ac2d"
+  },
+  "initiatingActor": {
+    "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+    "displayName": "futureenergytech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/98ebaf04-c626-48de-bdcf-f1fba8e78ab7/2026-09-13T02%3A13%3A26Z-25b15aa7-d0a9-4f19-8596-bc6621c0afd6.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T023343Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=38c4b5bd2fcbeee46f0d5ac46cd587e070acec7a786995bab5d5eb1ae594337b79efefbe59aa6846e69104863af9b1fe8f20168a0fa0a35159c55fe25bafcc475ba6643a6af584445191b8d13c5c5d2a2810622b8c16fa5d65088b0ab26a60caf2be1a7039f08218199e45908b3a46f6aab5bcb005d281ea839f3d0d1f92b0b254b9ee9f8f153f6887997a81d44c5f6c79f5b1e930f6bdb0ed985c56f37e9cc0aea0e5364f7405c6fa04c184bd8944476e4ef6d05271bc5581b3f98baeadfec4870ad1d68f4cc8d85e1a3c38d618eee78b1b18d553bee4c17fa4742d0a3903f1770b7d04cd47277b825dfb5972689257598d479499c01a0a00bf0428b982aa0d"
+  ],
+  "app": {
+    "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+    "name": "future-energy-heating",
+    "slug": "future-energy-heating",
+    "ownerAccount": {
+      "id": "719e490d-4a27-44cf-b672-c87839702689",
+      "name": "futureenergytech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "review",
+  "appIdentifier": "com.futureenergy.heatingcare",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.1.33",
+  "appBuildVersion": "33",
+  "gitCommitHash": "fd0fb175a3d6b2d66b1d2f1ad87a300ecfcf253c",
+  "gitCommitMessage": "Checkpoint: Codex 재검수 5차 build 준비: Android versionCode 33, iOS buildNumber 33, version 1.1.33을 기존 package/bundle ID에 적용하고 review/review-store profile을 새 단일 합성 preview API로 교체했다. 기존 review preview 예외는 재보호하고 신규 URL 한 건만 예외로 등록했다. Expo config에서 package/bundle ID `com.futureenergy.heatingcare`, Android code 33, iOS build 33을 확인했다. 운영 게시·고객 문자·TestFlight 제출·실기기 시험은 미실시다.",
+  "priority": "NORMAL",
+  "createdAt": "2026-09-13T02:13:25.090Z",
+  "updatedAt": "2026-09-13T02:29:28.407Z",
+  "completedAt": "2026-09-13T02:29:28.234Z",
+  "expirationDate": "2026-09-27T02:13:25.121Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 1025,
+    "buildQueueTime": 4524,
+    "buildDuration": 957595
+  }
+}

@@ -1,0 +1,146 @@
+[
+  {
+    "id": "57fa4b32-42a8-4d1f-80e3-438f402faaa3",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/hSWj8WsWkhly4v728L8kCzBaVdbBrm4nTTkTibyuAmo.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/hSWj8WsWkhly4v728L8kCzBaVdbBrm4nTTkTibyuAmo.apk"
+    },
+    "fingerprint": {
+      "id": "01a09f94-273c-7e9c-8cea-ddc7c25fc013",
+      "hash": "7ec6dfe4c525cef4fa4ff3fc3070e71ec510fdb2"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/57fa4b32-42a8-4d1f-80e3-438f402faaa3/2026-09-14T11%3A01%3A28Z-a79f2619-0f1c-4320-b018-154f945b03a7.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T124706Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=9f2e8177acf867d7a0f14160782ec60aae00194d307721ceba7977dd5189261ce5e5d218e3178968b858bd3a8b04d8f98ba600a0694338cc6e2574a3a5b4d6502c3fbcea0f3af44fa3f8ed75fbba6fb889e302a352e097c632dd0dae80d263bfd3b7a35fcaa419f068e954183615ed98c7fcb0f25d578ba0cb2d6e393efb4db8704bec79e14dc390c4583db5ea06891d9afc7c1b18bbb449b4e29e709934a0afcf6dd3482f7c68f5fc01161b72be7dc3c5a85d90c1411cfd803cb8b336ddd8c57ca508be554e77efaf4a3079b2cd028801d3f0db5636c14cbeb28e4edf65bc1de97a7ed16b425c123767e2291134d552fc9eedbc2b47f6ae2200ae057ff79848"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.41",
+    "appBuildVersion": "41",
+    "gitCommitHash": "d1f59b3c3d79bd3f62989935c51e783e009541a3",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 code 41 review 후보: 운영 홈페이지와 공용 price_items는 read-only 대조만 수행. 기존 버튼/선택 흐름을 재사용해 분배기·각방 구성에서 제어기·조절기 V타입·와이파이형 제어기·단자함을 독립 선택하고, 단독보수에 단자함·라인보수 20A·라인보수 25A를 추가함. 공급측만 단독보수 120,000원 승인 분기는 유지. 합성 review API는 단자함(38,000/30,000), 라인보수20A(166,000/143,000), 라인보수25A(203,000/194,000) snapshot만 제공하며 운영 DB/SMS 미연결. 새 단일 preview URL만 review profile에 주입하고 이전 exception은 재보호함. focused 회귀·server bundle·Expo config·preview HTTP 통과. Android 실제 기기 및 사진 첨부 검증은 미실시, 운영 게시·고객 문자·TestFlight 제출 보류.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-14T11:01:21.802Z",
+    "updatedAt": "2026-09-14T11:15:53.803Z",
+    "completedAt": "2026-09-14T11:15:53.618Z",
+    "expirationDate": "2026-09-28T11:01:21.844Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4448,
+      "buildQueueTime": 23927,
+      "buildDuration": 843441
+    }
+  },
+  {
+    "id": "dd8acff2-b1d5-44c3-8b16-22d14b042b0c",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/AojcqgsG-lYMdfRddqr5XVVCkSCQKD8Ew2sys8DAf0E.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/AojcqgsG-lYMdfRddqr5XVVCkSCQKD8Ew2sys8DAf0E.apk"
+    },
+    "fingerprint": {
+      "id": "01a09f52-113b-7321-b68f-7ddb81226693",
+      "hash": "44046f62a8a2084c42268ee3f1119a24018cddaf"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/dd8acff2-b1d5-44c3-8b16-22d14b042b0c/2026-09-14T09%3A49%3A12Z-6f06a2fb-c133-4190-8652-bd18114cc868.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T124706Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=912f1d008d74de529f83d38dfb096d6dce1961db5d85ace6481e46bd0e8c9adb4a60b4bbe7ebc2b4c67e2502a8f294fb97f0529a581008a3a23fea3f6599c817caaedb98a55c7aa0bfbd290d6f83a4c050e07d736d18352d59b80f8298a5099f33812a8acd2292eb3868a4e30dfc0e4a644fa246a95742431833f6c339b714371e491d5385a53bf0bbe8b9094333ebbfe6350718a30ba8c06cc0da6995a9b15c43287c1333bde2a46d1319fad9ea849ca544071424e4b34749831971e4a2e6cff84b460d99c06b14d4e606b176cad9f720162821c5b5437f954289f1e26b050c1b0913c3788a698529ca9c6ec85d048811ca2045b7d7ae2f3ac2131dffc805b6"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.40",
+    "appBuildVersion": "40",
+    "gitCommitHash": "ea3f22e6c5fc97bdb34feab85657e1a3f14400c4",
+    "gitCommitMessage": "Checkpoint: code 39 ImagePicker native registration 보완은 유지하면서 app/tech-estimate.tsx의 수량 컨트롤만 조정했다. 수량 TextInput은 64pt(최소 60pt) × 48pt(최소 48pt), 18pt/800 숫자, paddingVertical 0, includeFontPadding false, textAlign/textAlignVertical center로 변경했다. ± 버튼은 48×48pt, 22pt/900 기호와 130% 확대 글꼴을 위한 lineHeight 여유를 적용했다. engine 기반 수량 변경 및 actor/request scoped 초안 저장 코드는 유지했다. static quantity contract PASS, 130%에서 1·2·3·7·10 기하 검증 PASS, engine/actor Vitest 25 PASS, ImagePicker screen contract 8 PASS, Android Expo export PASS. version 1.1.40 / Android code 40 / iOS build 40, package com.futureenergy.heatingcare, review profile의 단일 합성 API와 기존 remote signing key를 유지한다. 전체 TypeScript는 기존 88 오류가 남아 무오류 주장하지 않는다. Android 실기기 화면·수량 입력·ImagePicker 사진 첨부는 아직 미검증이며, 운영 게시·홈페이지 견적/단가·운영 고객/SMS·TestFlight 제출은 보류한다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-14T09:49:10.799Z",
+    "updatedAt": "2026-09-14T10:02:58.760Z",
+    "completedAt": "2026-09-14T10:02:58.571Z",
+    "expirationDate": "2026-09-28T09:49:10.833Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 406,
+      "buildQueueTime": 6106,
+      "buildDuration": 821260
+    }
+  },
+  {
+    "id": "a575e0d0-cbd5-4cf4-b160-2728026063ba",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/sAr1U35R03wQJ7gXJvHNX_yBAjkokuXg_QkLo2FNN3Q.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/sAr1U35R03wQJ7gXJvHNX_yBAjkokuXg_QkLo2FNN3Q.apk"
+    },
+    "fingerprint": {
+      "id": "01a09dbe-6632-79b5-903b-47d9f2bb3099",
+      "hash": "b0f2392fa9570c2e5ffe97b70a466c15798acf81"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/a575e0d0-cbd5-4cf4-b160-2728026063ba/2026-09-14T02%3A28%3A21Z-2ef57165-9690-4296-b193-95c8f7f56689.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260914%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260914T124706Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=96bfc0b8f1ccb109ed3fb0fecec2a2e6bbbcf3ff004d3a469654059a8048a851d853afacee272ec68d9f4cdd0b003867dac51fccdd8221bbd2ba80786cd2790d366936876648fead16c98c560b716b409dfb58c2f67f9003213a770a6049dfacbc448dd7d9cf833cb16ef81b83c880a22c5d97865a2187015e8d86b1527097a02a7bebda15638a50a07113be9a42a75eec4dd9704f04b79dd7fc3d64065dfebf47ab11c0364707df76c45facaaa88e69dca6d2df4f57d403c285bd8295a9d2c542faefbe3e368f9bf2617a8afea7c9660f74ad6a69edbc617fd3b4da9cb108ca9d39ed3d06910d892f6dd11dd4983a1dce9d4ec3d2930f11be5663eb81367fd1"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.39",
+    "appBuildVersion": "39",
+    "gitCommitHash": "85bd98be52f328e3dc3ea5e1b73d8e9c061fa3ef",
+    "gitCommitMessage": "Checkpoint: code 38의 실제 Android 종료 원인은 `ExponentImagePicker` native module 등록 누락으로 기록했다. Expo SDK 54 기준으로 expo-image-picker 17.0.11, expo-location 19.0.8, expo-task-manager 14.0.9로 package 및 lockfile을 정렬했다. autolinking resolve와 생성 ExpoModulesPackageList에서 `expo.modules.imagepicker.ImagePickerModule` / `ImagePickerModule.class` 등록을 확인했다. work-report는 ImagePicker 최상위 import를 사진 action 시점 dynamic import로 바꾸고, native module·권한·카메라·앨범 실패가 점검표 route 종료로 번지지 않도록 오류 안내를 추가했다. version 1.1.39 / Android code 39 / iOS build 39, package `com.futureenergy.heatingcare` 및 image-picker config plugin을 보존했다. ImagePicker 계약 8 PASS, review 화면 계약 7 PASS, isolated review API 6 PASS, server bundle PASS. 전체 TypeScript는 기존 88 오류가 남아 무오류 주장하지 않는다. Android 실기기와 새 APK DEX 등록은 아직 미검증이다. 운영 게시·홈페이지 견적/단가·운영 고객/SMS·TestFlight 제출은 보류했다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-14T02:28:16.022Z",
+    "updatedAt": "2026-09-14T02:46:28.955Z",
+    "completedAt": "2026-09-14T02:46:28.788Z",
+    "expirationDate": "2026-09-28T02:28:16.044Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 5055,
+      "buildQueueTime": 24519,
+      "buildDuration": 1063192
+    }
+  }
+]

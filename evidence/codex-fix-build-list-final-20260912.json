@@ -1,0 +1,178 @@
+[
+  {
+    "id": "dc5814b7-98c5-44a1-b877-c4d20bf53a66",
+    "status": "IN_PROGRESS",
+    "platform": "IOS",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a097ef-13fa-7cf3-b882-76403979def7",
+      "hash": "051d7417e5651f4de933337c49dca6f44b8d0f3a"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/dc5814b7-98c5-44a1-b877-c4d20bf53a66/2026-09-12T23%3A23%3A46Z-cdab31f9-ff59-480f-adfb-2655d03662f9.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=3fd40a84bcf7d4eca043ce9a415cbe636d476cf60f27db5ddaf0817605b98db7d1664f325ba5a3ec0e74804540811742b13c5ed60e4d62144c9433fa905af31576c7282ea596792cfabb15918de4b525f8395c275eaa0186a01cae47c99018bdda974194b6051513f0da334bb572ef31b66948f215fac4eda7dcb15b8eb6c9d0495deeffee28dac3ba3534399f02c514ab80aa5c2c4e6638bf8c529152dd57ceda0530336287cf6945e5f815331cccff345b6f90065fac81dbe948a496dfcacf0d728ed751c2e87d68715fab020efbc75addb19186f294b13903a7d968533ee939ac332cdecfd808d699adc893d4e298171f25a157086f1950597ca4a326d10b"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "review-store",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.24",
+    "appBuildVersion": "24",
+    "gitCommitHash": "6a4e162398686da073737c2b94ffc9630af7979c",
+    "gitCommitMessage": "Checkpoint: Codex 재검수 보완 후보: 29,000원 유량밸브 고정값을 활성 단체가 fail-closed로 전환하고 스트레이너 36,000원 정책을 보존함. 와이파이/V타입 제어기 선택이 각방 디지털·아날로그 조절기 수량을 추가하지 않도록 보정함. 검수 기사·배정 접수 고정을 제거하여 인증 actor별 합성 접수·초안·보고를 분리함. 제출 상태를 schema 허용 pending으로 통일하고 SQLite 격리 저장소에서 저장 후 본인 조회를 재현함. approveTechRequest가 익명·기사·다른 지사를 알림 전 차단하며 본사·담당 지사 정상 경로를 유지함. 실제 운영 다운로드 페이지는 Android /download/driver/latest 링크를 보존한 iPhone 준비 문구만 별도 production commit으로 반영함. review Android/iOS profile은 새 인증 preview URL과 version 1.1.24 / Android code 24 / iOS build 24를 사용하며 TestFlight 제출·운영 게시·실기기 검증은 보류함.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T23:23:42.933Z",
+    "updatedAt": "2026-09-12T23:24:05.534Z",
+    "expirationDate": "2026-10-12T23:23:42.959Z",
+    "isForIosSimulator": false
+  },
+  {
+    "id": "99092ddf-15d7-4cd7-bb95-35d9ed9a20d8",
+    "status": "IN_PROGRESS",
+    "platform": "ANDROID",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a097eb-7181-70db-8a80-c0a57d2a1346",
+      "hash": "051209c5a98543ab6601b0ab586f38d5763fac77"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/99092ddf-15d7-4cd7-bb95-35d9ed9a20d8/2026-09-12T23%3A19%3A46Z-17d4ee38-91dc-4b97-9d61-d1440d0ae6d1.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=66b6232f40f800284f112cb57fde6142ecad7a48ed4f3b337b5f99ff858978ff8aab1f14f7ba49f17c6d9907f2cfd67707a565e4f046884eebd93d933499f21006cb5b10dc032c3bcd0c01a95230cfdc779249cb3439ec4830ffc74b199ce970444a9049b0c584be31c29524ceca88d3946a3a881e855a4470131c80d1d06eaf45605e0bf22a247cde1873ef9b72ce8925b324a8e132365123b20a81e2cf6225248eeb9587aa6c8f035bde7595110b2f618f4503509cb5598094cef0138f136dd78dfc820a9d14b7800dc26bf2227603a6885c1c79f612c384eeeba6d63ada8b5654a5c51e7046c616e02e505e9309451ce847efce41ee78d6493f0fb9a94963"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.24",
+    "appBuildVersion": "24",
+    "gitCommitHash": "6a4e162398686da073737c2b94ffc9630af7979c",
+    "gitCommitMessage": "Checkpoint: Codex 재검수 보완 후보: 29,000원 유량밸브 고정값을 활성 단체가 fail-closed로 전환하고 스트레이너 36,000원 정책을 보존함. 와이파이/V타입 제어기 선택이 각방 디지털·아날로그 조절기 수량을 추가하지 않도록 보정함. 검수 기사·배정 접수 고정을 제거하여 인증 actor별 합성 접수·초안·보고를 분리함. 제출 상태를 schema 허용 pending으로 통일하고 SQLite 격리 저장소에서 저장 후 본인 조회를 재현함. approveTechRequest가 익명·기사·다른 지사를 알림 전 차단하며 본사·담당 지사 정상 경로를 유지함. 실제 운영 다운로드 페이지는 Android /download/driver/latest 링크를 보존한 iPhone 준비 문구만 별도 production commit으로 반영함. review Android/iOS profile은 새 인증 preview URL과 version 1.1.24 / Android code 24 / iOS build 24를 사용하며 TestFlight 제출·운영 게시·실기기 검증은 보류함.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T23:19:44.738Z",
+    "updatedAt": "2026-09-12T23:19:50.747Z",
+    "expirationDate": "2026-09-26T23:19:44.762Z",
+    "isForIosSimulator": false
+  },
+  {
+    "id": "ada9f68b-b0d0-4bba-a2ee-43d8617436f1",
+    "status": "FINISHED",
+    "platform": "IOS",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/JH2FJo-NbwAWON6UZPwIsPFGOB8oHsgn_II2tBkR6po.ipa",
+      "xcodeBuildLogsUrl": "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-ada9f68b-b0d0-4bba-a2ee-43d8617436f1-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=005daafa3142fafa283551775afaa651c3b0e1bade55dc97e967d494042cbb1f55d54eb2bd3e6d8919455c3c5a74a056831f374e159c57d098b69a2941d5388d75ffba2158e10f5f35fcd004ea8eec29cf2166af3c46e413ad17028af89d17ebdf4f11cbd9f5dec3be73f60850fedf24f31dde75d411b9653a128354c7d1d45b22e8907ba644df8ba094bd910f18e7d30966a20034462f2533cabe2a82513e5455ce07a4696e2984b28e08cc414e433f2ed55a4604138bd0a345883e55ae7b2b58d34f61f6ee4a4ffe8e375edb48603e605de74b3b34eeb7a931f07ecaa15b568fad41fbca9b66e1b0bd4ca19fcb8be6460616f8b5bfb170d6457234444c9359",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/JH2FJo-NbwAWON6UZPwIsPFGOB8oHsgn_II2tBkR6po.ipa"
+    },
+    "fingerprint": {
+      "id": "01a096fe-edfb-71b3-95ed-664a74691926",
+      "hash": "cdb368cc0be0039960b8428bc0cf22145b9e3d64"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-65773bae-e7d0-415a-8b0f-49e7f7985a3a.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=a25afa139a096c0c08699d66a0cd63bee518fad14956f974a4446bce156ae979720b0ef696c4637f55e61d471be8b08996d532794628fea1725f587c518937c1f2aa11feb9653595422288d54fbdac15d223983a3674d6849b770521fccc03b1193ee0fa5ba54d215ff16f55b3dde936d8a8e1c6a3ad913c88c3d683942dba737cd54be44ddb8d04361389d9d1ac5c35253ff18a8cf08dcb553db8c46737f6346c21ece32ee07764d9260849fa3bbaaf291cb61bf77bd30584faad515f0bf743fb297ce0d19ea35bb9b8419b921579c45ba3637fd077052fe64faefcc652c1cacc766a288179d7832acfa78f13edbda3f8d76071fa7d1c17e926345672c4fd35",
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/ada9f68b-b0d0-4bba-a2ee-43d8617436f1/2026-09-12T19%3A01%3A26Z-ada9f68b-b0d0-4bba-a2ee-43d8617436f1-xcode.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=005daafa3142fafa283551775afaa651c3b0e1bade55dc97e967d494042cbb1f55d54eb2bd3e6d8919455c3c5a74a056831f374e159c57d098b69a2941d5388d75ffba2158e10f5f35fcd004ea8eec29cf2166af3c46e413ad17028af89d17ebdf4f11cbd9f5dec3be73f60850fedf24f31dde75d411b9653a128354c7d1d45b22e8907ba644df8ba094bd910f18e7d30966a20034462f2533cabe2a82513e5455ce07a4696e2984b28e08cc414e433f2ed55a4604138bd0a345883e55ae7b2b58d34f61f6ee4a4ffe8e375edb48603e605de74b3b34eeb7a931f07ecaa15b568fad41fbca9b66e1b0bd4ca19fcb8be6460616f8b5bfb170d6457234444c9359"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "review-store",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.23",
+    "appBuildVersion": "23",
+    "gitCommitHash": "e8ebcf13d39a750c6640cdb3daadc97189838508",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 검수 후보: 9941dbf8 기준 운영 홈페이지의 조절기 수량·종류 전환과 유량밸브 가격 정합화, estimates.customerPhone 실제 mapping 및 초안 수량 fail-closed 보완, 합성 기사·접수·메모리 보고·SMS 대체만 사용하는 인증 preview API 추가. 기존 preview 예외는 재보호했고 새 Vercel preview URL 한 건만 예외 적용. 미로그인 401, 본인 접수 200, 타 기사 접근 400/0건 실제 HTTP 확인. app v1.1.23 / Android versionCode 23 / iOS buildNumber 23, review profile은 새 preview URL만 사용. 운영 홈페이지·공용 단가 DB·운영 게시·TestFlight 제출 미변경.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T19:01:24.536Z",
+    "updatedAt": "2026-09-12T19:07:08.087Z",
+    "completedAt": "2026-09-12T19:07:07.754Z",
+    "expirationDate": "2026-10-12T19:01:24.586Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 1754,
+      "buildQueueTime": 21359,
+      "buildDuration": 320105
+    }
+  },
+  {
+    "id": "2ef29c96-193e-4413-a584-77cdf0ad60db",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/tZ-skLSy-BjyP5goxBIQwK-VToyS0rR1-D_QIT8o4js.apk"
+    },
+    "fingerprint": {
+      "id": "01a096b6-345c-7b5f-9e25-a2dcc00c158e",
+      "hash": "d1fad232e88cc37c0252ef0e5f496340c7fe03cf"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/d2a96663-3c56-4836-ab5a-1ce95421962c/2ef29c96-193e-4413-a584-77cdf0ad60db/2026-09-12T17%3A42%3A03Z-ee9e72ec-4f06-4453-817f-5f548b1aced4.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260912%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260912T232806Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=9ecd47ee143caca7cba2c83bc773186b1a34896c76ede7ab7665d100981d574ba641b6751603d73957b1113391adadf7915b52ffcbecf829c2acf5ec0082787259e491c7e1821c24f3aba2ec8ca2630194049c70dba0bcafb7dcd9a5e2fac056002cf7233a5140a63efa1fbb786436d2bbc1613c78e751ca0c4f746599849e39cfe62d77b18d1ff0e8b670000af8dd3c656da0a3fadaee81dca012c8b4a57631b4c5dea2f85f8d40b0b2028f61c27e51781ff1828b4676b736a713abc9017ea2e9fa2430bf1d31c471f4485658a1a163225160ddc073cc9cc19d6b13a235b20fb8f912e253fd7eaaba0b558147f9bcfff16c4e2ba3eadb52957385046d417fe7"
+    ],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "review",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.23",
+    "appBuildVersion": "23",
+    "gitCommitHash": "e8ebcf13d39a750c6640cdb3daadc97189838508",
+    "gitCommitMessage": "Checkpoint: 기사앱 자동견적 검수 후보: 9941dbf8 기준 운영 홈페이지의 조절기 수량·종류 전환과 유량밸브 가격 정합화, estimates.customerPhone 실제 mapping 및 초안 수량 fail-closed 보완, 합성 기사·접수·메모리 보고·SMS 대체만 사용하는 인증 preview API 추가. 기존 preview 예외는 재보호했고 새 Vercel preview URL 한 건만 예외 적용. 미로그인 401, 본인 접수 200, 타 기사 접근 400/0건 실제 HTTP 확인. app v1.1.23 / Android versionCode 23 / iOS buildNumber 23, review profile은 새 preview URL만 사용. 운영 홈페이지·공용 단가 DB·운영 게시·TestFlight 제출 미변경.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-12T17:41:58.443Z",
+    "updatedAt": "2026-09-12T17:56:47.953Z",
+    "completedAt": "2026-09-12T17:56:47.784Z",
+    "expirationDate": "2026-09-26T17:41:58.481Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2769,
+      "buildQueueTime": 6641,
+      "buildDuration": 879931
+    }
+  }
+]

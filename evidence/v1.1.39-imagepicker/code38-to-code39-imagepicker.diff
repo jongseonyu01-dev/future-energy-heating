@@ -1,0 +1,339 @@
+[1mdiff --git a/app.config.ts b/app.config.ts[m
+[1mindex def5e77..51ad813 100644[m
+[1m--- a/app.config.ts[m
+[1m+++ b/app.config.ts[m
+[36m@@ -42,7 +42,7 @@[m [mconst config: ExpoConfig = {[m
+   name: env.appName,[m
+   slug: env.appSlug,[m
+   owner: "futureenergytech",[m
+[31m-  version: "1.1.38",[m
+[32m+[m[32m  version: "1.1.39",[m
+   orientation: "portrait",[m
+   icon: "./assets/images/icon.png",[m
+   scheme: env.scheme,[m
+[36m@@ -50,7 +50,7 @@[m [mconst config: ExpoConfig = {[m
+   newArchEnabled: true,[m
+   ios: {[m
+     supportsTablet: true,[m
+[31m-    buildNumber: "38",[m
+[32m+[m[32m    buildNumber: "39",[m
+     bundleIdentifier: env.iosBundleId,[m
+     infoPlist: {[m
+       ITSAppUsesNonExemptEncryption: false,[m
+[36m@@ -64,7 +64,7 @@[m [mconst config: ExpoConfig = {[m
+     }[m
+   },[m
+   android: {[m
+[31m-    versionCode: 38,[m
+[32m+[m[32m    versionCode: 39,[m
+     allowBackup: false,[m
+     adaptiveIcon: {[m
+       backgroundColor: "#E6F4FE",[m
+[1mdiff --git a/app/work-report.tsx b/app/work-report.tsx[m
+[1mindex d89adf6..da0f162 100644[m
+[1m--- a/app/work-report.tsx[m
+[1m+++ b/app/work-report.tsx[m
+[36m@@ -19,7 +19,6 @@[m [mimport { useAppAuth } from "@/lib/auth-context";[m
+ import { trpc } from "@/lib/trpc";[m
+ import { formatFullAddress } from "@/constants/address-data";[m
+ import * as Haptics from "expo-haptics";[m
+[31m-import * as ImagePicker from "expo-image-picker";[m
+ import * as FileSystem from "expo-file-system/legacy";[m
+ [m
+ const CHECK_ITEMS = [[m
+[36m@@ -33,6 +32,24 @@[m [mconst CHECK_ITEMS = [[m
+   "전기 배선 안전 확인",[m
+ ];[m
+ [m
+[32m+[m[32m/**[m
+[32m+[m[32m * ImagePicker native registration is validated in the review build. This[m
+[32m+[m[32m * boundary prevents an unexpected missing module from terminating the report[m
+[32m+[m[32m * route before a technician intentionally opens a photo action.[m
+[32m+[m[32m */[m
+[32m+[m[32masync function loadImagePicker() {[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    return await import("expo-image-picker");[m
+[32m+[m[32m  } catch (error) {[m
+[32m+[m[32m    console.warn("ImagePicker native module unavailable", error);[m
+[32m+[m[32m    Alert.alert([m
+[32m+[m[32m      "사진 기능 준비 오류",[m
+[32m+[m[32m      "사진 선택 기능을 불러오지 못했습니다. 사진을 추가하지 말고 앱을 종료한 뒤 검수 담당자에게 알려 주세요.",[m
+[32m+[m[32m    );[m
+[32m+[m[32m    return null;[m
+[32m+[m[32m  }[m
+[32m+[m[32m}[m
+[32m+[m
+ export default function WorkReportScreen() {[m
+   const { id } = useLocalSearchParams<{ id: string }>();[m
+   const requestId = parseInt(id ?? "0");[m
+[36m@@ -90,10 +107,19 @@[m [mexport default function WorkReportScreen() {[m
+   const uploadPhotoMutation = trpc.workReport.uploadPhoto.useMutation();[m
+ [m
+   const pickPhoto = async (type: "before" | "after") => {[m
+[32m+[m[32m    const imagePicker = await loadImagePicker();[m
+[32m+[m[32m    if (!imagePicker) return;[m
+[32m+[m
+     if (Platform.OS !== "web") {[m
+[31m-      const { status } = await ImagePicker.requestCameraPermissionsAsync();[m
+[31m-      if (status !== "granted") {[m
+[31m-        Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        const { status } = await imagePicker.requestCameraPermissionsAsync();[m
+[32m+[m[32m        if (status !== "granted") {[m
+[32m+[m[32m          Alert.alert("권한 필요", "카메라 사용 권한이 필요합니다.");[m
+[32m+[m[32m          return;[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } catch (error) {[m
+[32m+[m[32m        console.warn("ImagePicker camera permission request failed", error);[m
+[32m+[m[32m        Alert.alert("사진 기능 오류", "카메라 권한을 확인하지 못했습니다. 사진을 추가하지 말고 검수 담당자에게 알려 주세요.");[m
+         return;[m
+       }[m
+     }[m
+[36m@@ -105,26 +131,36 @@[m [mexport default function WorkReportScreen() {[m
+         {[m
+           text: "카메라 촬영",[m
+           onPress: async () => {[m
+[31m-            const result = await ImagePicker.launchCameraAsync({[m
+[31m-              mediaTypes: "images",[m
+[31m-              quality: 0.7,[m
+[31m-              allowsEditing: false,[m
+[31m-            });[m
+[31m-            if (!result.canceled && result.assets[0]) {[m
+[31m-              await handlePhotoSelected(result.assets[0].uri, type);[m
+[32m+[m[32m            try {[m
+[32m+[m[32m              const result = await imagePicker.launchCameraAsync({[m
+[32m+[m[32m                mediaTypes: "images",[m
+[32m+[m[32m                quality: 0.7,[m
+[32m+[m[32m                allowsEditing: false,[m
+[32m+[m[32m              });[m
+[32m+[m[32m              if (!result.canceled && result.assets[0]) {[m
+[32m+[m[32m                await handlePhotoSelected(result.assets[0].uri, type);[m
+[32m+[m[32m              }[m
+[32m+[m[32m            } catch (error) {[m
+[32m+[m[32m              console.warn("ImagePicker camera launch failed", error);[m
+[32m+[m[32m              Alert.alert("사진 기능 오류", "카메라를 열지 못했습니다. 사진을 추가하지 말고 검수 담당자에게 알려 주세요.");[m
+             }[m
+           },[m
+         },[m
+         {[m
+           text: "갤러리에서 선택",[m
+           onPress: async () => {[m
+[31m-            const result = await ImagePicker.launchImageLibraryAsync({[m
+[31m-              mediaTypes: "images",[m
+[31m-              quality: 0.7,[m
+[31m-              allowsEditing: false,[m
+[31m-            });[m
+[31m-            if (!result.canceled && result.assets[0]) {[m
+[31m-              await handlePhotoSelected(result.assets[0].uri, type);[m
+[32m+[m[32m            try {[m
+[32m+[m[32m              const result = await imagePicker.launchImageLibraryAsync({[m
+[32m+[m[32m                mediaTypes: "images",[m
+[32m+[m[32m                quality: 0.7,[m
+[32m+[m[32m                allowsEditing: false,[m
+[32m+[m[32m              });[m
+[32m+[m[32m              if (!result.canceled && result.assets[0]) {[m
+[32m+[m[32m                await handlePhotoSelected(result.assets[0].uri, type);[m
+[32m+[m[32m              }[m
+[32m+[m[32m            } catch (error) {[m
+[32m+[m[32m              console.warn("ImagePicker library launch failed", error);[m
+[32m+[m[32m              Alert.alert("사진 기능 오류", "앨범을 열지 못했습니다. 사진을 추가하지 말고 검수 담당자에게 알려 주세요.");[m
+             }[m
+           },[m
+         },[m
+[1mdiff --git a/package.json b/package.json[m
+[1mindex 6d512a7..08682c9 100644[m
+[1m--- a/package.json[m
+[1m+++ b/package.json[m
+[36m@@ -14,8 +14,8 @@[m
+     "format": "prettier --write .",[m
+     "test": "vitest run",[m
+     "db:push": "drizzle-kit generate && drizzle-kit migrate",[m
+[31m-    "android": "expo start --android",[m
+[31m-    "ios": "expo start --ios",[m
+[32m+[m[32m    "android": "expo run:android",[m
+[32m+[m[32m    "ios": "expo run:ios",[m
+     "qr": "node scripts/generate_qr.mjs"[m
+   },[m
+   "dependencies": {[m
+[36m@@ -42,10 +42,10 @@[m
+     "expo-font": "~14.0.10",[m
+     "expo-haptics": "~15.0.8",[m
+     "expo-image": "~3.0.11",[m
+[31m-    "expo-image-picker": "^16.0.6",[m
+[32m+[m[32m    "expo-image-picker": "^17.0.11",[m
+     "expo-keep-awake": "~15.0.8",[m
+     "expo-linking": "~8.0.10",[m
+[31m-    "expo-location": "^18.0.10",[m
+[32m+[m[32m    "expo-location": "^19.0.8",[m
+     "expo-notifications": "~0.32.15",[m
+     "expo-router": "~6.0.19",[m
+     "expo-secure-store": "~15.0.8",[m
+[36m@@ -53,7 +53,7 @@[m
+     "expo-status-bar": "~3.0.9",[m
+     "expo-symbols": "~1.0.8",[m
+     "expo-system-ui": "~6.0.9",[m
+[31m-    "expo-task-manager": "^13.0.0",[m
+[32m+[m[32m    "expo-task-manager": "^14.0.9",[m
+     "expo-video": "~3.0.15",[m
+     "expo-web-browser": "~15.0.10",[m
+     "express": "^4.22.1",[m
+[1mdiff --git a/pnpm-lock.yaml b/pnpm-lock.yaml[m
+[1mindex 8b27c7c..4ee8c44 100644[m
+[1m--- a/pnpm-lock.yaml[m
+[1m+++ b/pnpm-lock.yaml[m
+[36m@@ -78,8 +78,8 @@[m [mimporters:[m
+         specifier: ~3.0.11[m
+         version: 3.0.11(expo@54.0.29)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+       expo-image-picker:[m
+[31m-        specifier: ^16.0.6[m
+[31m-        version: 16.0.6(expo@54.0.29)[m
+[32m+[m[32m        specifier: ^17.0.11[m
+[32m+[m[32m        version: 17.0.11(expo@54.0.29)[m
+       expo-keep-awake:[m
+         specifier: ~15.0.8[m
+         version: 15.0.8(expo@54.0.29)(react@19.1.0)[m
+[36m@@ -87,8 +87,8 @@[m [mimporters:[m
+         specifier: ~8.0.10[m
+         version: 8.0.10(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+       expo-location:[m
+[31m-        specifier: ^18.0.10[m
+[31m-        version: 18.0.10(expo@54.0.29)[m
+[32m+[m[32m        specifier: ^19.0.8[m
+[32m+[m[32m        version: 19.0.8(expo@54.0.29)[m
+       expo-notifications:[m
+         specifier: ~0.32.15[m
+         version: 0.32.15(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+[36m@@ -111,8 +111,8 @@[m [mimporters:[m
+         specifier: ~6.0.9[m
+         version: 6.0.9(expo@54.0.29)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))[m
+       expo-task-manager:[m
+[31m-        specifier: ^13.0.0[m
+[31m-        version: 13.0.0(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))[m
+[32m+[m[32m        specifier: ^14.0.9[m
+[32m+[m[32m        version: 14.0.9(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))[m
+       expo-video:[m
+         specifier: ~3.0.15[m
+         version: 3.0.15(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+[36m@@ -764,11 +764,11 @@[m [mpackages:[m
+ [m
+   '@esbuild-kit/core-utils@3.3.2':[m
+     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}[m
+[31m-    deprecated: 'Merged into tsx: https://tsx.is'[m
+[32m+[m[32m    deprecated: 'Merged into tsx: https://tsx.hirok.io'[m
+ [m
+   '@esbuild-kit/esm-loader@2.6.5':[m
+     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}[m
+[31m-    deprecated: 'Merged into tsx: https://tsx.is'[m
+[32m+[m[32m    deprecated: 'Merged into tsx: https://tsx.hirok.io'[m
+ [m
+   '@esbuild/aix-ppc64@0.21.5':[m
+     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}[m
+[36m@@ -3455,6 +3455,7 @@[m [mpackages:[m
+   eslint@9.39.2:[m
+     resolution: {integrity: sha512-LEyamqS7W5HB3ujJyvi0HQK/dtVINZvd5mAAp9eT5S/ujByGjiZLCzPcHVzuXbpJDJF/cxwHlfceVUDZ2lnSTw==}[m
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}[m
+[32m+[m[32m    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.[m
+     hasBin: true[m
+     peerDependencies:[m
+       jiti: '*'[m
+[36m@@ -3559,13 +3560,13 @@[m [mpackages:[m
+     peerDependencies:[m
+       expo: '*'[m
+ [m
+[31m-  expo-image-loader@5.0.0:[m
+[31m-    resolution: {integrity: sha512-Eg+5FHtyzv3Jjw9dHwu2pWy4xjf8fu3V0Asyy42kO+t/FbvW/vjUixpTjPtgKQLQh+2/9Nk4JjFDV6FwCnF2ZA==}[m
+[32m+[m[32m  expo-image-loader@6.0.0:[m
+[32m+[m[32m    resolution: {integrity: sha512-nKs/xnOGw6ACb4g26xceBD57FKLFkSwEUTDXEDF3Gtcu3MqF3ZIYd3YM+sSb1/z9AKV1dYT7rMSGVNgsveXLIQ==}[m
+     peerDependencies:[m
+       expo: '*'[m
+ [m
+[31m-  expo-image-picker@16.0.6:[m
+[31m-    resolution: {integrity: sha512-HN4xZirFjsFDIsWFb12AZh19fRzuvZjj2ll17cGr19VNRP06S/VPQU3Tdccn5vwUzQhOBlLu704CnNm278boiQ==}[m
+[32m+[m[32m  expo-image-picker@17.0.11:[m
+[32m+[m[32m    resolution: {integrity: sha512-/apkoyukDvsCHHb9fzP+F34A1uQqSzUtYH/2P/xJACNEwq+mwEXjXvVU8bzlJq6ih0Qo1+tpVivIa7B9kYSwOQ==}[m
+     peerDependencies:[m
+       expo: '*'[m
+ [m
+[36m@@ -3592,8 +3593,8 @@[m [mpackages:[m
+       react: '*'[m
+       react-native: '*'[m
+ [m
+[31m-  expo-location@18.0.10:[m
+[31m-    resolution: {integrity: sha512-R0Iioz0UZ9Ts8TACPngh8uDFbajJhVa5/igLqWB8Pq/gp8UHuwj7PC8XbZV7avsFoShYjaxrOhf4U7IONeKLgg==}[m
+[32m+[m[32m  expo-location@19.0.8:[m
+[32m+[m[32m    resolution: {integrity: sha512-H/FI75VuJ1coodJbbMu82pf+Zjess8X8Xkiv9Bv58ZgPKS/2ztjC1YO1/XMcGz7+s9DrbLuMIw22dFuP4HqneA==}[m
+     peerDependencies:[m
+       expo: '*'[m
+ [m
+[36m@@ -3684,8 +3685,8 @@[m [mpackages:[m
+       react-native-web:[m
+         optional: true[m
+ [m
+[31m-  expo-task-manager@13.0.0:[m
+[31m-    resolution: {integrity: sha512-dqM3Szu2+QshspniVaGCkVtIU48OiVmcrM3RFpTNRNKjqsxYrCh9pX/xJfX6+5iq9AneUtX8lYD0X+RpYs7nHA==}[m
+[32m+[m[32m  expo-task-manager@14.0.9:[m
+[32m+[m[32m    resolution: {integrity: sha512-GKWtXrkedr4XChHfTm5IyTcSfMtCPxzx89y4CMVqKfyfROATibrE/8UI5j7UC/pUOfFoYlQvulQEvECMreYuUA==}[m
+     peerDependencies:[m
+       expo: '*'[m
+       react-native: '*'[m
+[36m@@ -5877,8 +5878,8 @@[m [mpackages:[m
+     resolution: {integrity: sha512-hpbDzxUY9BFwX+UeBnxv3Sh1q7HFxj48DTmXchNgRa46lO8uj3/1iEn3MiNUYTg1g9ctIqXCCERn8gYZhHC5lQ==}[m
+     engines: {node: '>=4'}[m
+ [m
+[31m-  unimodules-app-loader@5.0.1:[m
+[31m-    resolution: {integrity: sha512-JI4dUMOovvLrZ1U/mrQrR73cxGH26H7NpfBxwE0hk59CBOyHO4YYpliI3hPSGgZzt+YEy2VZR6nrspSUXY8jyw==}[m
+[32m+[m[32m  unimodules-app-loader@6.0.8:[m
+[32m+[m[32m    resolution: {integrity: sha512-fqS8QwT/MC/HAmw1NKCHdzsPA6WaLm0dNmoC5Pz6lL+cDGYeYCNdHMO9fy08aL2ZD7cVkNM0pSR/AoNRe+rslA==}[m
+ [m
+   unique-string@2.0.0:[m
+     resolution: {integrity: sha512-uNaeirEPvpZWSgzwsPGtU2zVSTrn/8L5q/IexZmH0eH6SA73CmAA5U4GwORTxQAZs95TAXLNqeLoPPNO5gZfWg==}[m
+[36m@@ -9797,14 +9798,14 @@[m [msnapshots:[m
+     dependencies:[m
+       expo: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+ [m
+[31m-  expo-image-loader@5.0.0(expo@54.0.29):[m
+[32m+[m[32m  expo-image-loader@6.0.0(expo@54.0.29):[m
+     dependencies:[m
+       expo: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+ [m
+[31m-  expo-image-picker@16.0.6(expo@54.0.29):[m
+[32m+[m[32m  expo-image-picker@17.0.11(expo@54.0.29):[m
+     dependencies:[m
+       expo: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+[31m-      expo-image-loader: 5.0.0(expo@54.0.29)[m
+[32m+[m[32m      expo-image-loader: 6.0.0(expo@54.0.29)[m
+ [m
+   expo-image@3.0.11(expo@54.0.29)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):[m
+     dependencies:[m
+[36m@@ -9829,7 +9830,7 @@[m [msnapshots:[m
+       - expo[m
+       - supports-color[m
+ [m
+[31m-  expo-location@18.0.10(expo@54.0.29):[m
+[32m+[m[32m  expo-location@19.0.8(expo@54.0.29):[m
+     dependencies:[m
+       expo: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+ [m
+[36m@@ -9941,11 +9942,11 @@[m [msnapshots:[m
+     transitivePeerDependencies:[m
+       - supports-color[m
+ [m
+[31m-  expo-task-manager@13.0.0(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0)):[m
+[32m+[m[32m  expo-task-manager@14.0.9(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0)):[m
+     dependencies:[m
+       expo: 54.0.29(@babel/core@7.28.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.19)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)[m
+       react-native: 0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0)[m
+[31m-      unimodules-app-loader: 5.0.1[m
+[32m+[m[32m      unimodules-app-loader: 6.0.8[m
+ [m
+   expo-video@3.0.15(expo@54.0.29)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):[m
+     dependencies:[m
+[36m@@ -12487,7 +12488,7 @@[m [msnapshots:[m
+ [m
+   unicode-property-aliases-ecmascript@2.2.0: {}[m
+ [m
+[31m-  unimodules-app-loader@5.0.1: {}[m
+[32m+[m[32m  unimodules-app-loader@6.0.8: {}[m
+ [m
+   unique-string@2.0.0:[m
+     dependencies:[m

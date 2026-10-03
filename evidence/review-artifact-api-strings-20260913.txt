@@ -1,0 +1,8 @@
+android review URL:
+https://futureenergytech-wlvr2pr81-futureenergytech.vercel.app
+android operations URL matches:
+1
+ios review URL:
+https://futureenergytech-wlvr2pr81-futureenergytech.vercel.app
+ios operations URL matches:
+1

@@ -1,0 +1,8 @@
+register new Apple Devices to use for internal distribution
+
+USAGE
+  $ eas device:create
+
+DESCRIPTION
+  register new Apple Devices to use for internal distribution
+

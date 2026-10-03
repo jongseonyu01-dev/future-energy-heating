@@ -1,0 +1,1 @@
+38:      expo.modules.imagepicker.ImagePickerModule.class,

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "8a29dae4-2110-456d-872f-cf6acd8f7494",
+    "status": "NEW",
+    "platform": "IOS",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a0988d-6a4d-7a53-b20a-410eaba4b123",
+      "hash": "ce7f552e050d1a43d21d00a9f25c1e033a943c5e"
+    },
+    "initiatingActor": {
+      "id": "ab26eea1-9b54-4cc4-aeb9-9ca1dcd49f0b",
+      "displayName": "futureenergytech"
+    },
+    "logFiles": [],
+    "app": {
+      "id": "d2a96663-3c56-4836-ab5a-1ce95421962c",
+      "name": "future-energy-heating",
+      "slug": "future-energy-heating",
+      "ownerAccount": {
+        "id": "719e490d-4a27-44cf-b672-c87839702689",
+        "name": "futureenergytech"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "review-store",
+    "appIdentifier": "com.futureenergy.heatingcare",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.1.33",
+    "appBuildVersion": "33",
+    "gitCommitHash": "fd0fb175a3d6b2d66b1d2f1ad87a300ecfcf253c",
+    "gitCommitMessage": "Checkpoint: Codex 재검수 5차 build 준비: Android versionCode 33, iOS buildNumber 33, version 1.1.33을 기존 package/bundle ID에 적용하고 review/review-store profile을 새 단일 합성 preview API로 교체했다. 기존 review preview 예외는 재보호하고 신규 URL 한 건만 예외로 등록했다. Expo config에서 package/bundle ID `com.futureenergy.heatingcare`, Android code 33, iOS build 33을 확인했다. 운영 게시·고객 문자·TestFlight 제출·실기기 시험은 미실시다.",
+    "priority": "NORMAL",
+    "createdAt": "2026-09-13T02:16:39.730Z",
+    "updatedAt": "2026-09-13T02:16:39.730Z",
+    "expirationDate": "2026-10-13T02:16:39.754Z",
+    "isForIosSimulator": false
+  }
+]

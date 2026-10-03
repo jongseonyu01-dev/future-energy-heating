@@ -1,0 +1,85 @@
+{
+  "provenance": {
+    "originallyReviewedZipSHA256": "f6c6dd00bdcc172486b3e7d74d91f992e3d681e29d26a31e0e683e76d0190565",
+    "sourceHashes": {
+      "engine": "2e879f2a9306e3b740d3874322dad674b2bc76665094b905687b0cf80e24670d",
+      "screen": "8f463c9a6651421f78706e1eda20c39556b3fe19da0d2b9f94fa8203b0e065eb",
+      "router": "d7dca8eb58b6f4755b3bdbb9d16edc2df092aa29784c6458a0052c65ff2683c3"
+    },
+    "runtime": {
+      "node": "v22.13.0",
+      "typescript": "5.9.3",
+      "zod": "4.2.1"
+    },
+    "scope": "Original engine and screen/procedure code transpiled and run with React hooks, native UI, storage, auth data, DB, and SMS boundaries mocked. No real app install, DB query, network request, SMS, or homepage mutation."
+  },
+  "results": [
+    {
+      "id": "P01",
+      "name": "Manifold-only flow valve always uses its discount price",
+      "result": "PASS"
+    },
+    {
+      "id": "P02",
+      "name": "Failed 10-port selection retains both the 4-port UI state and quotation",
+      "result": "PASS"
+    },
+    {
+      "id": "P03",
+      "name": "Deleting the manifold clears its selected-port prerequisite",
+      "result": "PASS"
+    },
+    {
+      "id": "P04",
+      "name": "Switching to a different technician/request cannot retain the previous draft",
+      "result": "FAIL",
+      "detail": "Cannot read properties of null (reading 'customer')"
+    },
+    {
+      "id": "P05",
+      "name": "Nonfinite quantity input is rejected or normalized before reaching a quotation",
+      "result": "PASS"
+    },
+    {
+      "id": "S01",
+      "name": "An unauthenticated caller is denied without a database write",
+      "result": "FAIL",
+      "detail": "The validation function is expected to return \"true\". Received false\n\nCaught error:\n\n[\n  {\n    \"expected\": \"number\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"requestId\"\n    ],\n    \"message\": \"Invalid input: expected number, received undefined\"\n  }\n]"
+    },
+    {
+      "id": "S02",
+      "name": "A customer role is denied without a database write",
+      "result": "FAIL",
+      "detail": "The validation function is expected to return \"true\". Received false\n\nCaught error:\n\n[\n  {\n    \"expected\": \"number\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"requestId\"\n    ],\n    \"message\": \"Invalid input: expected number, received undefined\"\n  }\n]"
+    },
+    {
+      "id": "S03",
+      "name": "Submitted technician/branch IDs do not override the authenticated technician",
+      "result": "FAIL",
+      "detail": "[\n  {\n    \"expected\": \"number\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"requestId\"\n    ],\n    \"message\": \"Invalid input: expected number, received undefined\"\n  }\n]"
+    },
+    {
+      "id": "S04",
+      "name": "Own-history handler supplies technician and source filters",
+      "result": "PASS"
+    },
+    {
+      "id": "P06",
+      "name": "Zero amount and malformed item JSON are rejected before persistence",
+      "result": "PASS"
+    },
+    {
+      "id": "P07",
+      "name": "A positive amount mismatching the line total is rejected",
+      "result": "PASS"
+    },
+    {
+      "id": "P08",
+      "name": "A report originating from request 42 preserves that request association",
+      "result": "FAIL",
+      "detail": "db.getRepairRequestById is not a function"
+    }
+  ],
+  "passed": 7,
+  "failed": 5
+}

@@ -1,0 +1,81 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "review": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE": "1",
+        "EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE": "1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-eu3egs12k-futureenergytech.vercel.app"
+      }
+    },
+    "testflight": {
+      "distribution": "store",
+      "ios": {},
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "review-store": {
+      "extends": "testflight",
+      "env": {
+        "EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE": "1",
+        "EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE": "1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://futureenergytech-eu3egs12k-futureenergytech.vercel.app"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {}
+    },
+    "production-apk": {
+      "environment": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "jongseonyu01@gmail.com",
+        "ascAppId": "6788993921",
+        "appleTeamId": "83MU3C8JZN"
+      }
+    },
+    "testflight": {
+      "ios": {
+        "appleId": "jongseonyu01@gmail.com",
+        "ascAppId": "6788993921",
+        "appleTeamId": "83MU3C8JZN"
+      }
+    }
+  }
+}

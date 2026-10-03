@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "appId": "driver",
+  "versionName": "1.1.45",
+  "versionCode": 45,
+  "minSupportedVersionCode": 1,
+  "sha256": "a2fe5d49771be690c4121cabe2cefbcb33f353e96ca951c6ec680fb3d9e41d1c",
+  "fileSize": 94646567,
+  "sourceSha": "8109459c1f4532ea9ef1ffcfaf8674432b23171c",
+  "sourceCheckpoint": "8109459c",
+  "releaseNotes": "기사 회원가입과 기존 본사 승인 대기 흐름을 복구했습니다. 기존 앱을 삭제하지 않고 업데이트 설치하십시오.",
+  "publishedAt": "2026-09-15T14:02:54.000Z"
+}
