@@ -273,6 +273,24 @@ export default function TechScheduleScreen() {
   };
 
   const s = styles(colors);
+  const trackingStatus = debugState?.serverStatus ?? "idle";
+  const trackingStatusLabel: Record<typeof trackingStatus, string> = {
+    idle: "⏳ 위치 전송 대기",
+    uploading: "⏳ 위치 전송 중",
+    stored: "✅ 새 위치 저장됨",
+    ignored: "ℹ️ 이전·중복 위치 (새 저장 없음)",
+    error: "❌ 위치 전송 실패",
+  };
+  const trackingStatusColor: Record<typeof trackingStatus, string> = {
+    idle: "#F59E0B",
+    uploading: "#F59E0B",
+    stored: "#22C55E",
+    ignored: "#64748B",
+    error: "#EF4444",
+  };
+  const formatTrackingTime = (time: number | null | undefined) => time
+    ? `${Math.max(0, Math.round((Date.now() - time) / 1000))}초 전 (${new Date(time).toLocaleTimeString("ko-KR")})`
+    : "아직 없음";
 
   // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
   useEffect(() => {
@@ -399,21 +417,27 @@ export default function TechScheduleScreen() {
             <Text style={s.locationStatusTitle}>📡 위치 전송 상태</Text>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>전송 상태</Text>
-              <Text style={[s.locationStatusValue, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#F59E0B' }]}>
-                {debugState?.serverOk === true ? '✅ 서버 전송 성공' : debugState?.serverOk === false ? '❌ 전송 실패' : '⏳ 전송 대기 중'}
+              <Text style={[s.locationStatusValue, { color: trackingStatusColor[trackingStatus] }]}>
+                {trackingStatusLabel[trackingStatus]}
               </Text>
             </View>
             <View style={s.locationStatusRow}>
-              <Text style={s.locationStatusLabel}>마지막 전송</Text>
+              <Text style={s.locationStatusLabel}>마지막 새 위치 저장</Text>
               <Text style={s.locationStatusValue}>
-                {debugState?.lastSuccessAt
-                  ? `${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 (${new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR')})`
-                  : '아직 전송 없음'}
+                {formatTrackingTime(debugState?.lastStoredAt)}
               </Text>
             </View>
             <View style={s.locationStatusRow}>
-              <Text style={s.locationStatusLabel}>전송 횟수</Text>
-              <Text style={s.locationStatusValue}>{debugState?.sendCount ?? 0}회</Text>
+              <Text style={s.locationStatusLabel}>전송 시도</Text>
+              <Text style={s.locationStatusValue}>{debugState?.attemptCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>새 위치 저장</Text>
+              <Text style={s.locationStatusValue}>{debugState?.storedCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>중복·이전 응답</Text>
+              <Text style={s.locationStatusValue}>{debugState?.ignoredCount ?? 0}회</Text>
             </View>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>현재 좌표</Text>
@@ -429,9 +453,10 @@ export default function TechScheduleScreen() {
             </View>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>위치 권한</Text>
-              <Text style={s.locationStatusValue}>{permStatus.bg}</Text>
+              <Text style={s.locationStatusValue}>앱 사용 중 {permStatus.foregroundLocation} · 항상 {permStatus.backgroundLocation} · 알림 {permStatus.notification}</Text>
             </View>
-            <Text style={s.locationStatusNote}>💡 고객은 문자로 받은 링크에서 위치를 확인합니다</Text>
+            {debugState?.serverError ? <Text style={s.locationStatusNote}>안내: {debugState.serverError}</Text> : null}
+            <Text style={s.locationStatusNote}>💡 새 위치 저장 시점만 고객 지도 최신 위치로 반영됩니다.</Text>
           </View>
         )}
 
@@ -517,11 +542,11 @@ export default function TechScheduleScreen() {
         >
           <Text style={s.trackingBannerIcon}>📍</Text>
           <View style={s.trackingBannerText}>
-            <Text style={s.trackingBannerTitle}>위치 공유 중 {debugState?.serverOk === true ? '✅' : debugState?.serverOk === false ? '⚠️' : ''}</Text>
+            <Text style={s.trackingBannerTitle}>위치 공유 중 {trackingStatus === 'stored' ? '✅' : trackingStatus === 'error' ? '⚠️' : ''}</Text>
             <Text style={s.trackingBannerSub}>
-              {debugState?.lastSuccessAt
-                ? `마지막 전송: ${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 · ${debugState.sendCount}회`
-                : '전송 대기 중...'}
+              {debugState?.lastStoredAt
+                ? `새 위치 저장: ${formatTrackingTime(debugState.lastStoredAt)} · 시도 ${debugState.attemptCount}회`
+                : `위치 전송 대기 · 시도 ${debugState?.attemptCount ?? 0}회`}
             </Text>
           </View>
           <Text style={{ color: '#fff', fontSize: 11 }}>{showDebug ? '▲' : '▼'}</Text>
@@ -537,16 +562,17 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>정확도: {debugState?.accuracy != null ? `${Math.round(debugState.accuracy)}m` : '-'}</Text>
           <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}</Text>
           <Text style={s.debugRow}>방향: {debugState?.heading != null ? `${Math.round(debugState.heading)}°` : '-'}</Text>
-          <Text style={s.debugRow}>전송 횟수: {debugState?.sendCount ?? 0}회</Text>
+          <Text style={s.debugRow}>전송 시도: {debugState?.attemptCount ?? 0}회 · 새 위치 저장: {debugState?.storedCount ?? 0}회 · 중복·이전: {debugState?.ignoredCount ?? 0}회</Text>
           <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
-          <Text style={[s.debugRow, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#9BA1A6' }]}>
-            서버 응답: {debugState?.serverOk === true ? '✅ 성공' : debugState?.serverOk === false ? `❌ ${debugState?.serverError}` : '대기'}
+          <Text style={[s.debugRow, { color: trackingStatusColor[trackingStatus] }]}>
+            서버 상태: {trackingStatusLabel[trackingStatus]}{debugState?.serverError ? ` — ${debugState.serverError}` : ''}
           </Text>
           <Text style={s.debugRow}>
-            마지막 성공: {debugState?.lastSuccessAt ? new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR') : '-'}
+            마지막 응답: {debugState?.lastResponseAt ? new Date(debugState.lastResponseAt).toLocaleTimeString('ko-KR') : '-'} · 마지막 새 위치 저장: {debugState?.lastStoredAt ? new Date(debugState.lastStoredAt).toLocaleTimeString('ko-KR') : '-'}
           </Text>
-          <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
-          <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
+          <Text style={s.debugRow}>앱 사용 중 위치 권한: {permStatus.foregroundLocation}</Text>
+          <Text style={s.debugRow}>항상 위치 권한: {permStatus.backgroundLocation}</Text>
+          <Text style={s.debugRow}>알림 권한: {permStatus.notification}</Text>
           <Text style={s.debugRow}>API 서버: https://www.xn--h50b270bp0ceuddugnobx2m.kr</Text>
         </View>
       )}

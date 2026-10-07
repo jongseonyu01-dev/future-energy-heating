@@ -16,6 +16,12 @@ import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
 import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";
 import {
+  classifyLocationUpdateResponse,
+  LatestOnlyUploadQueue,
+  selectNewestFreshLocation,
+  type LocationUpdateResponseBody,
+} from "@/lib/location-upload-scheduler";
+import {
   matchesTrackingStopAction,
   TrackingLifecycleCoordinator,
   sameTrackingLifecycleState,
@@ -40,6 +46,8 @@ export const STOP_TRACKING_NOTIFICATION_ACTION = "FUTURE_ENERGY_LOCATION_STOP";
 const MAX_MEASUREMENT_AGE_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
 const STOP_REQUEST_ATTEMPTS = 2;
+const UPDATE_REQUEST_ATTEMPTS = 3;
+const UPDATE_RETRY_DELAY_MS = 1_000;
 
 export interface PersistedTrackingState {
   token: string;
@@ -72,11 +80,14 @@ export interface LocationDebugState {
   accuracy: number | null;
   speed: number | null;
   heading: number | null;
-  lastSentAt: number | null;
-  lastSuccessAt: number | null;
-  serverOk: boolean | null;
+  lastAttemptAt: number | null;
+  lastResponseAt: number | null;
+  lastStoredAt: number | null;
+  serverStatus: "idle" | "uploading" | "stored" | "ignored" | "error";
   serverError: string | null;
-  sendCount: number;
+  attemptCount: number;
+  storedCount: number;
+  ignoredCount: number;
   source: "foreground-service-task" | "";
 }
 
@@ -96,14 +107,14 @@ type TimeoutHandle = {
 
 let debugState: LocationDebugState = {
   lat: null, lng: null, accuracy: null, speed: null, heading: null,
-  lastSentAt: null, lastSuccessAt: null, serverOk: null, serverError: null,
-  sendCount: 0, source: "",
+  lastAttemptAt: null, lastResponseAt: null, lastStoredAt: null,
+  serverStatus: "idle", serverError: null, attemptCount: 0, storedCount: 0, ignoredCount: 0, source: "",
 };
-const debugListeners: Array<(state: LocationDebugState) => void> = [];
-const trackingStateListeners: Array<(state: PersistedTrackingState | null) => void> = [];
-let activeUploadKey: string | null = null;
+const debugListeners: ((state: LocationDebugState) => void)[] = [];
+const trackingStateListeners: ((state: PersistedTrackingState | null) => void)[] = [];
 let lastUploadMeasurement = { key: "", measuredAt: 0 };
 let trackingNotificationId: string | null = null;
+const uploadQueue = new LatestOnlyUploadQueue<LocationSample>();
 
 function stateKey(state: PersistedTrackingState): string {
   return `${state.token}:${state.requestId}:${state.technicianUserId}:${state.startedAt}`;
@@ -262,7 +273,7 @@ function createRequestTimeout(timeoutMs = REQUEST_TIMEOUT_MS): TimeoutHandle {
 }
 
 function isTerminalLocationResponse(status: number, payload: { status?: unknown; code?: unknown } | null): boolean {
-  if (status === 401 || status === 403 || status === 404) return true;
+  if (status === 401 || status === 403 || status === 404 || status === 409) return true;
   if (status !== 400) return false;
   const sessionStatus = typeof payload?.status === "string" ? payload.status : "";
   const code = typeof payload?.code === "string" ? payload.code : "";
@@ -274,6 +285,12 @@ function timeoutMessage(error: unknown): string {
   return error instanceof Error && error.name === "AbortError"
     ? "전송 시간 초과"
     : "네트워크 연결을 기다리는 중";
+}
+
+function serverRecordedAt(value: unknown): number {
+  if (typeof value !== "string") return Date.now();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
 export async function requestLocationPermissions(): Promise<{
@@ -309,13 +326,15 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
   const started = await trackingLifecycle.start(state);
   if (!started) throw new Error("위치 공유 시작이 취소되었거나 다른 공유로 교체되었습니다.");
   lastUploadMeasurement = { key: stateKey(state), measuredAt: 0 };
-  emitDebug({ sendCount: 0, serverOk: null, serverError: null, source: "" });
+  emitDebug({
+    lastAttemptAt: null, lastResponseAt: null, lastStoredAt: null,
+    serverStatus: "idle", serverError: null, attemptCount: 0, storedCount: 0, ignoredCount: 0, source: "",
+  });
 }
 
 /** Stops only native/local state. A separate token-scoped server stop is best effort. */
 export async function stopLocationTracking(): Promise<void> {
   await trackingLifecycle.stopCurrent();
-  activeUploadKey = null;
   lastUploadMeasurement = { key: "", measuredAt: 0 };
 }
 
@@ -324,7 +343,7 @@ export async function restoreLocationTrackingForUser(userId: number): Promise<Pe
   try {
     return await trackingLifecycle.restoreForUser(userId);
   } catch (error) {
-    emitDebug({ serverOk: false, serverError: "위치공유 서비스를 다시 시작하지 못했습니다." });
+    emitDebug({ serverStatus: "error", serverError: "위치공유 서비스를 다시 시작하지 못했습니다." });
     console.warn("[LocationTracking] restore failed", error);
     return null;
   }
@@ -352,7 +371,7 @@ export async function getCurrentLocationFull(): Promise<{
 
 async function deactivateAfterTerminalResponse(state: PersistedTrackingState): Promise<void> {
   const stopped = await trackingLifecycle.stopIfCurrent(state);
-  if (stopped) emitDebug({ serverOk: false, serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
+  if (stopped) emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
 }
 
 export async function sendLocationToServer(
@@ -363,75 +382,108 @@ export async function sendLocationToServer(
   const now = Date.now();
   const key = stateKey(state);
   if (!Number.isFinite(location.measuredAt) || location.measuredAt <= 0 || now - location.measuredAt > MAX_MEASUREMENT_AGE_MS) {
-    emitDebug({ serverOk: false, serverError: "오래된 위치 측정값은 전송하지 않았습니다.", lastSentAt: now, source: "foreground-service-task" });
+    emitDebug({ serverStatus: "error", serverError: "오래된 위치 측정값은 전송하지 않았습니다.", lastAttemptAt: now, source: "foreground-service-task" });
     return;
   }
-  if (activeUploadKey === key || (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt)) return;
+  if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
   if (!(await trackingLifecycle.isCurrent(state))) return;
 
-  activeUploadKey = key;
-  lastUploadMeasurement = { key, measuredAt: location.measuredAt };
-  emitDebug({
-    lat: location.lat, lng: location.lng, speed: location.speed, heading: location.heading, accuracy: location.accuracy,
-    lastSentAt: now, source: "foreground-service-task",
-  });
+  await uploadQueue.enqueue(location, async (queuedLocation) => {
+    if (!(await trackingLifecycle.isCurrent(state))) return;
+    const queuedNow = Date.now();
+    if (queuedNow - queuedLocation.measuredAt > MAX_MEASUREMENT_AGE_MS) {
+      emitDebug({ serverStatus: "error", serverError: "대기 중 오래된 위치 측정값은 전송하지 않았습니다.", lastAttemptAt: queuedNow, source: "foreground-service-task" });
+      return;
+    }
+    if (lastUploadMeasurement.key === key && queuedLocation.measuredAt <= lastUploadMeasurement.measuredAt) return;
 
-  try {
-    const guarded = await runGuardedLocationUpload({
-      isCurrent: () => trackingLifecycle.isCurrent(state),
-      getCredential: async () => {
-        const technicianToken = capturedBearerToken ?? await Auth.getSessionToken();
-        return buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
-      },
-      request: async (technicianToken) => {
-        const headers = buildLocationRequestHeaders(technicianToken);
-        if (!headers) throw new Error("LOCATION_CREDENTIAL_UNAVAILABLE");
-        const timeout = createRequestTimeout();
-        try {
-          return await fetch(`${getApiBaseUrl()}/api/location/update`, {
-            method: "POST",
-            headers,
-            signal: timeout.signal,
-            body: JSON.stringify({
-              token: state.token,
-              lat: location.lat,
-              lng: location.lng,
-              speed: location.speed,
-              heading: location.heading,
-              accuracy: location.accuracy,
-              measuredAt: location.measuredAt,
-            }),
-          });
-        } finally {
-          timeout.dispose();
-        }
-      },
+    emitDebug({
+      lat: queuedLocation.lat, lng: queuedLocation.lng, speed: queuedLocation.speed, heading: queuedLocation.heading, accuracy: queuedLocation.accuracy,
+      lastAttemptAt: queuedNow, serverStatus: "uploading", serverError: null, source: "foreground-service-task",
     });
-    if (guarded.kind === "STALE") return;
-    if (guarded.kind === "MISSING_CREDENTIAL") {
-      emitDebug({ serverOk: false, serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다.", sendCount: debugState.sendCount + 1 });
-      return;
-    }
-    const response = guarded.response;
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null) as { error?: unknown; status?: unknown; code?: unknown } | null;
+
+    for (let attempt = 0; attempt < UPDATE_REQUEST_ATTEMPTS; attempt += 1) {
+      emitDebug({ attemptCount: debugState.attemptCount + 1, serverStatus: "uploading" });
+      const guarded = await runGuardedLocationUpload({
+        isCurrent: () => trackingLifecycle.isCurrent(state),
+        getCredential: async () => {
+          const technicianToken = capturedBearerToken ?? await Auth.getSessionToken();
+          return buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
+        },
+        request: async (technicianToken) => {
+          const headers = buildLocationRequestHeaders(technicianToken);
+          if (!headers) throw new Error("LOCATION_CREDENTIAL_UNAVAILABLE");
+          const timeout = createRequestTimeout();
+          try {
+            return await fetch(`${getApiBaseUrl()}/api/location/update`, {
+              method: "POST",
+              headers,
+              signal: timeout.signal,
+              body: JSON.stringify({
+                token: state.token,
+                lat: queuedLocation.lat,
+                lng: queuedLocation.lng,
+                speed: queuedLocation.speed,
+                heading: queuedLocation.heading,
+                accuracy: queuedLocation.accuracy,
+                measuredAt: queuedLocation.measuredAt,
+              }),
+            });
+          } finally {
+            timeout.dispose();
+          }
+        },
+      }).catch((error: unknown) => ({ kind: "REQUEST_ERROR" as const, error }));
+
+      if (guarded.kind === "STALE") return;
+      if (guarded.kind === "MISSING_CREDENTIAL") {
+        emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
+        return;
+      }
+      if (guarded.kind === "REQUEST_ERROR") {
+        if (!(await trackingLifecycle.isCurrent(state))) return;
+        if (attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(queuedLocation.measuredAt)) {
+          await new Promise<void>((resolve) => setTimeout(resolve, UPDATE_RETRY_DELAY_MS));
+          continue;
+        }
+        emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
+        return;
+      }
+
+      const response = guarded.response;
+      const payload = await response.json().catch(() => null) as LocationUpdateResponseBody | null;
       if (!(await trackingLifecycle.isCurrent(state))) return;
-      emitDebug({
-        serverOk: false,
-        serverError: formatLocationRequestFailure(response.status, payload?.error),
-        sendCount: debugState.sendCount + 1,
-      });
-      if (isTerminalLocationResponse(response.status, payload)) await deactivateAfterTerminalResponse(state);
+      const disposition = classifyLocationUpdateResponse(response.status, payload);
+      if (disposition === "accepted") {
+        lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
+        const recordedAt = serverRecordedAt(payload?.updatedAt);
+        emitDebug({
+          serverStatus: "stored", serverError: null, lastResponseAt: Date.now(), lastStoredAt: recordedAt,
+          storedCount: debugState.storedCount + 1,
+        });
+        return;
+      }
+      if (disposition === "ignored") {
+        lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
+        emitDebug({
+          serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: Date.now(),
+          ignoredCount: debugState.ignoredCount + 1,
+        });
+        return;
+      }
+      if (disposition === "terminal") {
+        emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: Date.now() });
+        if (isTerminalLocationResponse(response.status, payload)) await deactivateAfterTerminalResponse(state);
+        return;
+      }
+      if (disposition === "retryable" && attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(queuedLocation.measuredAt)) {
+        await new Promise<void>((resolve) => setTimeout(resolve, UPDATE_RETRY_DELAY_MS));
+        continue;
+      }
+      emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: Date.now() });
       return;
     }
-    emitDebug({ serverOk: true, lastSuccessAt: Date.now(), serverError: null, sendCount: debugState.sendCount + 1 });
-  } catch (error: unknown) {
-    if (await trackingLifecycle.isCurrent(state)) {
-      emitDebug({ serverOk: false, serverError: timeoutMessage(error), sendCount: debugState.sendCount + 1 });
-    }
-  } finally {
-    if (activeUploadKey === key) activeUploadKey = null;
-  }
+  });
 }
 
 export async function notifySessionStop(
@@ -489,7 +541,6 @@ export async function stopStoredTrackingAndNotify(
 ): Promise<void> {
   // `stopCurrent()` also fences a cold runtime before it performs its stored read.
   const stopped = await trackingLifecycle.stopCurrent();
-  activeUploadKey = null;
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) {
     const matchingSnapshot = authSnapshot?.technicianUserId === stopped.technicianUserId ? authSnapshot : null;
@@ -516,7 +567,6 @@ async function handleTrackingNotificationResponse(response: Notifications.Notifi
   const stopped = current
     ? await trackingLifecycle.stopCurrent()
     : await trackingLifecycle.stopStoredIf((state) => matchesTrackingStopAction(state, data));
-  activeUploadKey = null;
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) void notifySessionStop(stopped.token, "업무취소", stopped.technicianUserId);
 }
@@ -550,7 +600,19 @@ if (Platform.OS !== "web") {
   try {
     if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {
-        if (error || !data?.locations?.length) return;
+        if (error) {
+          emitDebug({ serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다.", source: "foreground-service-task" });
+          return;
+        }
+        const taskLocations = (Array.isArray(data?.locations) ? data.locations : []) as {
+          timestamp?: number;
+          coords?: { latitude?: number; longitude?: number; speed?: number | null; heading?: number | null; accuracy?: number | null };
+        }[];
+        const latest = selectNewestFreshLocation(taskLocations, Date.now(), MAX_MEASUREMENT_AGE_MS);
+        if (!latest) {
+          emitDebug({ serverStatus: "error", serverError: "유효한 최근 위치 측정값이 없어 전송하지 않았습니다.", source: "foreground-service-task" });
+          return;
+        }
         const adopted = await adoptHeadlessTrackingWithCredential({
           lifecycle: trackingLifecycle,
           getBearerToken: async () => {
@@ -558,15 +620,23 @@ if (Platform.OS !== "web") {
             return buildLocationRequestHeaders(token) ? token : null;
           },
         });
-        const location = data.locations[0];
-        if (!adopted || !location?.coords) return;
+        if (!adopted) {
+          emitDebug({ serverStatus: "error", serverError: "현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.", source: "foreground-service-task" });
+          return;
+        }
+        const lat = Number(latest.coords?.latitude);
+        const lng = Number(latest.coords?.longitude);
+        if (!latest.coords || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+          emitDebug({ serverStatus: "error", serverError: "위치 좌표 형식을 확인하지 못했습니다.", source: "foreground-service-task" });
+          return;
+        }
         await sendLocationToServer(adopted.state, {
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-          speed: location.coords.speed ?? null,
-          heading: location.coords.heading ?? null,
-          accuracy: location.coords.accuracy ?? null,
-          measuredAt: location.timestamp,
+          lat,
+          lng,
+          speed: latest.coords.speed ?? null,
+          heading: latest.coords.heading ?? null,
+          accuracy: latest.coords.accuracy ?? null,
+          measuredAt: Number(latest.timestamp),
         }, adopted.bearerToken);
       });
     }

@@ -6,11 +6,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+import * as Location from "expo-location";
 import { useAppAuth } from "@/lib/auth-context";
 import {
   createLocationStopAuthSnapshot,
   getPersistedTrackingState,
-  requestLocationPermissions,
   restoreLocationTrackingForUser,
   startLocationTracking,
   stopStoredTrackingAndNotify,
@@ -26,7 +26,7 @@ export interface LocationTrackingContextValue {
   trackingRequestId: number | null;
   trackingUrl: string | null;
   debugState: LocationDebugState | null;
-  permStatus: { fg: string; bg: string };
+  permStatus: { foregroundLocation: string; backgroundLocation: string; notification: string };
   startTracking: (params: StartTrackingParams) => Promise<StartTrackingResult>;
   stopTracking: (reason: "도착완료" | "업무취소") => Promise<void>;
   checkPermissions: () => Promise<void>;
@@ -51,7 +51,7 @@ const LocationTrackingContext = createContext<LocationTrackingContextValue>({
   trackingRequestId: null,
   trackingUrl: null,
   debugState: null,
-  permStatus: { fg: "확인 중...", bg: "확인 중..." },
+  permStatus: { foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." },
   startTracking: async () => ({ ok: false }),
   stopTracking: async () => {},
   checkPermissions: async () => {},
@@ -73,7 +73,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const [trackingRequestId, setTrackingRequestId] = useState<number | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
-  const [permStatus, setPermStatus] = useState({ fg: "확인 중...", bg: "확인 중..." });
+  const [permStatus, setPermStatus] = useState({ foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." });
 
   const applyState = useCallback((state: PersistedTrackingState | null) => {
     const view = stateToView(state);
@@ -85,20 +85,20 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
 
   const checkPermissions = useCallback(async () => {
     if (Platform.OS === "web") {
-      setPermStatus({ fg: "Android 앱 필요", bg: "Android 앱 필요" });
+      setPermStatus({ foregroundLocation: "Android 앱 필요", backgroundLocation: "Android 앱 필요", notification: "Android 앱 필요" });
       return;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Location = require("expo-location");
       const foreground = await Location.getForegroundPermissionsAsync();
+      const background = await Location.getBackgroundPermissionsAsync();
       const notifications = await Notifications.getPermissionsAsync();
       setPermStatus({
-        fg: foreground.status === "granted" ? "✅ 위치 허용" : `❌ 위치 ${foreground.status}`,
-        bg: notifications.granted ? "✅ 알림·중지 버튼 사용 가능" : "⚠️ 알림 권한 필요",
+        foregroundLocation: foreground.status === "granted" ? "✅ 허용" : `❌ ${foreground.status}`,
+        backgroundLocation: background.status === "granted" ? "✅ 항상 허용" : `⚠️ ${background.status}`,
+        notification: notifications.granted ? "✅ 허용" : "⚠️ 필요",
       });
     } catch {
-      setPermStatus({ fg: "확인 실패", bg: "확인 실패" });
+      setPermStatus({ foregroundLocation: "확인 실패", backgroundLocation: "확인 실패", notification: "확인 실패" });
     }
   }, []);
 

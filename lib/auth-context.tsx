@@ -77,6 +77,9 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ json: { userId, token } }),
     });
+    // A temporary server outage must not erase a valid local technician
+    // session and thereby stop an active foreground location service.
+    if (res.status >= 500) return true;
     if (!res.ok) return false;
     const data = await res.json();
     return data?.result?.data?.json?.success === true;
