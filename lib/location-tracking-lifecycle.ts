@@ -225,6 +225,11 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     return this.beginStop(state);
   }
 
+  /** Applies an explicitly classified terminal server response to its exact owner only. */
+  public async stopForTerminalResponse(state: T): Promise<T | null> {
+    return this.stopIfCurrent(state);
+  }
+
   /**
    * Handles a cold notification action with no in-memory intent. A stored state
    * read that races with a new start is rejected before it can stop the shared

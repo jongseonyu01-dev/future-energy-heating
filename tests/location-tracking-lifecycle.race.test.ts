@@ -185,6 +185,27 @@ async function main() {
     assert.equal(requests, 0);
   }
 
+  // FGS start may be rejected if the technician backgrounds the app while
+  // departure is starting. The saved local intent and notification must be
+  // cleared so the schedule UI can stop the just-created server session and
+  // ask for a foreground retry instead of claiming that tracking started.
+  {
+    let attempts = 0;
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        attempts += 1;
+        fixture.calls.push("native:start");
+        if (attempts === 1) throw new Error("FOREGROUND_SERVICE_START_DENIED");
+      },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    await assert.rejects(() => coordinator.start(state("F", 5)), /FOREGROUND_SERVICE_START_DENIED/);
+    assert.equal(fixture.readStored(), null, "failed foreground start must clear persisted tracking intent");
+    assert.ok(fixture.calls.includes("native:stop"), "failed foreground start must stop any partial native collection");
+    assert.ok(fixture.calls.includes("state:none"), "failed foreground start must not report active sharing");
+    assert.equal(await coordinator.start(state("F", 5)), true, "foreground retry may start after the transient failure");
+  }
+
   // Stale notification action cannot terminate a replacement customer's share.
   {
     const first = state("F", 6);

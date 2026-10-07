@@ -51,7 +51,11 @@ export function classifyLocationUpdateResponse(
   status: number,
   payload: LocationUpdateResponseBody | null,
 ): LocationUpdateDisposition {
-  if (status === 401 || status === 403 || status === 404) return "terminal";
+  const code = typeof payload?.code === "string" ? payload.code : "";
+  if (status === 401 || status === 403 || status === 404 || status === 409) return "terminal";
+  if (status === 400 && ["LOCATION_SESSION_TERMINATED", "LOCATION_SESSION_EXPIRED", "LOCATION_ASSIGNMENT_CHANGED"].includes(code)) {
+    return "terminal";
+  }
   if (status === 408 || status === 429 || status >= 500) return "retryable";
   if (status < 200 || status >= 300) return "rejected";
   if (payload?.success !== true) return "rejected";
@@ -66,18 +70,23 @@ export function classifyLocationUpdateResponse(
  * completed old operation from affecting a replacement location session.
  */
 export class LatestOnlyUploadQueue<T extends { measuredAt: number }> {
-  private pending: { value: T; execute: (value: T) => Promise<void> } | null = null;
+  private pending: { scope: string; value: T; execute: (value: T) => Promise<void> } | null = null;
   private draining: Promise<void> | null = null;
 
-  public enqueue(value: T, execute: (value: T) => Promise<void>): Promise<void> {
-    this.pending = { value, execute };
+  public enqueue(scope: string, value: T, execute: (value: T) => Promise<void>): Promise<void> {
+    // A different location-session/user scope replaces a stale pending callback
+    // regardless of device timestamp. Within the same scope, delayed TaskManager
+    // batches must never overwrite a newer sample already waiting to send.
+    if (!this.pending || this.pending.scope !== scope || value.measuredAt > this.pending.value.measuredAt) {
+      this.pending = { scope, value, execute };
+    }
     if (!this.draining) this.draining = this.drain();
     return this.draining;
   }
 
   /** Allows retry code to yield to a fresher queued sample. */
-  public hasNewerPending(measuredAt: number): boolean {
-    return Boolean(this.pending && this.pending.value.measuredAt > measuredAt);
+  public hasNewerPending(scope: string, measuredAt: number): boolean {
+    return Boolean(this.pending && this.pending.scope === scope && this.pending.value.measuredAt > measuredAt);
   }
 
   private async drain(): Promise<void> {

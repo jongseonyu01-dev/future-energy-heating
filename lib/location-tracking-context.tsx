@@ -88,18 +88,28 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       setPermStatus({ foregroundLocation: "Android 앱 필요", backgroundLocation: "Android 앱 필요", notification: "Android 앱 필요" });
       return;
     }
+    let foregroundLocation = "확인 실패";
+    let backgroundLocation = "FGS 방식 (별도 권한 미요청)";
+    let notification = "확인 실패";
     try {
       const foreground = await Location.getForegroundPermissionsAsync();
-      const background = await Location.getBackgroundPermissionsAsync();
-      const notifications = await Notifications.getPermissionsAsync();
-      setPermStatus({
-        foregroundLocation: foreground.status === "granted" ? "✅ 허용" : `❌ ${foreground.status}`,
-        backgroundLocation: background.status === "granted" ? "✅ 항상 허용" : `⚠️ ${background.status}`,
-        notification: notifications.granted ? "✅ 허용" : "⚠️ 필요",
-      });
+      foregroundLocation = foreground.status === "granted" ? "✅ 허용" : `❌ ${foreground.status}`;
     } catch {
-      setPermStatus({ foregroundLocation: "확인 실패", backgroundLocation: "확인 실패", notification: "확인 실패" });
+      // A location-module failure must not hide the independent notification state.
     }
+    try {
+      const background = await Location.getBackgroundPermissionsAsync();
+      backgroundLocation = background.status === "granted" ? "✅ 항상 허용" : `ℹ️ ${background.status} (FGS 방식)`;
+    } catch {
+      // expo-location may throw when ACCESS_BACKGROUND_LOCATION is intentionally absent.
+    }
+    try {
+      const notifications = await Notifications.getPermissionsAsync();
+      notification = notifications.granted ? "✅ 허용" : "⚠️ 필요";
+    } catch {
+      // Notification lookup is independently best effort.
+    }
+    setPermStatus({ foregroundLocation, backgroundLocation, notification });
   }, []);
 
   const stopTracking = useCallback(async (reason: "도착완료" | "업무취소") => {

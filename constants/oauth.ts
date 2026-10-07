@@ -4,7 +4,15 @@ import { OFFICIAL_API_BASE_URL, resolveApiBaseUrl } from "@/lib/api-base-url";
 
 export const IS_REVENUE_REVIEW_MODE = process.env.EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE === "1";
 export { OFFICIAL_API_BASE_URL };
-export const API_BASE_URL = resolveApiBaseUrl(process.env);
+// Expo Metro only replaces EXPO_PUBLIC_* values accessed with dot notation.
+// Do not pass the complete process.env object: it would leave the release URL
+// decision to a runtime object which Android bundles do not provide.
+const apiBaseUrlEnvironment = {
+  EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+  EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE: process.env.EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE,
+  EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE: process.env.EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE,
+};
+export const API_BASE_URL = resolveApiBaseUrl(apiBaseUrlEnvironment);
 
 const env = {
   portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL || "",

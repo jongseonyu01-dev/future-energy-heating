@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.51",
+  version: "1.1.52",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    versionCode: 51,
+    versionCode: 52,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
@@ -75,7 +75,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION"],
+    permissions: ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION"],
     intentFilters: [
       {
         action: "VIEW",
@@ -102,7 +102,7 @@ const config: ExpoConfig = {
       {
         "locationAlwaysAndWhenInUsePermission": "퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
         "isIosBackgroundLocationEnabled": true,
-        isAndroidBackgroundLocationEnabled: true
+        isAndroidBackgroundLocationEnabled: false
       }
     ],
     "expo-notifications",

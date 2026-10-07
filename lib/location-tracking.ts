@@ -249,18 +249,23 @@ async function startNativeLocationTask(): Promise<void> {
   if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME)) {
     await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);
   }
-  await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
-    accuracy: Location.Accuracy.High,
-    timeInterval: 10_000,
-    distanceInterval: 5,
-    foregroundService: {
-      notificationTitle: "고객에게 이동 위치 공유 중",
-      notificationBody: "기사 위치를 고객 지도에 안전하게 업데이트하고 있습니다.",
-      notificationColor: "#FF6B35",
-      killServiceOnDestroy: false,
-    },
-    pausesUpdatesAutomatically: false,
-  });
+  try {
+    await Location.startLocationUpdatesAsync(BACKGROUND_TASK_NAME, {
+      accuracy: Location.Accuracy.High,
+      timeInterval: 10_000,
+      distanceInterval: 5,
+      foregroundService: {
+        notificationTitle: "고객에게 이동 위치 공유 중",
+        notificationBody: "기사 위치를 고객 지도에 안전하게 업데이트하고 있습니다.",
+        notificationColor: "#FF6B35",
+        killServiceOnDestroy: false,
+      },
+      pausesUpdatesAutomatically: false,
+    });
+  } catch (error) {
+    console.warn("[LocationTracking] Android foreground-service start failed", error);
+    throw new Error("위치 공유는 앱 화면이 열린 상태에서 시작해야 합니다. 앱을 다시 연 뒤 출발을 다시 눌러 주세요.");
+  }
 }
 
 function createRequestTimeout(timeoutMs = REQUEST_TIMEOUT_MS): TimeoutHandle {
@@ -270,15 +275,6 @@ function createRequestTimeout(timeoutMs = REQUEST_TIMEOUT_MS): TimeoutHandle {
     signal: controller.signal,
     dispose: () => clearTimeout(timer),
   };
-}
-
-function isTerminalLocationResponse(status: number, payload: { status?: unknown; code?: unknown } | null): boolean {
-  if (status === 401 || status === 403 || status === 404 || status === 409) return true;
-  if (status !== 400) return false;
-  const sessionStatus = typeof payload?.status === "string" ? payload.status : "";
-  const code = typeof payload?.code === "string" ? payload.code : "";
-  return ["도착완료", "업무취소", "만료"].includes(sessionStatus)
-    || ["LOCATION_SESSION_TERMINATED", "LOCATION_SESSION_EXPIRED", "LOCATION_ASSIGNMENT_CHANGED"].includes(code);
 }
 
 function timeoutMessage(error: unknown): string {
@@ -295,29 +291,18 @@ function serverRecordedAt(value: unknown): number {
 
 export async function requestLocationPermissions(): Promise<{
   granted: boolean;
-  backgroundGranted: boolean;
   notificationGranted: boolean;
   message?: string;
 }> {
-  if (Platform.OS === "web") return { granted: true, backgroundGranted: true, notificationGranted: false };
+  if (Platform.OS === "web") return { granted: true, notificationGranted: false };
   try {
     const Location = await getLocationModule();
     const foreground = await Location.requestForegroundPermissionsAsync();
     if (foreground.status !== "granted") {
       return {
         granted: false,
-        backgroundGranted: false,
         notificationGranted: false,
         message: "위치 공유를 위해 위치 권한을 허용해 주세요.",
-      };
-    }
-    const background = await Location.requestBackgroundPermissionsAsync();
-    if (background.status !== "granted") {
-      return {
-        granted: false,
-        backgroundGranted: false,
-        notificationGranted: false,
-        message: "다른 앱·잠금 화면에서도 위치를 공유하려면 위치 권한을 ‘항상 허용’으로 변경해 주세요.",
       };
     }
     const notification = await Notifications.requestPermissionsAsync();
@@ -325,19 +310,17 @@ export async function requestLocationPermissions(): Promise<{
     if (!notificationGranted) {
       return {
         granted: true,
-        backgroundGranted: true,
         notificationGranted: false,
         message: "위치 공유 상태와 중지 버튼을 표시하려면 알림 권한을 허용해 주세요.",
       };
     }
-    return { granted: true, backgroundGranted: true, notificationGranted: true };
+    return { granted: true, notificationGranted: true };
   } catch (error) {
     console.warn("[LocationTracking] permission request failed", error);
     return {
       granted: false,
-      backgroundGranted: false,
       notificationGranted: false,
-      message: "위치·항상 위치 또는 알림 권한을 확인하지 못했습니다.",
+      message: "위치 또는 알림 권한을 확인하지 못했습니다.",
     };
   }
 }
@@ -391,7 +374,7 @@ export async function getCurrentLocationFull(): Promise<{
 }
 
 async function deactivateAfterTerminalResponse(state: PersistedTrackingState): Promise<void> {
-  const stopped = await trackingLifecycle.stopIfCurrent(state);
+  const stopped = await trackingLifecycle.stopForTerminalResponse(state);
   if (stopped) emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
 }
 
@@ -409,7 +392,7 @@ export async function sendLocationToServer(
   if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
   if (!(await trackingLifecycle.isCurrent(state))) return;
 
-  await uploadQueue.enqueue(location, async (queuedLocation) => {
+  await uploadQueue.enqueue(key, location, async (queuedLocation) => {
     if (!(await trackingLifecycle.isCurrent(state))) return;
     const queuedNow = Date.now();
     if (queuedNow - queuedLocation.measuredAt > MAX_MEASUREMENT_AGE_MS) {
@@ -463,7 +446,7 @@ export async function sendLocationToServer(
       }
       if (guarded.kind === "REQUEST_ERROR") {
         if (!(await trackingLifecycle.isCurrent(state))) return;
-        if (attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(queuedLocation.measuredAt)) {
+        if (attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(key, queuedLocation.measuredAt)) {
           await new Promise<void>((resolve) => setTimeout(resolve, UPDATE_RETRY_DELAY_MS));
           continue;
         }
@@ -494,10 +477,10 @@ export async function sendLocationToServer(
       }
       if (disposition === "terminal") {
         emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: Date.now() });
-        if (isTerminalLocationResponse(response.status, payload)) await deactivateAfterTerminalResponse(state);
+        await deactivateAfterTerminalResponse(state);
         return;
       }
-      if (disposition === "retryable" && attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(queuedLocation.measuredAt)) {
+      if (disposition === "retryable" && attempt + 1 < UPDATE_REQUEST_ATTEMPTS && !uploadQueue.hasNewerPending(key, queuedLocation.measuredAt)) {
         await new Promise<void>((resolve) => setTimeout(resolve, UPDATE_RETRY_DELAY_MS));
         continue;
       }

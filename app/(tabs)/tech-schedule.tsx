@@ -144,14 +144,12 @@ export default function TechScheduleScreen() {
     setIsStartingTracking(true);
     try {
       // 위치 권한 요청
-      const { granted, backgroundGranted, notificationGranted, message } = await requestLocationPermissions();
+      const { granted, notificationGranted, message } = await requestLocationPermissions();
       await checkPermissions();
       if (!granted && Platform.OS !== "web") {
         Alert.alert(
-          backgroundGranted ? "위치 권한 필요" : "항상 위치 허용 필요",
-          message || (backgroundGranted
-            ? "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 허용"
-            : "다른 앱·잠금 화면에서도 위치를 공유하려면\n설정 → 앱 → 퓨처에너지테크 → 위치 → 항상 허용으로 변경해 주세요."),
+          "위치 권한 필요",
+          message || "위치 공유를 위해 위치 권한이 필요합니다.\n앱이 열린 상태에서 출발을 다시 눌러 주세요.",
           [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
         );
         setIsStartingTracking(false);

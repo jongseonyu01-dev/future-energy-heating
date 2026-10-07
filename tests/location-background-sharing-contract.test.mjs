@@ -48,6 +48,7 @@ assert.match(context, /subscribeTrackingState/, "terminal server cleanup must cl
 assert.match(context, /getBackgroundPermissionsAsync/, "background location permission must be observed separately from notification permission");
 assert.match(context, /foregroundLocation/, "foreground location permission must have its own UI field");
 assert.match(context, /notification/, "notification permission must have its own UI field");
+assert.match(context, /FGS 방식 \(별도 권한 미요청\)/, "absent background permission must not hide foreground or notification status");
 assert.match(schedule, /isTracking && trackingRequestId !== work\.id/, "departure must block different active customer");
 assert.match(schedule, /technicianUserId: userId/, "tracking persistence binds the authenticated technician");
 assert.match(schedule, /notifySessionStop\(result\.token, "업무취소", userId, createLocationStopAuthSnapshot\(user\)\)/, "failed native start must end only the active technician session");
@@ -58,10 +59,10 @@ assert.match(schedule, /ignoredCount/, "technician UI must label older or duplic
 assert.match(workReport, /trackingRequestId === requestId && !needsRevisit/, "successful completion must stop matching sharing only");
 assert.match(auth, /stopStoredTrackingAndNotify\("업무취소", stopSnapshot\)/, "logout must use the captured A credential without reading a later B login");
 assert.match(auth, /if \(res\.status >= 500\) return true;/, "temporary auth verification 5xx must not clear a live technician session");
-assert.match(config, /ACCESS_BACKGROUND_LOCATION/, "Android background permission must be declared for other-app and screen-off tracking");
-assert.match(config, /isAndroidBackgroundLocationEnabled:\s*true/, "Expo location plugin must enable Android background location support");
-assert.match(tracking, /requestBackgroundPermissionsAsync\(\)/, "departure must request Always Allow before native collection starts");
-assert.match(schedule, /항상 위치 허용 필요/, "departure UI must block and explain missing Always Allow permission");
+assert.doesNotMatch(config, /ACCESS_BACKGROUND_LOCATION/, "FGS-started tracking must not expand to background location permission without a separate design");
+assert.match(config, /isAndroidBackgroundLocationEnabled:\s*false/, "Expo location plugin must retain the foreground-service permission boundary");
+assert.doesNotMatch(tracking, /requestBackgroundPermissionsAsync\(\)/, "departure must not force Always Allow for a foreground-service start");
+assert.match(tracking, /앱 화면이 열린 상태에서 시작해야 합니다/, "foreground-service start rejection must guide a foreground retry");
 assert.match(config, /FOREGROUND_SERVICE_LOCATION/, "Android foreground-service location permission is declared");
 assert.match(config, /expo-notifications/, "actionable persistent notification module is included");
 
