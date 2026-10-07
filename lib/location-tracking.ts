@@ -295,29 +295,50 @@ function serverRecordedAt(value: unknown): number {
 
 export async function requestLocationPermissions(): Promise<{
   granted: boolean;
+  backgroundGranted: boolean;
   notificationGranted: boolean;
   message?: string;
 }> {
-  if (Platform.OS === "web") return { granted: true, notificationGranted: false };
+  if (Platform.OS === "web") return { granted: true, backgroundGranted: true, notificationGranted: false };
   try {
     const Location = await getLocationModule();
     const foreground = await Location.requestForegroundPermissionsAsync();
     if (foreground.status !== "granted") {
-      return { granted: false, notificationGranted: false, message: "위치 권한을 허용해 주세요." };
+      return {
+        granted: false,
+        backgroundGranted: false,
+        notificationGranted: false,
+        message: "위치 공유를 위해 위치 권한을 허용해 주세요.",
+      };
+    }
+    const background = await Location.requestBackgroundPermissionsAsync();
+    if (background.status !== "granted") {
+      return {
+        granted: false,
+        backgroundGranted: false,
+        notificationGranted: false,
+        message: "다른 앱·잠금 화면에서도 위치를 공유하려면 위치 권한을 ‘항상 허용’으로 변경해 주세요.",
+      };
     }
     const notification = await Notifications.requestPermissionsAsync();
     const notificationGranted = notification.granted || notification.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
     if (!notificationGranted) {
       return {
         granted: true,
+        backgroundGranted: true,
         notificationGranted: false,
         message: "위치 공유 상태와 중지 버튼을 표시하려면 알림 권한을 허용해 주세요.",
       };
     }
-    return { granted: true, notificationGranted: true };
+    return { granted: true, backgroundGranted: true, notificationGranted: true };
   } catch (error) {
     console.warn("[LocationTracking] permission request failed", error);
-    return { granted: false, notificationGranted: false, message: "위치 또는 알림 권한을 확인하지 못했습니다." };
+    return {
+      granted: false,
+      backgroundGranted: false,
+      notificationGranted: false,
+      message: "위치·항상 위치 또는 알림 권한을 확인하지 못했습니다.",
+    };
   }
 }
 

@@ -58,7 +58,10 @@ assert.match(schedule, /ignoredCount/, "technician UI must label older or duplic
 assert.match(workReport, /trackingRequestId === requestId && !needsRevisit/, "successful completion must stop matching sharing only");
 assert.match(auth, /stopStoredTrackingAndNotify\("업무취소", stopSnapshot\)/, "logout must use the captured A credential without reading a later B login");
 assert.match(auth, /if \(res\.status >= 500\) return true;/, "temporary auth verification 5xx must not clear a live technician session");
-assert.doesNotMatch(config, /ACCESS_BACKGROUND_LOCATION/, "candidate must not unconditionally request Android background location permission");
+assert.match(config, /ACCESS_BACKGROUND_LOCATION/, "Android background permission must be declared for other-app and screen-off tracking");
+assert.match(config, /isAndroidBackgroundLocationEnabled:\s*true/, "Expo location plugin must enable Android background location support");
+assert.match(tracking, /requestBackgroundPermissionsAsync\(\)/, "departure must request Always Allow before native collection starts");
+assert.match(schedule, /항상 위치 허용 필요/, "departure UI must block and explain missing Always Allow permission");
 assert.match(config, /FOREGROUND_SERVICE_LOCATION/, "Android foreground-service location permission is declared");
 assert.match(config, /expo-notifications/, "actionable persistent notification module is included");
 
