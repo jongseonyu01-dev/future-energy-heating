@@ -1,4 +1,6 @@
-export const OFFICIAL_API_BASE_URL = "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
+// `www` 호스트는 Production에서 308으로 루트 호스트로 이동한다. React Native
+// API 요청은 이 교차 호스트 이동에서 Authorization 헤더를 보존한다고 가정하지 않는다.
+export const OFFICIAL_API_BASE_URL = "https://xn--h50b270bp0ceuddugnobx2m.kr";
 
 export type ApiBaseUrlEnvironment = {
   EXPO_PUBLIC_API_BASE_URL?: string | undefined;

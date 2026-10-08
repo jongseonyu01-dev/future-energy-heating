@@ -4,6 +4,8 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { createLocationStopAuthSnapshot, stopStoredTrackingAndNotify } from "@/lib/location-tracking";
+import * as Auth from "@/lib/_core/auth";
+import { synchronizeAppSessionToken } from "@/lib/session-token-storage";
 
 export type AppRole = "customer" | "technician" | "branch_manager" | "hq_admin";
 
@@ -129,11 +131,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // 4. 서버 토큰 검증 (token이 있는 경우)
-        if (saved.token) {
-          const valid = await verifyTokenWithServer(saved.userId, saved.token);
-          if (!valid) {
-            // 서버에서 유효하지 않다고 판단 → 강제 로그아웃
+        // 4. 네이티브에서는 화면 세션과 tRPC Bearer 저장소를 함께 복원한다.
+        // SecureStore 동기화가 실패하면 화면만 로그인 상태로 두지 않는다.
+        if (!saved.token || !await verifyTokenWithServer(saved.userId, saved.token)) {
+          await clearAllAuthStorage();
+          setIsLoading(false);
+          return;
+        }
+        if (Platform.OS !== "web") {
+          const synchronized = await synchronizeAppSessionToken(saved.token, Auth.setSessionToken);
+          if (!synchronized) {
             await clearAllAuthStorage();
             setIsLoading(false);
             return;
@@ -154,12 +161,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (authUser: AuthUser, loginId: string, rememberMe: boolean = false) => {
     const userWithLoginId = { ...authUser, loginId };
-    setUser(userWithLoginId);
-    // tRPC Authorization 헤더용 token을 SecureStore에 저장 (trpc.ts의 Auth.getSessionToken()이 읽음)
-    // 자동로그인 여부와 무관하게 앱 사용 중에는 항상 SecureStore에 토큰 유지
-    if (authUser.token && Platform.OS !== "web") {
-      try { await SecureStore.setItemAsync(APP_SESSION_TOKEN_KEY, authUser.token); } catch {}
+    // tRPC Authorization 헤더용 token을 SecureStore에 저장한다. 자동로그인
+    // 여부와 무관하게 저장 실패는 로그인 성공으로 처리하지 않는다.
+    if (Platform.OS !== "web") {
+      const synchronized = await synchronizeAppSessionToken(authUser.token, Auth.setSessionToken);
+      if (!synchronized) throw new Error("SESSION_TOKEN_STORAGE_FAILED");
     }
+    setUser(userWithLoginId);
     if (rememberMe) {
       // 자동 로그인 선택 시: AsyncStorage에 세션 저장 (앱 재시작 시도 로그인 유지)
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));

@@ -5,8 +5,8 @@ import type { AppRouter } from "@/server/routers";
 import * as Auth from "@/lib/_core/auth";
 import { getApiBaseUrl } from "@/constants/oauth";
 
-// 운영 build는 기존 www 포함 주소를, review build는 EAS profile이 주입한
-// 격리 preview URL만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
+// 운영 build는 리다이렉트 없는 canonical 공식 API 주소를, review build는
+// 명시적으로 지정된 격리 API 주소만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
 const API_URL = getApiBaseUrl();
 
 export const trpc = createTRPCReact<AppRouter>();
