@@ -4,13 +4,15 @@ import { readFile } from "node:fs/promises";
 const root = new URL("..", import.meta.url);
 const read = (relative) => readFile(new URL(relative, root), "utf8");
 
-const [tracking, lifecycle, uploadGuard, scheduler, diagnostics, responseParser, context, schedule, workReport, auth, config] = await Promise.all([
+const [tracking, lifecycle, uploadGuard, scheduler, diagnostics, responseParser, taskBudget, runtimeStatus, context, schedule, workReport, auth, config] = await Promise.all([
   read("lib/location-tracking.ts"),
   read("lib/location-tracking-lifecycle.ts"),
   read("lib/location-upload-guard.ts"),
   read("lib/location-upload-scheduler.ts"),
   read("lib/location-runtime-diagnostics.ts"),
   read("lib/location-upload-response.ts"),
+  read("lib/location-task-budget.ts"),
+  read("lib/location-runtime-status.ts"),
   read("lib/location-tracking-context.tsx"),
   read("app/(tabs)/tech-schedule.tsx"),
   read("app/work-report.tsx"),
@@ -36,11 +38,16 @@ assert.match(tracking, /LatestOnlyUploadQueue/, "overlapping native callbacks mu
 assert.match(tracking, /TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000/, "TaskManager 15초 job budget 안에서 fetch must remain bounded");
 assert.match(tracking, /RESPONSE_BODY_TIMEOUT_MS = 2_000/, "response body parsing must have its own bounded budget");
 assert.match(tracking, /createTaskDeadline\(TASK_CALLBACK_TOTAL_BUDGET_MS\)/, "callback must reserve one finite end-to-end deadline before adoption/upload");
-assert.match(tracking, /remainingTaskBudgetMs\(taskDeadlineAt\)/, "fetch and response parsing must consume the remaining callback budget");
+assert.match(tracking, /TaskCallbackDeadlineFence/, "callback must own a deadline fence that returns even when an await hangs");
+assert.match(tracking, /taskFence\.remainingMs\(\)/, "fetch and response parsing must consume the remaining callback budget");
+assert.match(tracking, /withinDiagnosticsDeadline/, "deadline expiry must release best-effort diagnostics from the callback path");
 assert.match(tracking, /parseJsonWithin\(response, responseBodyBudgetMs\)/, "response.json must not hold the latest-only queue indefinitely");
 assert.doesNotMatch(tracking, /UPDATE_RETRY_DELAY_MS/, "headless callback must not combine delayed retry loops with the job deadline");
 assert.match(responseParser, /Promise\.race\(\[parsed, timeout\]\)/, "response parser must release on body timeout");
+assert.match(taskBudget, /Promise\.race\(\[work, timeout\]\)/, "task deadline must release a blocked storage/auth await");
 assert.match(diagnostics, /sameDiagnosticScope/, "runtime diagnostics must reject a replacement session");
+assert.match(diagnostics, /releaseExpiredWork/, "expired best-effort diagnostics must not block a later native callback");
+assert.match(runtimeStatus, /오래된 위치 전송 시도는 완료로 표시하지 않습니다/, "UI must not restore stale uploading as an active transfer");
 assert.match(tracking, /serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다/, "TaskManager errors must become observable technician state");
 assert.match(tracking, /현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다/, "missing headless credential/session must become observable technician state");
 assert.match(scheduler, /payload\.accepted === true/, "HTTP 2xx must not alone count as a new location save");

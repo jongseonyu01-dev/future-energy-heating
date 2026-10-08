@@ -25,6 +25,7 @@ import {
   LocationRuntimeDiagnosticsStore,
   type LocationRuntimeDiagnostics,
 } from "@/lib/location-runtime-diagnostics";
+import { locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
 import { parseJsonWithin } from "@/lib/location-upload-response";
 import {
   matchesTrackingStopAction,
@@ -34,7 +35,11 @@ import {
 } from "@/lib/location-tracking-lifecycle";
 import { runGuardedLocationUpload } from "@/lib/location-upload-guard";
 import { adoptHeadlessTrackingWithCredential } from "@/lib/location-tracking-runtime";
-import { createTaskDeadline, remainingTaskBudgetMs } from "@/lib/location-task-budget";
+import {
+  createTaskDeadline,
+  TaskCallbackDeadlineFence,
+  type TaskDeadlineResult,
+} from "@/lib/location-task-budget";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -175,6 +180,7 @@ function emitPersistedDiagnostics(diagnostics: LocationRuntimeDiagnostics | null
     attemptCount: diagnostics.attemptCount,
     storedCount: diagnostics.storedCount,
     ignoredCount: diagnostics.ignoredCount,
+    ...locationRuntimeStatusFromDiagnostics(diagnostics, Date.now(), TASK_CALLBACK_TOTAL_BUDGET_MS),
   });
 }
 
@@ -419,7 +425,6 @@ export async function restoreLocationTrackingForUser(userId: number): Promise<Pe
       const diagnostics = await runtimeDiagnostics.patch(restored, {
         nativeRegistration: result === "unavailable" ? "unknown" : "registered",
         lastNativeCheckAt: nativeCheckAt,
-        lastErrorCode: null,
       });
       emitPersistedDiagnostics(diagnostics);
     } catch (error) {
@@ -468,65 +473,92 @@ async function deactivateAfterTerminalResponse(state: PersistedTrackingState): P
   }
 }
 
+async function withinTaskDeadline<T>(
+  fence: TaskCallbackDeadlineFence | undefined,
+  operation: () => Promise<T>,
+): Promise<TaskDeadlineResult<T>> {
+  if (!fence) return { kind: "VALUE", value: await operation() };
+  return fence.run(operation);
+}
+
+async function withinDiagnosticsDeadline<T>(
+  fence: TaskCallbackDeadlineFence | undefined,
+  operation: () => Promise<T>,
+): Promise<TaskDeadlineResult<T>> {
+  const result = await withinTaskDeadline(fence, operation);
+  if (result.kind === "EXPIRED") runtimeDiagnostics.releaseExpiredWork();
+  return result;
+}
+
+function taskStillActive(fence: TaskCallbackDeadlineFence | undefined): boolean {
+  return !fence || fence.isActive();
+}
+
 export async function sendLocationToServer(
   state: PersistedTrackingState,
   location: LocationSample,
   capturedBearerToken?: string,
-  taskDeadlineAt?: number,
+  taskFence?: TaskCallbackDeadlineFence,
 ): Promise<void> {
+  const isActive = () => taskStillActive(taskFence);
   const now = Date.now();
   const key = stateKey(state);
+  if (!isActive()) return;
   if (!Number.isFinite(location.measuredAt) || location.measuredAt <= 0 || now - location.measuredAt > MAX_MEASUREMENT_AGE_MS) {
     emitDebug({ serverStatus: "error", serverError: "오래된 위치 측정값은 전송하지 않았습니다.", lastAttemptAt: now, source: "foreground-service-task" });
     return;
   }
   if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
-  if (!(await trackingLifecycle.isCurrent(state))) return;
+  const initialOwner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
+  if (initialOwner.kind !== "VALUE" || !initialOwner.value) return;
 
   await uploadQueue.enqueue(key, location, async (queuedLocation) => {
-    if (!(await trackingLifecycle.isCurrent(state))) return;
+    if (!isActive()) return;
+    const owner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
+    if (owner.kind !== "VALUE" || !owner.value) return;
     const queuedNow = Date.now();
     if (queuedNow - queuedLocation.measuredAt > MAX_MEASUREMENT_AGE_MS) {
       emitDebug({ serverStatus: "error", serverError: "대기 중 오래된 위치 측정값은 전송하지 않았습니다.", lastAttemptAt: queuedNow, source: "foreground-service-task" });
       return;
     }
     if (lastUploadMeasurement.key === key && queuedLocation.measuredAt <= lastUploadMeasurement.measuredAt) return;
-    const remainingBeforeRequest = taskDeadlineAt === undefined
-      ? TASK_CALLBACK_NETWORK_BUDGET_MS + RESPONSE_BODY_TIMEOUT_MS
-      : remainingTaskBudgetMs(taskDeadlineAt);
+
+    const remainingBeforeRequest = taskFence
+      ? taskFence.remainingMs()
+      : TASK_CALLBACK_NETWORK_BUDGET_MS + RESPONSE_BODY_TIMEOUT_MS;
     const requestBudgetMs = Math.min(
       TASK_CALLBACK_NETWORK_BUDGET_MS,
       Math.max(0, remainingBeforeRequest - RESPONSE_BODY_TIMEOUT_MS),
     );
-    if (requestBudgetMs <= 0) {
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastErrorCode: "CALLBACK_BUDGET_EXPIRED" }));
-      emitDebug({ serverStatus: "error", serverError: "Android 위치 작업 시간 안에 전송을 시작하지 못했습니다." });
-      return;
-    }
+    if (requestBudgetMs <= 0 || !isActive()) return;
 
-    const startedDiagnostics = await runtimeDiagnostics.update(state, (current) => ({
-      ...current,
-      lastUploadStartedAt: queuedNow,
-      lastErrorCode: null,
-      attemptCount: current.attemptCount + 1,
-    }));
-    emitPersistedDiagnostics(startedDiagnostics);
-    emitDebug({
-      lat: queuedLocation.lat, lng: queuedLocation.lng, speed: queuedLocation.speed, heading: queuedLocation.heading, accuracy: queuedLocation.accuracy,
-      lastAttemptAt: queuedNow, serverStatus: "uploading", serverError: null, source: "foreground-service-task",
-    });
-
-    const guarded = await runGuardedLocationUpload({
-      isCurrent: () => trackingLifecycle.isCurrent(state),
+    let requestStartedAt: number | null = null;
+    const guardedResult = await withinTaskDeadline(taskFence, async () => runGuardedLocationUpload({
+      isCurrent: () => trackingLifecycle.isCurrent(state, undefined, isActive),
       getCredential: async () => {
-        const technicianToken = capturedBearerToken ?? await getStoredLocationBearerToken();
-        return buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
+        if (!isActive()) return null;
+        const tokenResult = await withinTaskDeadline(taskFence, async () => (
+          capturedBearerToken ?? await getStoredLocationBearerToken()
+        ));
+        const technicianToken = tokenResult.kind === "VALUE" ? tokenResult.value : null;
+        return isActive() && buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
       },
       request: async (technicianToken) => {
+        // This is the last asynchronous boundary before HTTP. A callback that
+        // expired while storage/auth resolved must never start a late fetch.
+        if (!isActive()) throw new Error("CALLBACK_BUDGET_EXPIRED");
+        const stillOwner = await trackingLifecycle.isCurrent(state, undefined, isActive);
+        if (!isActive() || !stillOwner) throw new Error("LOCATION_OWNER_STALE");
         const headers = buildLocationRequestHeaders(technicianToken);
         if (!headers) throw new Error("LOCATION_CREDENTIAL_UNAVAILABLE");
-        const timeout = createRequestTimeout(requestBudgetMs);
+        requestStartedAt = Date.now();
+        emitDebug({
+          lat: queuedLocation.lat, lng: queuedLocation.lng, speed: queuedLocation.speed, heading: queuedLocation.heading, accuracy: queuedLocation.accuracy,
+          lastAttemptAt: requestStartedAt, serverStatus: "uploading", serverError: null, source: "foreground-service-task",
+        });
+        const timeout = createRequestTimeout(Math.min(requestBudgetMs, taskFence ? taskFence.remainingMs() : requestBudgetMs));
         try {
+          if (!isActive()) throw new Error("CALLBACK_BUDGET_EXPIRED");
           return await fetch(`${getApiBaseUrl()}/api/location/update`, {
             method: "POST",
             headers,
@@ -545,40 +577,61 @@ export async function sendLocationToServer(
           timeout.dispose();
         }
       },
-    }).catch((error: unknown) => ({ kind: "REQUEST_ERROR" as const, error }));
+    }).catch((error: unknown) => ({ kind: "REQUEST_ERROR" as const, error })));
+
+    if (guardedResult.kind !== "VALUE" || !isActive()) return;
+    const guarded = guardedResult.value;
+
+    // Count only after the request function actually called fetch. A stalled
+    // credential/diagnostic read therefore cannot fabricate a request attempt.
+    if (requestStartedAt !== null) {
+      const attempted = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
+        ...current,
+        lastUploadStartedAt: requestStartedAt,
+        attemptCount: current.attemptCount + 1,
+      }), isActive));
+      if (attempted.kind !== "VALUE" || !isActive()) return;
+      emitPersistedDiagnostics(attempted.value);
+    }
 
     if (guarded.kind === "STALE") return;
     if (guarded.kind === "MISSING_CREDENTIAL") {
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastErrorCode: "MISSING_CREDENTIAL" }));
-      emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+        lastErrorCode: "MISSING_CREDENTIAL", lastErrorAt: Date.now(),
+      }, isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
       return;
     }
     if (guarded.kind === "REQUEST_ERROR") {
-      if (!(await trackingLifecycle.isCurrent(state))) return;
+      const ownerAfterError = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
+      if (ownerAfterError.kind !== "VALUE" || !ownerAfterError.value || !isActive()) return;
       const errorCode = guarded.error instanceof Error && guarded.error.name === "AbortError" ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastErrorCode: errorCode }));
-      emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+        lastErrorCode: errorCode, lastErrorAt: Date.now(),
+      }, isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
       return;
     }
 
     const response = guarded.response;
-    const responseBodyBudgetMs = taskDeadlineAt === undefined
-      ? RESPONSE_BODY_TIMEOUT_MS
-      : Math.min(RESPONSE_BODY_TIMEOUT_MS, remainingTaskBudgetMs(taskDeadlineAt));
-    if (responseBodyBudgetMs <= 0) {
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastErrorCode: "CALLBACK_BUDGET_EXPIRED" }));
-      emitDebug({ serverStatus: "error", serverError: "Android 위치 작업 시간 안에 응답 저장 여부를 확인하지 못했습니다." });
-      return;
-    }
-    const parsed = await parseJsonWithin(response, responseBodyBudgetMs);
-    if (!(await trackingLifecycle.isCurrent(state))) return;
+    const responseBodyBudgetMs = taskFence
+      ? Math.min(RESPONSE_BODY_TIMEOUT_MS, taskFence.remainingMs())
+      : RESPONSE_BODY_TIMEOUT_MS;
+    if (responseBodyBudgetMs <= 0 || !isActive()) return;
+    const parsedResult = await withinTaskDeadline(taskFence, () => parseJsonWithin(response, responseBodyBudgetMs));
+    if (parsedResult.kind !== "VALUE" || !isActive()) return;
+    const ownerAfterBody = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
+    if (ownerAfterBody.kind !== "VALUE" || !ownerAfterBody.value || !isActive()) return;
     const respondedAt = Date.now();
+    const parsed = parsedResult.value;
     if (parsed.kind === "TIMEOUT") {
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, {
-        lastResponseAt: respondedAt,
-        lastErrorCode: "RESPONSE_BODY_TIMEOUT",
-      }));
-      emitDebug({ serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.", lastResponseAt: respondedAt });
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+        lastResponseAt: respondedAt, lastErrorCode: "RESPONSE_BODY_TIMEOUT", lastErrorAt: respondedAt,
+      }, isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.", lastResponseAt: respondedAt });
       return;
     }
     const payload = (parsed.kind === "JSON" ? parsed.value : null) as LocationUpdateResponseBody | null;
@@ -586,35 +639,47 @@ export async function sendLocationToServer(
     if (disposition === "accepted") {
       lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
       const recordedAt = serverRecordedAt(payload?.updatedAt);
-      emitPersistedDiagnostics(await runtimeDiagnostics.update(state, (current) => ({
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
         ...current,
         lastResponseAt: respondedAt,
         lastStoredAt: recordedAt,
         lastErrorCode: null,
+        lastErrorAt: null,
         storedCount: current.storedCount + 1,
-      })));
-      emitDebug({ serverStatus: "stored", serverError: null, lastResponseAt: respondedAt, lastStoredAt: recordedAt });
+      }), isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "stored", serverError: null, lastResponseAt: respondedAt, lastStoredAt: recordedAt });
       return;
     }
     if (disposition === "ignored") {
       lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
-      emitPersistedDiagnostics(await runtimeDiagnostics.update(state, (current) => ({
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
         ...current,
         lastResponseAt: respondedAt,
         lastErrorCode: "IGNORED_OLDER_OR_DUPLICATE",
+        lastErrorAt: respondedAt,
         ignoredCount: current.ignoredCount + 1,
-      })));
-      emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: respondedAt });
+      }), isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: respondedAt });
       return;
     }
     if (disposition === "terminal") {
-      emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastResponseAt: respondedAt, lastErrorCode: "SERVER_TERMINAL" }));
-      emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
-      await deactivateAfterTerminalResponse(state);
+      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+        lastResponseAt: respondedAt, lastErrorCode: "SERVER_TERMINAL", lastErrorAt: respondedAt,
+      }, isActive));
+      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+      if (isActive()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
+      if (isActive()) await deactivateAfterTerminalResponse(state);
       return;
     }
-    emitPersistedDiagnostics(await runtimeDiagnostics.patch(state, { lastResponseAt: respondedAt, lastErrorCode: parsed.kind === "INVALID" ? "INVALID_RESPONSE_BODY" : "SERVER_RETRYABLE" }));
-    emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
+    const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+      lastResponseAt: respondedAt,
+      lastErrorCode: parsed.kind === "INVALID" ? "INVALID_RESPONSE_BODY" : "SERVER_RETRYABLE",
+      lastErrorAt: respondedAt,
+    }, isActive));
+    if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
+    if (isActive()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
   });
 }
 
@@ -753,7 +818,7 @@ if (Platform.OS !== "web") {
   try {
     if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {
-        const taskDeadlineAt = createTaskDeadline(TASK_CALLBACK_TOTAL_BUDGET_MS);
+        const taskFence = new TaskCallbackDeadlineFence(createTaskDeadline(TASK_CALLBACK_TOTAL_BUDGET_MS));
         if (error) {
           emitDebug({ serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다.", source: "foreground-service-task" });
           return;
@@ -767,13 +832,17 @@ if (Platform.OS !== "web") {
           emitDebug({ serverStatus: "error", serverError: "유효한 최근 위치 측정값이 없어 전송하지 않았습니다.", source: "foreground-service-task" });
           return;
         }
-        const adopted = await adoptHeadlessTrackingWithCredential({
+        const adoptedResult = await taskFence.run(() => adoptHeadlessTrackingWithCredential({
           lifecycle: trackingLifecycle,
           getBearerToken: async () => {
+            if (!taskFence.isActive()) return null;
             const token = await getStoredLocationBearerToken();
-            return buildLocationRequestHeaders(token) ? token : null;
+            return taskFence.isActive() && buildLocationRequestHeaders(token) ? token : null;
           },
-        });
+          isActive: () => taskFence.isActive(),
+        }));
+        if (adoptedResult.kind !== "VALUE" || !taskFence.isActive()) return;
+        const adopted = adoptedResult.value;
         if (!adopted) {
           emitDebug({ serverStatus: "error", serverError: "현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.", source: "foreground-service-task" });
           return;
@@ -785,14 +854,21 @@ if (Platform.OS !== "web") {
           return;
         }
         const callbackAt = Date.now();
-        await runtimeDiagnostics.ensure(adopted.state, callbackAt);
-        emitPersistedDiagnostics(await runtimeDiagnostics.update(adopted.state, (current) => ({
+        const ensured = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.ensure(
+          adopted.state,
+          callbackAt,
+          () => taskFence.isActive(),
+        ));
+        if (ensured.kind !== "VALUE" || !taskFence.isActive()) return;
+        const callbackDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(adopted.state, (current) => ({
           ...current,
           lastCallbackAt: callbackAt,
           lastMeasuredAt: Number(latest.timestamp),
           nativeRegistration: "registered",
           lastNativeCheckAt: callbackAt,
-        })));
+        }), () => taskFence.isActive()));
+        if (callbackDiagnostics.kind !== "VALUE" || !taskFence.isActive()) return;
+        emitPersistedDiagnostics(callbackDiagnostics.value);
         await sendLocationToServer(adopted.state, {
           lat,
           lng,
@@ -800,7 +876,7 @@ if (Platform.OS !== "web") {
           heading: latest.coords.heading ?? null,
           accuracy: latest.coords.accuracy ?? null,
           measuredAt: Number(latest.timestamp),
-        }, adopted.bearerToken, taskDeadlineAt);
+        }, adopted.bearerToken, taskFence);
       });
     }
   } catch (error) {

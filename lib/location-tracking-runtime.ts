@@ -13,11 +13,14 @@ import {
 export async function adoptHeadlessTrackingWithCredential<T extends TrackingLifecycleState>(params: {
   lifecycle: TrackingLifecycleCoordinator<T>;
   getBearerToken: () => Promise<string | null>;
+  isActive?: () => boolean;
 }): Promise<{ state: T; bearerToken: string } | null> {
-  const state = await params.lifecycle.adoptStoredForHeadlessTask();
+  const isActive = params.isActive ?? (() => true);
+  if (!isActive()) return null;
+  const state = await params.lifecycle.adoptStoredForHeadlessTask(isActive);
   if (!state) return null;
   const bearerToken = await params.getBearerToken();
-  if (!bearerToken || !(await params.lifecycle.isCurrent(state))) return null;
+  if (!isActive() || !bearerToken || !(await params.lifecycle.isCurrent(state, undefined, isActive))) return null;
   return { state, bearerToken };
 }
 

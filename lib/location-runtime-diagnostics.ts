@@ -24,6 +24,8 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
   lastResponseAt: number | null;
   lastStoredAt: number | null;
   lastErrorCode: string | null;
+  /** Optional for v1 records written before explicit error ordering existed. */
+  lastErrorAt: number | null;
   attemptCount: number;
   storedCount: number;
   ignoredCount: number;
@@ -34,6 +36,8 @@ export interface KeyValueStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
 }
+
+export type DiagnosticsOperationGuard = () => boolean;
 
 export function diagnosticScopeOf(state: TrackingLifecycleState): LocationRuntimeDiagnosticScope {
   return {
@@ -68,6 +72,7 @@ export function createLocationRuntimeDiagnostics(
     lastResponseAt: null,
     lastStoredAt: null,
     lastErrorCode: null,
+    lastErrorAt: null,
     attemptCount: 0,
     storedCount: 0,
     ignoredCount: 0,
@@ -105,15 +110,22 @@ function normalizeDiagnostics(value: LocationRuntimeDiagnostics): LocationRuntim
     lastUploadStartedAt: normalizeTimestamp(value.lastUploadStartedAt),
     lastResponseAt: normalizeTimestamp(value.lastResponseAt),
     lastStoredAt: normalizeTimestamp(value.lastStoredAt),
+    lastErrorAt: normalizeTimestamp(value.lastErrorAt),
     finalizedAt: normalizeTimestamp(value.finalizedAt),
     lastErrorCode: typeof value.lastErrorCode === "string" && value.lastErrorCode.length <= 96 ? value.lastErrorCode : null,
   };
 }
 
+function active(guard?: DiagnosticsOperationGuard): boolean {
+  return !guard || guard();
+}
+
 /**
  * All read-modify-write operations share one serialized queue. A stale session
  * can therefore never overwrite diagnostics that have already been initialized
- * for a replacement customer/technician session.
+ * for a replacement customer/technician session. A callback deadline guard is
+ * rechecked after each awaited storage boundary, so a late operation may not
+ * write or emit state after its TaskManager callback has expired.
  */
 export class LocationRuntimeDiagnosticsStore {
   private writes: Promise<unknown> = Promise.resolve();
@@ -129,10 +141,21 @@ export class LocationRuntimeDiagnosticsStore {
     return next;
   }
 
-  private async readUnsafe(): Promise<LocationRuntimeDiagnostics | null> {
+  /**
+   * A TaskManager deadline may detach a hung best-effort storage promise. The
+   * operation itself received an inactive guard and cannot write after it later
+   * resolves; releasing this chain lets the next native callback record its own
+   * diagnostic and continue to upload instead of inheriting the old stall.
+   */
+  public releaseExpiredWork(): void {
+    this.writes = Promise.resolve();
+  }
+
+  private async readUnsafe(guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
+    if (!active(guard)) return null;
     try {
       const raw = await this.storage.getItem(this.key);
-      if (!raw) return null;
+      if (!active(guard) || !raw) return null;
       const parsed: unknown = JSON.parse(raw);
       return isValidDiagnostics(parsed) ? normalizeDiagnostics(parsed) : null;
     } catch {
@@ -140,50 +163,61 @@ export class LocationRuntimeDiagnosticsStore {
     }
   }
 
-  private async writeUnsafe(value: LocationRuntimeDiagnostics): Promise<void> {
+  private async writeUnsafe(value: LocationRuntimeDiagnostics, guard?: DiagnosticsOperationGuard): Promise<boolean> {
+    if (!active(guard)) return false;
     try {
       await this.storage.setItem(this.key, JSON.stringify(value));
+      return active(guard);
     } catch {
       // Diagnostics are intentionally best effort and must not block collection.
+      return false;
     }
   }
 
-  public async read(state: TrackingLifecycleState): Promise<LocationRuntimeDiagnostics | null> {
-    const current = await this.readUnsafe();
-    return sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
+  public async read(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
+    const current = await this.readUnsafe(guard);
+    return active(guard) && sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
   }
 
   /** Starts an exact replacement diagnostic scope after a new local share starts. */
-  public begin(state: TrackingLifecycleState, now = Date.now()): Promise<LocationRuntimeDiagnostics> {
+  public begin(
+    state: TrackingLifecycleState,
+    now = Date.now(),
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<LocationRuntimeDiagnostics | null> {
     return this.enqueue(async () => {
+      if (!active(guard)) return null;
       const next = createLocationRuntimeDiagnostics(state, now);
-      await this.writeUnsafe(next);
-      return next;
+      return (await this.writeUnsafe(next, guard)) ? next : null;
     });
   }
 
   /** Creates a legacy/missing record only when no other session diagnostic exists. */
-  public ensure(state: TrackingLifecycleState, now = Date.now()): Promise<LocationRuntimeDiagnostics | null> {
+  public ensure(
+    state: TrackingLifecycleState,
+    now = Date.now(),
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<LocationRuntimeDiagnostics | null> {
     return this.enqueue(async () => {
-      const current = await this.readUnsafe();
+      const current = await this.readUnsafe(guard);
+      if (!active(guard)) return null;
       if (sameDiagnosticScope(current, diagnosticScopeOf(state))) return current;
       if (current) return null;
       const next = createLocationRuntimeDiagnostics(state, now);
-      await this.writeUnsafe(next);
-      return next;
+      return (await this.writeUnsafe(next, guard)) ? next : null;
     });
   }
 
   public patch(
     state: TrackingLifecycleState,
     patch: Partial<Omit<LocationRuntimeDiagnostics, "schemaVersion" | "requestId" | "technicianUserId" | "startedAt">>,
+    guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
     return this.enqueue(async () => {
-      const current = await this.readUnsafe();
-      if (!current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
+      const current = await this.readUnsafe(guard);
+      if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       const next = normalizeDiagnostics({ ...current, ...patch });
-      await this.writeUnsafe(next);
-      return next;
+      return (await this.writeUnsafe(next, guard)) ? next : null;
     });
   }
 
@@ -191,19 +225,19 @@ export class LocationRuntimeDiagnosticsStore {
   public update(
     state: TrackingLifecycleState,
     update: (current: LocationRuntimeDiagnostics) => LocationRuntimeDiagnostics,
+    guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
     return this.enqueue(async () => {
-      const current = await this.readUnsafe();
-      if (!current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
+      const current = await this.readUnsafe(guard);
+      if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       const next = normalizeDiagnostics(update(current));
-      if (!sameDiagnosticScope(next, diagnosticScopeOf(state))) return null;
-      await this.writeUnsafe(next);
-      return next;
+      if (!active(guard) || !sameDiagnosticScope(next, diagnosticScopeOf(state))) return null;
+      return (await this.writeUnsafe(next, guard)) ? next : null;
     });
   }
 
   /** Retains an ended session summary for the next in-app inspection without reviving it. */
-  public finalize(state: TrackingLifecycleState, now = Date.now()): Promise<LocationRuntimeDiagnostics | null> {
-    return this.patch(state, { finalizedAt: now });
+  public finalize(state: TrackingLifecycleState, now = Date.now(), guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
+    return this.patch(state, { finalizedAt: now }, guard);
   }
 }

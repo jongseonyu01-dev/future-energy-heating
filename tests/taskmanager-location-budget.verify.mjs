@@ -15,7 +15,9 @@ assert.match(locationModule, /hasStartedLocationUpdatesAsync/, "Expo location re
 assert.match(tracking, /TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000/, "app fetch budget must remain below the native 15s job guard");
 assert.match(tracking, /RESPONSE_BODY_TIMEOUT_MS = 2_000/, "app response-body budget must remain finite");
 assert.match(tracking, /createTaskDeadline\(TASK_CALLBACK_TOTAL_BUDGET_MS\)/, "the callback must establish one total deadline before asynchronous adoption");
-assert.match(tracking, /remainingTaskBudgetMs\(taskDeadlineAt\)/, "each network/body boundary must consume only remaining callback time");
+assert.match(tracking, /TaskCallbackDeadlineFence/, "callback storage/auth awaits must be fenced by a finite deadline");
+assert.match(tracking, /taskFence\.remainingMs\(\)/, "each network/body boundary must consume only remaining callback time");
+assert.match(tracking, /withinDiagnosticsDeadline/, "expired diagnostics must release a later callback instead of retaining the old queue");
 assert.match(tracking, /parseJsonWithin\(response, responseBodyBudgetMs\)/, "body parser must be bounded before queue release");
 assert.match(tracking, /hasStarted API confirms persisted task\/consumer registration only/, "registration must not be reported as collection or storage success");
 assert.doesNotMatch(tracking, /UPDATE_RETRY_DELAY_MS/, "headless callback must not extend work with delayed retry loops");

@@ -17,6 +17,20 @@ function deferred<T>() {
 }
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+async function within<T>(promise: Promise<T>, timeoutMs = 500): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`TEST_WATCHDOG_${timeoutMs}MS`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 const state = (name: string, requestId: number): State => ({
   token: name.repeat(43).slice(0, 43),
   requestId,
@@ -248,11 +262,33 @@ async function main() {
     assert.equal(await coordinator.start(first), true);
     const delayedA = coordinator.reconcileNativeCollection(first);
     await tick();
-    assert.equal(await coordinator.start(second), true);
+    const pendingB = coordinator.start(second);
+    await tick();
     registration.resolve(false);
-    assert.equal(await delayedA, "superseded");
+    assert.equal(await within(pendingB), true, "B start must not wait for A registration query");
+    assert.equal(await within(delayedA), "superseded");
     assert.equal(nativeStarts, 2, "A must not restart native collection after B owns the lifecycle");
     assert.equal((await coordinator.isCurrent(second)), true);
+  }
+
+  // A permanently delayed registration query must not block B stop either.
+  {
+    const registration = deferred<boolean>();
+    const fixture = buildAdapter({
+      isNativeCollectionRegistered: async () => registration.promise,
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const first = state("A", 59);
+    const second = state("B", 60);
+    assert.equal(await coordinator.start(first), true);
+    const delayedA = coordinator.reconcileNativeCollection(first);
+    await tick();
+    assert.equal(await within(coordinator.start(second)), true);
+    assert.ok(await within(coordinator.stopCurrent()), "B stop must not wait for A registration query");
+    registration.resolve(false);
+    assert.equal(await within(delayedA), "superseded");
+    assert.equal(fixture.readStored(), null);
+    assert.ok(fixture.calls.includes("native:stop"));
   }
 
   // Stale notification action cannot terminate a replacement customer's share.

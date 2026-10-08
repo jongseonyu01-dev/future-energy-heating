@@ -85,10 +85,14 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
   }
 
   /** Rechecks generation and intent after asynchronous storage reads. */
-  public async isCurrent(state: T, expectedGeneration = this.generation): Promise<boolean> {
-    if (!this.owns(state, expectedGeneration)) return false;
+  public async isCurrent(
+    state: T,
+    expectedGeneration = this.generation,
+    isActive: () => boolean = () => true,
+  ): Promise<boolean> {
+    if (!isActive() || !this.owns(state, expectedGeneration)) return false;
     const persisted = await this.adapter.read();
-    return this.owns(state, expectedGeneration) && sameTrackingLifecycleState(persisted, state);
+    return isActive() && this.owns(state, expectedGeneration) && sameTrackingLifecycleState(persisted, state);
   }
 
   private beginStop(state: T): Promise<T> {
@@ -202,15 +206,21 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
   public async reconcileNativeCollection(state: T): Promise<"registered" | "restarted" | "superseded" | "unavailable"> {
     if (!this.adapter.isNativeCollectionRegistered) return "unavailable";
     const recoveryGeneration = this.generation;
+    if (!this.owns(state, recoveryGeneration)) return "superseded";
+
+    // The Android registration query may hang. It must never occupy the
+    // lifecycle queue: a fresh B start advances generation synchronously and
+    // proceeds independently while this old A observation is still pending.
+    const persisted = await this.adapter.read();
+    if (!this.owns(state, recoveryGeneration) || !sameTrackingLifecycleState(persisted, state)) return "superseded";
+    const registered = await this.adapter.isNativeCollectionRegistered();
+    if (!this.owns(state, recoveryGeneration)) return "superseded";
+    if (registered) return "registered";
+
+    // Only the actual native restart is serialized. Recheck ownership after B
+    // had a chance to enqueue its own start while the registration read waited.
     return this.enqueue(async () => {
       if (!this.owns(state, recoveryGeneration)) return "superseded";
-      const persisted = await this.adapter.read();
-      if (!this.owns(state, recoveryGeneration) || !sameTrackingLifecycleState(persisted, state)) return "superseded";
-
-      const registered = await this.adapter.isNativeCollectionRegistered!();
-      if (!this.owns(state, recoveryGeneration)) return "superseded";
-      if (registered) return "registered";
-
       await this.adapter.startNativeCollection();
       if (!this.owns(state, recoveryGeneration)) {
         await this.adapter.stopNativeCollection();
@@ -227,11 +237,13 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
    * start native collection again. The caller must still validate its bearer at
    * the server before an update can be accepted.
    */
-  public async adoptStoredForHeadlessTask(): Promise<T | null> {
+  public async adoptStoredForHeadlessTask(isActive: () => boolean = () => true): Promise<T | null> {
     const readGeneration = this.generation;
+    if (!isActive()) return null;
     const state = await this.adapter.read();
-    if (!state || readGeneration !== this.generation) return null;
+    if (!isActive() || !state || readGeneration !== this.generation) return null;
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
+    if (!isActive()) return null;
     this.generation += 1;
     this.intent = state;
     return state;
