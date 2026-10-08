@@ -5,7 +5,10 @@ import { Platform } from "react-native";
 import type { AppRouter } from "@/server/routers";
 import * as Auth from "@/lib/_core/auth";
 import { getApiBaseUrl } from "@/constants/oauth";
-import { getTRPCOperationHeaders } from "@/lib/trpc-operation-headers";
+import {
+  getTRPCOperationHeaders,
+  temporaryAuthTokenFromOperationContext,
+} from "@/lib/trpc-operation-headers";
 
 // 운영 build는 리다이렉트 없는 canonical 공식 API 주소를, review build는
 // 명시적으로 지정된 격리 API 주소만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
@@ -35,6 +38,7 @@ export function createTRPCClient() {
             path: op.path,
             platform: Platform.OS,
             readToken: Auth.getSessionToken,
+            temporaryAuthToken: temporaryAuthTokenFromOperationContext(op.context),
           });
         },
       }),

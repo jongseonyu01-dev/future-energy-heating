@@ -7,13 +7,17 @@
  */
 export const NATIVE_PREAUTH_TRPC_PATHS = new Set([
   "auth.login",
-  "auth.changePassword",
   "auth.sendVerifyCode",
   "auth.checkVerifyCode",
   "auth.registerCustomer",
   "auth.findLoginId",
   "auth.resetPassword",
+  // Customer repair intake is explicitly public in the production router.
+  // Do not infer public access from `publicProcedure` for any other route.
+  "repair.create",
 ]);
+
+const TEMPORARY_PASSWORD_CHANGE_PATH = "auth.changePassword";
 
 export class NativeSessionAuthorizationError extends Error {
   readonly code: "AUTH_SESSION_MISSING" | "AUTH_SESSION_STORAGE_UNAVAILABLE";
@@ -36,8 +40,22 @@ export function requiresNativeSession(path: string): boolean {
 export async function getNativeSessionHeaders(params: {
   path: string;
   readToken: () => Promise<string | null>;
+  /**
+   * First-login temporary-password flow only. This token stays in component
+   * memory and may authorize exactly `auth.changePassword`; it is never a
+   * substitute bearer for another native procedure.
+   */
+  temporaryAuthToken?: unknown;
 }): Promise<Record<string, string>> {
   if (!requiresNativeSession(params.path)) return {};
+
+  if (
+    params.path === TEMPORARY_PASSWORD_CHANGE_PATH
+    && typeof params.temporaryAuthToken === "string"
+    && params.temporaryAuthToken.length > 0
+  ) {
+    return { Authorization: `Bearer ${params.temporaryAuthToken}` };
+  }
 
   let token: string | null;
   try {

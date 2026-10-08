@@ -9,7 +9,17 @@ export async function getTRPCOperationHeaders(params: {
   path: string;
   platform: string;
   readToken: () => Promise<string | null>;
+  temporaryAuthToken?: unknown;
 }): Promise<Record<string, string>> {
   if (params.platform === "web") return {};
-  return getNativeSessionHeaders({ path: params.path, readToken: params.readToken });
+  return getNativeSessionHeaders({
+    path: params.path,
+    readToken: params.readToken,
+    temporaryAuthToken: params.temporaryAuthToken,
+  });
+}
+
+/** Reads only the request-scoped value carried by tRPC operation context. */
+export function temporaryAuthTokenFromOperationContext(context: Record<string, unknown>): unknown {
+  return context.temporaryAuthToken;
 }

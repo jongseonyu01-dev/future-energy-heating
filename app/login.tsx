@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -13,9 +13,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAppAuth } from "@/lib/auth-context";
-import { trpc } from "@/lib/trpc";
+import { createTRPCClient, trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
 import { ScreenContainer } from "@/components/screen-container";
+import {
+  FirstLoginPasswordChange,
+  type PendingForcedPasswordChange,
+} from "@/lib/first-login-password-change";
 import {
   sendTechnicianVerification,
   submitTechnicianSignup,
@@ -28,6 +32,8 @@ export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { login } = useAppAuth();
+  const [changePasswordClient] = useState(() => createTRPCClient());
+  const passwordChange = useRef(new FirstLoginPasswordChange()).current;
 
   const [view, setView] = useState<View2>("login");
   const [loginId, setLoginId] = useState("");
@@ -38,9 +44,10 @@ export default function LoginScreen() {
   const [info, setInfo] = useState("");
 
   // 강제 비밀번호 변경 컨텍스트
-  const [pendingUser, setPendingUser] = useState<any>(null);
+  const [pendingUser, setPendingUser] = useState<PendingForcedPasswordChange | null>(null);
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
+  const [isPasswordChangePending, setIsPasswordChangePending] = useState(false);
 
   // 회원가입
   const [suName, setSuName] = useState("");
@@ -72,6 +79,8 @@ export default function LoginScreen() {
 
   const s = styles(colors);
 
+  useEffect(() => () => passwordChange.cancel(), [passwordChange]);
+
   // 포커스된 입력칸이 키보드 위로 보이도록 자동 스크롤
   // Web에서는 findNodeHandle/UIManager를 사용할 수 없으므로 건너뜀
   const scrollRef = useRef<ScrollView>(null);
@@ -83,6 +92,12 @@ export default function LoginScreen() {
 
   const clearMsg = () => { setError(""); setInfo(""); };
   const go = (v: View2) => {
+    if (v !== "changePw") {
+      passwordChange.cancel();
+      setPendingUser(null);
+      setNewPw("");
+      setNewPw2("");
+    }
     if (v !== "techSignup") setTechSignupGrant(null);
     setView(v);
     clearMsg();
@@ -95,7 +110,7 @@ export default function LoginScreen() {
         {
           userId: data.userId!,
           appRole: data.appRole!,
-          loginId,
+          loginId: data.loginId ?? loginId,
           name: data.name ?? null,
           technicianId: data.technicianId ?? null,
           branchId: data.branchId ?? null,
@@ -118,50 +133,7 @@ export default function LoginScreen() {
     }
   };
 
-  const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: async (data) => {
-      if (!data.success) {
-        if ((data as any).blockedRole === "hq_admin" || (data as any).blockedRole === "branch_manager") {
-          setError("본사와 지사 계정은 홈페이지 관리시스템을 이용해 주세요.\nhttps://퓨처에너지테크.kr");
-        } else {
-          setError(data.error ?? "아이디 또는 비밀번호가 올바르지 않습니다.");
-        }
-        return;
-      }
-      if (data.mustChangePassword) {
-        setPendingUser(data);
-        go("changePw");
-        return;
-      }
-      await finishLogin(data);
-    },
-    onError: (err) => {
-      const msg = err?.message || "";
-      const httpStatus = (err as any)?.data?.httpStatus as number | undefined;
-      // 오류 유형 세분화
-      if (msg.includes("undefined is not a function") || msg.includes("is not a function")) {
-        setError("앱 내부 오류\n\uac1c로운 APK를 설치하거나 앱을 재시작해주세요.");
-      } else if (msg.includes("Network request failed") || msg.includes("fetch") || msg.includes("ECONNREFUSED")) {
-        setError("인터넷 또는 DNS 오류\n\uc11c버에 연결할 수 없습니다. Wi-Fi 또는 모바일 데이터를 확인해주세요.");
-      } else if (httpStatus === 401) {
-        setError("아이디 또는 비밀번호가 일치하지 않습니다.");
-      } else if (httpStatus === 403) {
-        setError("승인되지 않은 계정입니다. 본사에 문의해주세요.");
-      } else if (httpStatus === 404) {
-        setError("서버 연결 오류\n\uc11c버 주소를 확인하거나 담당자에 문의해주세요.");
-      } else {
-        setError(`서버 연결 실패\n${msg || "네트워크 오류"}`);
-      }
-    },
-  });
-
-  const changePwMutation = trpc.auth.changePassword.useMutation({
-    onSuccess: async (r) => {
-      if (!r.success) { setError(r.error ?? "비밀번호 변경에 실패했습니다."); return; }
-      await finishLogin(pendingUser);
-    },
-    onError: () => setError("비밀번호 변경 중 오류가 발생했습니다."),
-  });
+  const loginMutation = trpc.auth.login.useMutation();
 
   const sendCodeMutation = trpc.auth.sendVerifyCode.useMutation();
   const checkCodeMutation = trpc.auth.checkVerifyCode.useMutation();
@@ -173,15 +145,103 @@ export default function LoginScreen() {
     Keyboard.dismiss();
     clearMsg();
     if (!loginId.trim() || !password.trim()) { setError("아이디와 비밀번호를 입력해주세요."); return; }
-    loginMutation.mutate({ loginId: loginId.trim(), password, source: "app" });
+    const attempt = { loginId: loginId.trim(), password };
+    passwordChange.cancel();
+    setPendingUser(null);
+    loginMutation.mutate(
+      { loginId: attempt.loginId, password: attempt.password, source: "app" },
+      {
+        onSuccess: async (data) => {
+          if (!data.success) {
+            if ((data as any).blockedRole === "hq_admin" || (data as any).blockedRole === "branch_manager") {
+              setError("본사와 지사 계정은 홈페이지 관리시스템을 이용해 주세요.\nhttps://퓨처에너지테크.kr");
+            } else {
+              setError(data.error ?? "아이디 또는 비밀번호가 올바르지 않습니다.");
+            }
+            return;
+          }
+          if (data.mustChangePassword) {
+            if (!data.token || !data.userId || !data.appRole) {
+              setError("임시 비밀번호 변경 세션을 시작하지 못했습니다. 다시 로그인해 주세요.");
+              return;
+            }
+            const pending = passwordChange.begin({
+              userId: data.userId,
+              loginId: attempt.loginId,
+              appRole: data.appRole,
+              token: data.token,
+              currentPassword: attempt.password,
+              name: data.name ?? null,
+              technicianId: data.technicianId ?? null,
+              branchId: data.branchId ?? null,
+              branchName: data.branchName ?? null,
+              phoneNumber: data.phoneNumber ?? null,
+            });
+            setPendingUser(pending);
+            setPassword("");
+            setNewPw("");
+            setNewPw2("");
+            setView("changePw");
+            return;
+          }
+          await finishLogin({ ...data, loginId: attempt.loginId });
+        },
+        onError: (err) => {
+          const msg = err?.message || "";
+          const httpStatus = (err as any)?.data?.httpStatus as number | undefined;
+          if (msg.includes("undefined is not a function") || msg.includes("is not a function")) {
+            setError("앱 내부 오류\n\uac1c로운 APK를 설치하거나 앱을 재시작해주세요.");
+          } else if (msg.includes("Network request failed") || msg.includes("fetch") || msg.includes("ECONNREFUSED")) {
+            setError("인터넷 또는 DNS 오류\n\uc11c버에 연결할 수 없습니다. Wi-Fi 또는 모바일 데이터를 확인해주세요.");
+          } else if (httpStatus === 401) {
+            setError("아이디 또는 비밀번호가 일치하지 않습니다.");
+          } else if (httpStatus === 403) {
+            setError("승인되지 않은 계정입니다. 본사에 문의해주세요.");
+          } else if (httpStatus === 404) {
+            setError("서버 연결 오류\n\uc11c버 주소를 확인하거나 담당자에 문의해주세요.");
+          } else {
+            setError(`서버 연결 실패\n${msg || "네트워크 오류"}`);
+          }
+        },
+      },
+    );
   };
 
-  const handleChangePw = () => {
+  const handleChangePw = async () => {
     Keyboard.dismiss();
     clearMsg();
+    const pending = pendingUser;
+    if (!passwordChange.isCurrent(pending)) {
+      setError("비밀번호 변경 세션이 만료되었습니다. 다시 로그인해 주세요.");
+      go("login");
+      return;
+    }
     if (newPw.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return; }
     if (newPw !== newPw2) { setError("비밀번호가 일치하지 않습니다."); return; }
-    changePwMutation.mutate({ userId: pendingUser.userId, newPassword: newPw });
+    setIsPasswordChangePending(true);
+    try {
+      const response = await changePasswordClient.auth.changePassword.mutate(
+        {
+          userId: pending.userId,
+          currentPassword: pending.currentPassword,
+          newPassword: newPw,
+        },
+        { context: { temporaryAuthToken: pending.token } },
+      );
+      const completed = passwordChange.complete(pending, response);
+      if (!completed) {
+        if (passwordChange.isCurrent(pending)) setError("비밀번호 변경에 실패했습니다. 다시 시도해 주세요.");
+        return;
+      }
+      setPendingUser(null);
+      setNewPw("");
+      setNewPw2("");
+      await finishLogin(completed);
+    } catch {
+      if (passwordChange.isCurrent(pending)) setError("비밀번호 변경 중 오류가 발생했습니다.");
+    } finally {
+      setIsPasswordChangePending(false);
+    }
   };
 
   const handleGuestMode = () => router.replace("/(tabs)");
@@ -442,8 +502,11 @@ export default function LoginScreen() {
               <Text style={s.label}>새 비밀번호 확인</Text>
               <TextInput style={s.input} value={newPw2} onChangeText={setNewPw2} onFocus={handleFocus} placeholder="새 비밀번호 다시 입력" placeholderTextColor={colors.muted} secureTextEntry {...idInputProps} />
               <Msg />
-              <TouchableOpacity style={[s.loginBtn, changePwMutation.isPending && s.loginBtnDisabled]} onPress={handleChangePw} disabled={changePwMutation.isPending} activeOpacity={0.8}>
-                {changePwMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>변경 후 시작하기</Text>}
+              <TouchableOpacity style={[s.loginBtn, isPasswordChangePending && s.loginBtnDisabled]} onPress={handleChangePw} disabled={isPasswordChangePending} activeOpacity={0.8}>
+                {isPasswordChangePending ? <ActivityIndicator color="#fff" /> : <Text style={s.loginBtnText}>변경 후 시작하기</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => go("login")} style={s.backLink} disabled={isPasswordChangePending}>
+                <Text style={s.link}>← 로그인으로 돌아가기</Text>
               </TouchableOpacity>
             </View>
           )}

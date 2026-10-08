@@ -16,16 +16,19 @@ const AUTH_REQUIRED_NATIVE_PATHS = [
   "location.markArrived",
   "location.markWorkCompleted",
   "auth.updateMyProfile",
+  "auth.changePassword",
+  "repair.find",
+  "workReport.getByRequest",
 ] as const;
 
 const PREAUTH_NATIVE_PATHS = [
   "auth.login",
-  "auth.changePassword",
   "auth.sendVerifyCode",
   "auth.checkVerifyCode",
   "auth.registerCustomer",
   "auth.findLoginId",
   "auth.resetPassword",
+  "repair.create",
 ] as const;
 
 describe("native tRPC bearer coverage", () => {
@@ -56,5 +59,14 @@ describe("native tRPC bearer coverage", () => {
       await expect(getNativeSessionHeaders({ path, readToken })).resolves.toEqual({});
       expect(readToken, path).not.toHaveBeenCalled();
     }
+  });
+
+  it("does not drop bearer authentication for an unlisted internally authorized native operation", async () => {
+    const readToken = vi.fn(async () => "current-native-token");
+    await expect(getNativeSessionHeaders({
+      path: "repair.getById",
+      readToken,
+    })).resolves.toEqual({ Authorization: "Bearer current-native-token" });
+    expect(readToken).toHaveBeenCalledTimes(1);
   });
 });
