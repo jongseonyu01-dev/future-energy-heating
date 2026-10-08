@@ -561,6 +561,21 @@ export async function stopStoredTrackingAndNotify(
   }
 }
 
+/**
+ * Used only by a delayed owner/orphan reconciliation. The passed state is
+ * verified again against the persisted state and lifecycle generation before
+ * local shutdown, so an old A reconciliation cannot stop a newer B share.
+ */
+export async function stopExactStoredTrackingAndNotify(
+  state: PersistedTrackingState,
+  reason: TrackingStopReason,
+): Promise<void> {
+  const stopped = await trackingLifecycle.stopStoredExact(state);
+  if (!stopped) return;
+  lastUploadMeasurement = { key: "", measuredAt: 0 };
+  void notifySessionStop(stopped.token, reason, stopped.technicianUserId);
+}
+
 const trackingLifecycle = new TrackingLifecycleCoordinator<PersistedTrackingState>({
   read: getPersistedTrackingState,
   save: saveTrackingState,

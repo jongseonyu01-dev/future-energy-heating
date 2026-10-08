@@ -3,7 +3,7 @@
  * 실제 좌표 전송은 lib/location-tracking.ts의 TaskManager callback 하나만 수행한다.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
@@ -13,12 +13,17 @@ import {
   getPersistedTrackingState,
   restoreLocationTrackingForUser,
   startLocationTracking,
+  stopExactStoredTrackingAndNotify,
   stopStoredTrackingAndNotify,
   subscribeDebug,
   subscribeTrackingState,
   type LocationDebugState,
   type PersistedTrackingState,
 } from "@/lib/location-tracking";
+import {
+  LocationTrackingOwnerReconciliationGuard,
+  reconcileLocationTrackingOwner,
+} from "@/lib/location-tracking-owner-reconciliation";
 
 export interface LocationTrackingContextValue {
   isTracking: boolean;
@@ -74,6 +79,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
   const [permStatus, setPermStatus] = useState({ foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." });
+  const ownerReconciliation = useRef(new LocationTrackingOwnerReconciliationGuard()).current;
 
   const applyState = useCallback((state: PersistedTrackingState | null) => {
     const view = stateToView(state);
@@ -125,22 +131,21 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      if (isLoading) return;
-      if (!user?.userId || user.appRole !== "technician") {
-        const orphaned = await getPersistedTrackingState();
-        if (orphaned) await stopStoredTrackingAndNotify("업무취소");
-        if (!cancelled) applyState(null);
-        return;
-      }
-      const restored = await restoreLocationTrackingForUser(user.userId);
-      if (!cancelled) {
-        applyState(restored);
-        await checkPermissions();
-      }
-    })();
+    const generation = ownerReconciliation.begin();
+    void reconcileLocationTrackingOwner({
+      generation,
+      isCurrent: () => !cancelled && ownerReconciliation.isCurrent(generation),
+      isAuthLoading: isLoading,
+      technicianUserId: user?.userId,
+      isTechnician: user?.appRole === "technician",
+      getPersistedState: getPersistedTrackingState,
+      stopExactStoredState: async (state) => stopExactStoredTrackingAndNotify(state, "업무취소"),
+      restoreForUser: restoreLocationTrackingForUser,
+      applyState,
+      checkPermissions,
+    });
     return () => { cancelled = true; };
-  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions]);
+  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation]);
 
   const startTracking = useCallback(async (params: StartTrackingParams): Promise<StartTrackingResult> => {
     const existing = await getPersistedTrackingState();

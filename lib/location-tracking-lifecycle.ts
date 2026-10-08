@@ -251,4 +251,20 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     this.intent = state;
     return this.beginStop(state);
   }
+
+  /**
+   * Stops a previously-read orphan only when storage still contains that exact
+   * state and no newer in-memory share has been claimed. This is intentionally
+   * separate from `stopCurrent()`: an old provider effect must never turn a B
+   * foreground service off merely because it finished reading A late.
+   */
+  public async stopStoredExact(state: T): Promise<T | null> {
+    const readGeneration = this.generation;
+    const persisted = await this.adapter.read();
+    if (!sameTrackingLifecycleState(persisted, state)
+      || readGeneration !== this.generation
+      || this.intent) return null;
+    this.intent = state;
+    return this.beginStop(state);
+  }
 }

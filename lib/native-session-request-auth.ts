@@ -1,8 +1,18 @@
-export const NATIVE_SESSION_REQUIRED_TRPC_PATHS = new Set([
-  // The server derives the technician from the authenticated bearer. Never
-  // turn a missing native token into an anonymous schedule network request.
-  "repair.listMySchedule",
-  "auth.updateMyProfile",
+/**
+ * Only these flows are deliberately available before a native app has a
+ * session. `publicProcedure` does not imply public access: the production
+ * router performs its own role checks inside several location procedures.
+ * Every other native tRPC operation therefore keeps the current bearer or is
+ * stopped before fetch when storage is unavailable.
+ */
+export const NATIVE_PREAUTH_TRPC_PATHS = new Set([
+  "auth.login",
+  "auth.changePassword",
+  "auth.sendVerifyCode",
+  "auth.checkVerifyCode",
+  "auth.registerCustomer",
+  "auth.findLoginId",
+  "auth.resetPassword",
 ]);
 
 export class NativeSessionAuthorizationError extends Error {
@@ -20,7 +30,7 @@ export class NativeSessionAuthorizationError extends Error {
 }
 
 export function requiresNativeSession(path: string): boolean {
-  return NATIVE_SESSION_REQUIRED_TRPC_PATHS.has(path);
+  return !NATIVE_PREAUTH_TRPC_PATHS.has(path);
 }
 
 export async function getNativeSessionHeaders(params: {

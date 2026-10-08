@@ -12,6 +12,7 @@ import { useFocusEffect } from "expo-router";
 
 import { useColors } from "@/hooks/use-colors";
 import { useAppAuth } from "@/lib/auth-context";
+import { isAuthenticatedScheduleReady, refreshAuthenticatedSchedule } from "@/lib/authenticated-schedule-refresh";
 import { trpc } from "@/lib/trpc";
 import {
   formatKstDateLabel,
@@ -33,6 +34,7 @@ export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
   const colors = useColors();
   const { user, isLoading: isAuthLoading } = useAppAuth();
   const userId = user?.userId;
+  const canRefreshSchedule = isAuthenticatedScheduleReady({ userId, isAuthLoading });
   const [now, setNow] = useState(() => new Date());
   const today = getKstDateString(now);
   const tomorrow = getKstDateString(now, 1);
@@ -46,7 +48,7 @@ export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
     isLoading,
     isError,
     refetch,
-  } = trpc.repair.listMySchedule.useQuery(undefined, { enabled: !!userId && !isAuthLoading });
+  } = trpc.repair.listMySchedule.useQuery(undefined, { enabled: canRefreshSchedule });
 
   const refreshCalendar = useCallback(() => {
     const currentNow = new Date();
@@ -55,8 +57,8 @@ export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
     setSelectedDate((current) =>
       reconcileWeeklySelectedDate(current, currentUpcomingDates),
     );
-    if (userId) refetch();
-  }, [userId, refetch]);
+    void refreshAuthenticatedSchedule({ ready: canRefreshSchedule, refetch });
+  }, [canRefreshSchedule, refetch]);
 
   useFocusEffect(
     useCallback(() => {
@@ -196,7 +198,8 @@ export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
             </Text>
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => refetch()}
+              onPress={() => { void refreshAuthenticatedSchedule({ ready: canRefreshSchedule, refetch }); }}
+              disabled={!canRefreshSchedule}
               activeOpacity={0.8}
             >
               <Text style={styles.retryText}>다시 시도</Text>

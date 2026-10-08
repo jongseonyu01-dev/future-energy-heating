@@ -20,6 +20,7 @@ import {
 import { saveAndConfirmLocationConsent } from "@/lib/location-consent-confirmation";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { useLocationTracking } from "@/lib/location-tracking-context";
+import { isAuthenticatedScheduleReady, refreshAuthenticatedSchedule } from "@/lib/authenticated-schedule-refresh";
 import { formatKstDateLabel, getUpcomingWorksForDate } from "@/lib/technician-weekly-schedule";
 import {
   getTechnicianScheduleRouteState,
@@ -44,6 +45,7 @@ export default function TechScheduleScreen() {
 
   const technicianId = user?.technicianId;
   const userId = user?.userId;
+  const canRefreshSchedule = isAuthenticatedScheduleReady({ userId, isAuthLoading });
   // KST(Asia/Seoul) 기준 날짜 계산 - UTC+9 고정 (getTimezoneOffset 사용 금지)
   const getKSTDate = (offsetDays = 0) => {
     const now = new Date();
@@ -88,7 +90,11 @@ export default function TechScheduleScreen() {
   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
   const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery(
     undefined,
-    { enabled: !!userId && !isAuthLoading, retry: 1 }
+    { enabled: canRefreshSchedule, retry: 1 }
+  );
+  const refreshSchedule = useCallback(
+    () => refreshAuthenticatedSchedule({ ready: canRefreshSchedule, refetch }),
+    [canRefreshSchedule, refetch],
   );
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
@@ -96,22 +102,22 @@ export default function TechScheduleScreen() {
   // 화면 복귀 시 새 배정 반영. tab route는 date 없이 교체하므로 이전 주간 선택이 되살아나지 않는다.
   useFocusEffect(
     useCallback(() => {
-      refetch();
+      void refreshSchedule();
       setActiveTab(requestedTab);
       setSelectedScheduleDate(requestedDate);
-    }, [refetch, requestedTab, requestedDate])
+    }, [refreshSchedule, requestedTab, requestedDate])
   );
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
-    { enabled: !!(resolvedTechnicianId ?? technicianId) }
+    { enabled: canRefreshSchedule && !!(resolvedTechnicianId ?? technicianId) }
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
   const saveConsentMutation = trpc.location.saveConsent.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
-    { enabled: !!trackingRequestId, refetchInterval: 10000 }
+    { enabled: canRefreshSchedule && !!trackingRequestId, refetchInterval: 10000 }
   );
 
 
@@ -232,7 +238,7 @@ export default function TechScheduleScreen() {
           onPress: async () => {
             if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await stopTracking("도착완료");
-            refetch();
+            void refreshSchedule();
             Alert.alert("도착 완료", "위치 공유가 종료되었습니다.\n고객용 링크가 만료됩니다.");
           },
         },
@@ -255,7 +261,7 @@ export default function TechScheduleScreen() {
             if (trackingToken && trackingRequestId === work.id) {
               await stopTracking("업무취소");
             }
-            refetch();
+            void refreshSchedule();
           },
         },
       ]
@@ -599,7 +605,8 @@ export default function TechScheduleScreen() {
           </Text>
           <TouchableOpacity
             style={{ marginTop: 16, backgroundColor: '#FF6B35', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}
-            onPress={() => refetch()}
+            onPress={() => { void refreshSchedule(); }}
+            disabled={!canRefreshSchedule}
             activeOpacity={0.8}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>다시 시도</Text>
@@ -670,7 +677,7 @@ export default function TechScheduleScreen() {
           ) : (
             <ScrollView
               contentContainerStyle={s.list}
-              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B35" />}
+              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { void refreshSchedule(); }} enabled={canRefreshSchedule} tintColor="#FF6B35" />}
             >
               {selectedDateWorks.map((work: any) => renderWorkCard(work))}
             </ScrollView>

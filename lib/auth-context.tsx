@@ -230,14 +230,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const generation = transitions.begin();
     const previousUser = userRef.current;
+    const stopSnapshot = createLocationStopAuthSnapshot(previousUser);
+    // Publishing user=null while this is false lets location owner cleanup
+    // race a replacement login. Keep all auth-bound effects paused first.
+    setIsLoading(true);
     setVisibleUser(generation, null);
-    await clearAccountBoundQueries();
-    await stopStoredTrackingAndNotify("업무취소", createLocationStopAuthSnapshot(previousUser));
-    await transitions.runStorage(generation, async () => {
-      await clearAllAuthStorage();
-      await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
-    });
-    finishLoadingIfCurrent(generation);
+    try {
+      await clearAccountBoundQueries();
+      await stopStoredTrackingAndNotify("업무취소", stopSnapshot);
+      await transitions.runStorage(generation, async () => {
+        await clearAllAuthStorage();
+        await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
+      });
+    } finally {
+      finishLoadingIfCurrent(generation);
+    }
   }, [clearAccountBoundQueries, finishLoadingIfCurrent, setVisibleUser, transitions]);
 
   return (
