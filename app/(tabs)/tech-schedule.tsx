@@ -297,6 +297,12 @@ export default function TechScheduleScreen() {
   const formatTrackingTime = (time: number | null | undefined) => time
     ? `${Math.max(0, Math.round((Date.now() - time) / 1000))}초 전 (${new Date(time).toLocaleTimeString("ko-KR")})`
     : "아직 없음";
+  const nativeRegistrationLabel: Record<NonNullable<typeof debugState>["nativeRegistration"], string> = {
+    unknown: "미확인",
+    registered: "등록 확인 (수집·저장 별도 확인)",
+    not_registered: "등록되지 않음",
+    restart_failed: "재등록 실패",
+  };
 
   // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
   useEffect(() => {
@@ -367,7 +373,7 @@ export default function TechScheduleScreen() {
 
         {isThisTracking && (
           <View style={s.trackingIndicator}>
-            <Text style={s.trackingIndicatorText}>📍 위치 공유 중</Text>
+            <Text style={s.trackingIndicatorText}>📍 위치 공유 세션 유지 중 · 수집·저장 별도 확인</Text>
           </View>
         )}
 
@@ -425,6 +431,24 @@ export default function TechScheduleScreen() {
               <Text style={s.locationStatusLabel}>전송 상태</Text>
               <Text style={[s.locationStatusValue, { color: trackingStatusColor[trackingStatus] }]}>
                 {trackingStatusLabel[trackingStatus]}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>native 등록</Text>
+              <Text style={s.locationStatusValue}>
+                {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 Task callback</Text>
+              <Text style={s.locationStatusValue}>
+                {formatTrackingTime(debugState?.lastCallbackAt)}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 측정 시각</Text>
+              <Text style={s.locationStatusValue}>
+                {formatTrackingTime(debugState?.lastMeasuredAt)}
               </Text>
             </View>
             <View style={s.locationStatusRow}>
@@ -548,11 +572,11 @@ export default function TechScheduleScreen() {
         >
           <Text style={s.trackingBannerIcon}>📍</Text>
           <View style={s.trackingBannerText}>
-            <Text style={s.trackingBannerTitle}>위치 공유 중 {trackingStatus === 'stored' ? '✅' : trackingStatus === 'error' ? '⚠️' : ''}</Text>
+            <Text style={s.trackingBannerTitle}>위치 공유 세션 유지 중 {trackingStatus === 'stored' ? '✅' : trackingStatus === 'error' ? '⚠️' : ''}</Text>
             <Text style={s.trackingBannerSub}>
-              {debugState?.lastStoredAt
-                ? `새 위치 저장: ${formatTrackingTime(debugState.lastStoredAt)} · 시도 ${debugState.attemptCount}회`
-                : `위치 전송 대기 · 시도 ${debugState?.attemptCount ?? 0}회`}
+              {debugState?.lastCallbackAt
+                ? `Task callback: ${formatTrackingTime(debugState.lastCallbackAt)} · 새 저장: ${formatTrackingTime(debugState.lastStoredAt)}`
+                : `Task callback 미확인 · 새 저장: ${formatTrackingTime(debugState?.lastStoredAt)}`}
             </Text>
           </View>
           <Text style={{ color: '#fff', fontSize: 11 }}>{showDebug ? '▲' : '▼'}</Text>
@@ -569,6 +593,8 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}</Text>
           <Text style={s.debugRow}>방향: {debugState?.heading != null ? `${Math.round(debugState.heading)}°` : '-'}</Text>
           <Text style={s.debugRow}>전송 시도: {debugState?.attemptCount ?? 0}회 · 새 위치 저장: {debugState?.storedCount ?? 0}회 · 중복·이전: {debugState?.ignoredCount ?? 0}회</Text>
+          <Text style={s.debugRow}>native 등록: {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]} · 확인: {formatTrackingTime(debugState?.lastNativeCheckAt)}</Text>
+          <Text style={s.debugRow}>마지막 Task callback: {formatTrackingTime(debugState?.lastCallbackAt)} · 마지막 측정: {formatTrackingTime(debugState?.lastMeasuredAt)}</Text>
           <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
           <Text style={[s.debugRow, { color: trackingStatusColor[trackingStatus] }]}>
             서버 상태: {trackingStatusLabel[trackingStatus]}{debugState?.serverError ? ` — ${debugState.serverError}` : ''}

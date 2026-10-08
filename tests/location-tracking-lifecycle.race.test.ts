@@ -109,6 +109,7 @@ async function main() {
       read: async () => (++reads === 1 ? read.promise : stored),
       save: async (next) => { stored = next; },
     });
+    const saved = (): State | null => stored;
     const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
     const first = state("A", 11);
     const second = state("B", 12);
@@ -120,7 +121,7 @@ async function main() {
     read.resolve(first);
     assert.equal(await lateTerminal, null, "late A storage read must not invoke a global B stop");
     assert.equal((await coordinator.isCurrent(second)), true);
-    assert.equal(stored?.requestId, second.requestId);
+    assert.equal(saved()?.requestId, second.requestId);
   }
 
   // P1: restore ownership is captured before storage await; an old A cannot enqueue after B starts.
@@ -132,6 +133,7 @@ async function main() {
       read: async () => (++reads === 1 ? read.promise : stored),
       save: async (next) => { stored = next; },
     });
+    const saved = (): State | null => stored;
     const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
     const first = state("A", 21);
     const second = state("B", 22);
@@ -141,7 +143,7 @@ async function main() {
     read.resolve(first);
     assert.equal(await pendingRestore, null, "late A restore must be cancelled before enqueue");
     assert.equal((await coordinator.isCurrent(second)), true);
-    assert.equal(stored?.requestId, second.requestId);
+    assert.equal(saved()?.requestId, second.requestId);
   }
 
   // P1: a cold stop fences pending restore reads but never stops an explicit replacement B.
@@ -153,6 +155,7 @@ async function main() {
       read: async () => (++reads === 1 ? read.promise : stored),
       save: async (next) => { stored = next; },
     });
+    const saved = (): State | null => stored;
     const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
     const replacement = state("H", 23);
     const pendingColdStop = coordinator.stopCurrent();
@@ -162,7 +165,7 @@ async function main() {
     assert.equal(await pendingColdStop, null, "cold stop must yield to an explicit replacement B");
     assert.equal(await pendingReplacement, true);
     assert.equal((await coordinator.isCurrent(replacement)), true);
-    assert.equal(stored?.requestId, replacement.requestId);
+    assert.equal(saved()?.requestId, replacement.requestId);
   }
 
   // C: stop while credential read is pending prevents old credentials from issuing /update.
@@ -204,6 +207,52 @@ async function main() {
     assert.ok(fixture.calls.includes("native:stop"), "failed foreground start must stop any partial native collection");
     assert.ok(fixture.calls.includes("state:none"), "failed foreground start must not report active sharing");
     assert.equal(await coordinator.start(state("F", 5)), true, "foreground retry may start after the transient failure");
+  }
+
+  // A persisted intent may outlive Android's task consumer. Reconciliation must
+  // restart only the exact current state; registration itself is not treated as
+  // proof that GPS callbacks or HTTP persistence are healthy.
+  {
+    let nativeRegistered = true;
+    let nativeStarts = 0;
+    const fixture = buildAdapter({
+      isNativeCollectionRegistered: async () => nativeRegistered,
+      startNativeCollection: async () => { nativeStarts += 1; nativeRegistered = true; },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const active = state("R", 55);
+    assert.equal(await coordinator.start(active), true);
+    nativeRegistered = false;
+    assert.equal(await coordinator.reconcileNativeCollection(active), "restarted");
+    assert.equal(nativeStarts, 2, "external native loss requires one exact-session restart");
+    assert.equal(await coordinator.reconcileNativeCollection(active), "registered");
+    assert.equal(nativeStarts, 2, "registration check must not restart a registered task");
+
+    const replacement = state("S", 56);
+    assert.equal(await coordinator.start(replacement), true);
+    assert.equal(await coordinator.reconcileNativeCollection(active), "superseded");
+    assert.equal((await coordinator.isCurrent(replacement)), true, "old A recovery cannot affect B");
+  }
+
+  // A delayed native registration check must not restart/stop replacement B.
+  {
+    const registration = deferred<boolean>();
+    let nativeStarts = 0;
+    const fixture = buildAdapter({
+      isNativeCollectionRegistered: async () => registration.promise,
+      startNativeCollection: async () => { nativeStarts += 1; },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const first = state("A", 57);
+    const second = state("B", 58);
+    assert.equal(await coordinator.start(first), true);
+    const delayedA = coordinator.reconcileNativeCollection(first);
+    await tick();
+    assert.equal(await coordinator.start(second), true);
+    registration.resolve(false);
+    assert.equal(await delayedA, "superseded");
+    assert.equal(nativeStarts, 2, "A must not restart native collection after B owns the lifecycle");
+    assert.equal((await coordinator.isCurrent(second)), true);
   }
 
   // Stale notification action cannot terminate a replacement customer's share.

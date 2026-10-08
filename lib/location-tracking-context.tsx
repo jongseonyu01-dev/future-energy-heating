@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import { useAppAuth } from "@/lib/auth-context";
@@ -145,6 +145,32 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       checkPermissions,
     });
     return () => { cancelled = true; };
+  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation]);
+
+  // Returning to the app does not itself upload a coordinate. It only compares
+  // the exact persisted session with Android's registration marker, then lets
+  // the native foreground-service task continue delivering future callbacks.
+  // The owner generation rejects a delayed A reconciliation after logout/B.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active" || isLoading || user?.appRole !== "technician" || !user.userId) return;
+      let cancelled = false;
+      const generation = ownerReconciliation.begin();
+      void reconcileLocationTrackingOwner({
+        generation,
+        isCurrent: () => !cancelled && ownerReconciliation.isCurrent(generation),
+        isAuthLoading: isLoading,
+        technicianUserId: user.userId,
+        isTechnician: true,
+        getPersistedState: getPersistedTrackingState,
+        stopExactStoredState: async (state) => stopExactStoredTrackingAndNotify(state, "업무취소"),
+        restoreForUser: restoreLocationTrackingForUser,
+        applyState,
+        checkPermissions,
+      }).finally(() => { cancelled = true; });
+    });
+    return () => subscription.remove();
   }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation]);
 
   const startTracking = useCallback(async (params: StartTrackingParams): Promise<StartTrackingResult> => {

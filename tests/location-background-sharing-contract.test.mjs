@@ -4,11 +4,13 @@ import { readFile } from "node:fs/promises";
 const root = new URL("..", import.meta.url);
 const read = (relative) => readFile(new URL(relative, root), "utf8");
 
-const [tracking, lifecycle, uploadGuard, scheduler, context, schedule, workReport, auth, config] = await Promise.all([
+const [tracking, lifecycle, uploadGuard, scheduler, diagnostics, responseParser, context, schedule, workReport, auth, config] = await Promise.all([
   read("lib/location-tracking.ts"),
   read("lib/location-tracking-lifecycle.ts"),
   read("lib/location-upload-guard.ts"),
   read("lib/location-upload-scheduler.ts"),
+  read("lib/location-runtime-diagnostics.ts"),
+  read("lib/location-upload-response.ts"),
   read("lib/location-tracking-context.tsx"),
   read("app/(tabs)/tech-schedule.tsx"),
   read("app/work-report.tsx"),
@@ -31,7 +33,14 @@ assert.match(tracking, /runGuardedLocationUpload/, "credential/request/response 
 assert.match(tracking, /adoptHeadlessTrackingWithCredential/, "fresh TaskManager runtimes must adopt persisted state without a mounted screen");
 assert.match(tracking, /selectNewestFreshLocation/, "unordered TaskManager batches must select the newest fresh measurement");
 assert.match(tracking, /LatestOnlyUploadQueue/, "overlapping native callbacks must serialize uploads with one latest pending sample");
-assert.match(tracking, /UPDATE_REQUEST_ATTEMPTS/, "temporary upload failure must have a bounded retry policy");
+assert.match(tracking, /TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000/, "TaskManager 15초 job budget 안에서 fetch must remain bounded");
+assert.match(tracking, /RESPONSE_BODY_TIMEOUT_MS = 2_000/, "response body parsing must have its own bounded budget");
+assert.match(tracking, /createTaskDeadline\(TASK_CALLBACK_TOTAL_BUDGET_MS\)/, "callback must reserve one finite end-to-end deadline before adoption/upload");
+assert.match(tracking, /remainingTaskBudgetMs\(taskDeadlineAt\)/, "fetch and response parsing must consume the remaining callback budget");
+assert.match(tracking, /parseJsonWithin\(response, responseBodyBudgetMs\)/, "response.json must not hold the latest-only queue indefinitely");
+assert.doesNotMatch(tracking, /UPDATE_RETRY_DELAY_MS/, "headless callback must not combine delayed retry loops with the job deadline");
+assert.match(responseParser, /Promise\.race\(\[parsed, timeout\]\)/, "response parser must release on body timeout");
+assert.match(diagnostics, /sameDiagnosticScope/, "runtime diagnostics must reject a replacement session");
 assert.match(tracking, /serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다/, "TaskManager errors must become observable technician state");
 assert.match(tracking, /현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다/, "missing headless credential/session must become observable technician state");
 assert.match(scheduler, /payload\.accepted === true/, "HTTP 2xx must not alone count as a new location save");
@@ -41,10 +50,12 @@ assert.match(lifecycle, /this\.generation \+= 1/, "stop must invalidate an activ
 assert.match(lifecycle, /await this\.adapter\.stopNativeCollection\(\)/, "local native stop must occur before optional server notification");
 assert.match(lifecycle, /stopIfCurrent/, "late terminal response must stop only its own current state");
 assert.match(lifecycle, /restoreForUser/, "restore must fence its initial asynchronous storage read");
+assert.match(lifecycle, /reconcileNativeCollection/, "foreground return must recheck exact-session native registration");
 assert.match(uploadGuard, /getCredential\(\)/, "guard checks delayed credential acquisition");
 assert.match(uploadGuard, /request\(credential\)/, "guard checks the upload response boundary");
 assert.match(context, /stopStoredTrackingAndNotify\(reason, createLocationStopAuthSnapshot\(user\)\)/, "context must capture stop credentials before local shutdown");
 assert.match(context, /subscribeTrackingState/, "terminal server cleanup must clear context UI state");
+assert.match(context, /AppState\.addEventListener/, "foreground return must re-run exact-session registration reconciliation");
 assert.match(context, /getBackgroundPermissionsAsync/, "background location permission must be observed separately from notification permission");
 assert.match(context, /foregroundLocation/, "foreground location permission must have its own UI field");
 assert.match(context, /notification/, "notification permission must have its own UI field");

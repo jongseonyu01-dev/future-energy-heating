@@ -46,6 +46,8 @@ export interface TrackingLifecycleAdapter<T extends TrackingLifecycleState> {
   clearIfSame: (state: T) => Promise<void>;
   showControlNotification: (state: T) => Promise<void>;
   clearControlNotification: (state: T | null) => Promise<void>;
+  /** Registration state only; it is not proof of a future callback or server persistence. */
+  isNativeCollectionRegistered?: () => Promise<boolean>;
   startNativeCollection: () => Promise<void>;
   stopNativeCollection: () => Promise<void>;
   onStateChanged: (state: T | null) => void;
@@ -189,6 +191,34 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
     const restored = await this.start(state, { restore: true, expectedGeneration: readGeneration });
     return restored ? state : null;
+  }
+
+  /**
+   * Rechecks the native task registration after a UI runtime returns. Persisted
+   * intent or a sticky notification alone is deliberately not treated as proof
+   * that Android still owns the collection task. The check/start is serialized
+   * with normal start/stop transitions so an A recovery cannot start or stop B.
+   */
+  public async reconcileNativeCollection(state: T): Promise<"registered" | "restarted" | "superseded" | "unavailable"> {
+    if (!this.adapter.isNativeCollectionRegistered) return "unavailable";
+    const recoveryGeneration = this.generation;
+    return this.enqueue(async () => {
+      if (!this.owns(state, recoveryGeneration)) return "superseded";
+      const persisted = await this.adapter.read();
+      if (!this.owns(state, recoveryGeneration) || !sameTrackingLifecycleState(persisted, state)) return "superseded";
+
+      const registered = await this.adapter.isNativeCollectionRegistered!();
+      if (!this.owns(state, recoveryGeneration)) return "superseded";
+      if (registered) return "registered";
+
+      await this.adapter.startNativeCollection();
+      if (!this.owns(state, recoveryGeneration)) {
+        await this.adapter.stopNativeCollection();
+        return "superseded";
+      }
+      this.adapter.onStateChanged(state);
+      return "restarted";
+    });
   }
 
   /**
