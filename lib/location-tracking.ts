@@ -283,6 +283,15 @@ function timeoutMessage(error: unknown): string {
     : "네트워크 연결을 기다리는 중";
 }
 
+/** SecureStore failures must stop this upload without becoming anonymous fetches. */
+async function getStoredLocationBearerToken(): Promise<string | null> {
+  try {
+    return await Auth.getSessionToken();
+  } catch {
+    return null;
+  }
+}
+
 function serverRecordedAt(value: unknown): number {
   if (typeof value !== "string") return Date.now();
   const parsed = Date.parse(value);
@@ -411,7 +420,7 @@ export async function sendLocationToServer(
       const guarded = await runGuardedLocationUpload({
         isCurrent: () => trackingLifecycle.isCurrent(state),
         getCredential: async () => {
-          const technicianToken = capturedBearerToken ?? await Auth.getSessionToken();
+          const technicianToken = capturedBearerToken ?? await getStoredLocationBearerToken();
           return buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
         },
         request: async (technicianToken) => {
@@ -506,7 +515,7 @@ export async function notifySessionStop(
   }
   const technicianToken = useCapturedSnapshot
     ? authSnapshot!.bearerToken
-    : await Auth.getSessionToken();
+    : await getStoredLocationBearerToken();
   const headers = buildLocationRequestHeaders(technicianToken);
   if (!headers) return;
   for (let attempt = 0; attempt < STOP_REQUEST_ATTEMPTS; attempt += 1) {
@@ -586,7 +595,7 @@ export async function adoptLocationTrackingForHeadlessTask(): Promise<PersistedT
   const adopted = await adoptHeadlessTrackingWithCredential({
     lifecycle: trackingLifecycle,
     getBearerToken: async () => {
-      const token = await Auth.getSessionToken();
+      const token = await getStoredLocationBearerToken();
       return buildLocationRequestHeaders(token) ? token : null;
     },
   });
@@ -620,7 +629,7 @@ if (Platform.OS !== "web") {
         const adopted = await adoptHeadlessTrackingWithCredential({
           lifecycle: trackingLifecycle,
           getBearerToken: async () => {
-            const token = await Auth.getSessionToken();
+            const token = await getStoredLocationBearerToken();
             return buildLocationRequestHeaders(token) ? token : null;
           },
         });

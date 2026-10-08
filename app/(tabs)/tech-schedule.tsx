@@ -40,7 +40,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function TechScheduleScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user } = useAppAuth();
+  const { user, isLoading: isAuthLoading } = useAppAuth();
 
   const technicianId = user?.technicianId;
   const userId = user?.userId;
@@ -88,7 +88,7 @@ export default function TechScheduleScreen() {
   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
   const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery(
     undefined,
-    { enabled: !!userId, retry: 1 }
+    { enabled: !!userId && !isAuthLoading, retry: 1 }
   );
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);

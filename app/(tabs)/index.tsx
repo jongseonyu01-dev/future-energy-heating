@@ -52,7 +52,7 @@ const hqAdminMenuItems = [
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user, logout } = useAppAuth();
+  const { user, isLoading: isAuthLoading, logout } = useAppAuth();
 
   const role = user?.appRole ?? "customer";
 
@@ -89,8 +89,13 @@ export default function HomeScreen() {
                   <Text style={styles.authBtnText}>로그아웃</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.authBtn} onPress={handleLogin} activeOpacity={0.8}>
-                  <Text style={styles.authBtnText}>직원 로그인</Text>
+                <TouchableOpacity
+                  style={[styles.authBtn, isAuthLoading && styles.authBtnDisabled]}
+                  onPress={handleLogin}
+                  activeOpacity={0.8}
+                  disabled={isAuthLoading}
+                >
+                  <Text style={styles.authBtnText}>{isAuthLoading ? "세션 확인 중" : "직원 로그인"}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -199,6 +204,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: "500" },
   headerDesc: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 4 },
   authBtn: { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  authBtnDisabled: { opacity: 0.55 },
   authBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   roleBadge: { backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start" },
   roleBadgeText: { color: "#fff", fontSize: 12, fontWeight: "600" },

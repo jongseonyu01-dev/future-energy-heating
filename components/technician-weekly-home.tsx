@@ -31,7 +31,7 @@ type TechnicianWeeklyHomeProps = {
 
 export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
   const colors = useColors();
-  const { user } = useAppAuth();
+  const { user, isLoading: isAuthLoading } = useAppAuth();
   const userId = user?.userId;
   const [now, setNow] = useState(() => new Date());
   const today = getKstDateString(now);
@@ -46,7 +46,7 @@ export function TechnicianWeeklyHome({ onPress }: TechnicianWeeklyHomeProps) {
     isLoading,
     isError,
     refetch,
-  } = trpc.repair.listMySchedule.useQuery(undefined, { enabled: !!userId });
+  } = trpc.repair.listMySchedule.useQuery(undefined, { enabled: !!userId && !isAuthLoading });
 
   const refreshCalendar = useCallback(() => {
     const currentNow = new Date();

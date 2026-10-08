@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import { useQueryClient } from "@tanstack/react-query";
 import { Platform } from "react-native";
+
 import { getApiBaseUrl } from "@/constants/oauth";
 import { createLocationStopAuthSnapshot, stopStoredTrackingAndNotify } from "@/lib/location-tracking";
+import { AuthSessionTransition } from "@/lib/auth-session-transition";
 import * as Auth from "@/lib/_core/auth";
 import { synchronizeAppSessionToken } from "@/lib/session-token-storage";
 
@@ -42,9 +45,8 @@ const STORAGE_KEY = "fe_auth_user";
 const SECURE_STORE_KEY = "fe_session_token";
 // tRPC Authorization 헤더용 토큰 키 (lib/_core/auth.ts의 SESSION_TOKEN_KEY와 동일)
 const APP_SESSION_TOKEN_KEY = "app_session_token";
-// 앱 버전 키 - 버전 변경 시 기존 세션 무효화
 const SESSION_VERSION_KEY = "fe_session_version";
-const CURRENT_SESSION_VERSION = "v6"; // v6: headers.entries() 제거, API 주소 단일화, 과거 서버주소 키 정리 (2026-08-03)
+const CURRENT_SESSION_VERSION = "v6";
 
 /** 모든 저장소에서 인증 데이터 완전 삭제 */
 async function clearAllAuthStorage() {
@@ -52,7 +54,6 @@ async function clearAllAuthStorage() {
   try { await AsyncStorage.removeItem("fe_remember_me"); } catch {}
   try { await AsyncStorage.removeItem("authUser"); } catch {}
   try { await AsyncStorage.removeItem("manus-runtime-user-info"); } catch {}
-  // 과거 서버주소 저장 키 마이그레이션 (futureenergytech.co.kr 등 잘못된 주소 제거)
   const legacyUrlKeys = ["serverUrl", "apiUrl", "apiBaseUrl", "baseUrl", "customServer", "endpoint"];
   for (const key of legacyUrlKeys) {
     try { await AsyncStorage.removeItem(key); } catch {}
@@ -62,7 +63,6 @@ async function clearAllAuthStorage() {
     try { await SecureStore.deleteItemAsync(APP_SESSION_TOKEN_KEY); } catch {}
     try { await SecureStore.deleteItemAsync("manus-session-token"); } catch {}
     try { await SecureStore.deleteItemAsync("fe_token"); } catch {}
-    // SecureStore 과거 서버주소 키도 삭제
     for (const key of legacyUrlKeys) {
       try { await SecureStore.deleteItemAsync(key); } catch {}
     }
@@ -72,9 +72,8 @@ async function clearAllAuthStorage() {
 /** 서버에서 토큰 유효성 검증 */
 async function verifyTokenWithServer(userId: number, token: string): Promise<boolean> {
   try {
-    // 운영 build는 기존 운영 주소, review build는 build-time 격리 주소를 사용한다.
-    const API_BASE = `${getApiBaseUrl()}/api/trpc`;
-    const res = await fetch(`${API_BASE}/auth.verifyToken`, {
+    const apiBase = `${getApiBaseUrl()}/api/trpc`;
+    const res = await fetch(`${apiBase}/auth.verifyToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ json: { userId, token } }),
@@ -92,26 +91,57 @@ async function verifyTokenWithServer(userId: number, token: string): Promise<boo
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const userRef = useRef<AuthUser | null>(null);
+  const transitions = useRef(new AuthSessionTransition()).current;
+
+  const setVisibleUser = useCallback((generation: number, nextUser: AuthUser | null) => {
+    if (!transitions.isCurrent(generation)) return false;
+    userRef.current = nextUser;
+    setUser(nextUser);
+    return true;
+  }, [transitions]);
+
+  /**
+   * `listMySchedule` has no technician id in its tRPC key because the server
+   * derives it from the bearer. Therefore an account boundary must cancel and
+   * discard all in-flight/cache data before another bearer can render it.
+   */
+  const clearAccountBoundQueries = useCallback(async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
+
+  const finishLoadingIfCurrent = useCallback((generation: number) => {
+    if (transitions.isCurrent(generation)) setIsLoading(false);
+  }, [transitions]);
 
   useEffect(() => {
+    const generation = transitions.begin();
+
+    async function clearAndRecordVersion() {
+      return transitions.runStorage(generation, async () => {
+        await clearAllAuthStorage();
+        await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
+      });
+    }
+
     async function restoreSession() {
+      await clearAccountBoundQueries();
       try {
-        // 1. 세션 버전 확인 - 버전이 다르면 기존 세션 무효화
         const savedVersion = await AsyncStorage.getItem(SESSION_VERSION_KEY);
         if (savedVersion !== CURRENT_SESSION_VERSION) {
-          // 버전 불일치: 기존 세션 모두 삭제 후 새 버전 기록
-          await clearAllAuthStorage();
-          await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
-          setIsLoading(false);
+          await clearAndRecordVersion();
           return;
         }
 
-        // 2. 저장된 세션 읽기
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (!raw) {
-          setIsLoading(false);
+          // A rememberMe=false session must not leave an app_session_token that
+          // turns a next cold start into a silent authenticated request.
+          await clearAndRecordVersion();
           return;
         }
 
@@ -119,78 +149,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           saved = JSON.parse(raw);
         } catch {
-          await clearAllAuthStorage();
-          setIsLoading(false);
+          await clearAndRecordVersion();
           return;
         }
 
-        // 3. 필수 필드 검증
-        if (!saved.userId || !saved.appRole || !saved.loginId) {
-          await clearAllAuthStorage();
-          setIsLoading(false);
+        if (!saved.userId || !saved.appRole || !saved.loginId || !saved.token) {
+          await clearAndRecordVersion();
+          return;
+        }
+        if (!await verifyTokenWithServer(saved.userId, saved.token)) {
+          await clearAndRecordVersion();
           return;
         }
 
-        // 4. 네이티브에서는 화면 세션과 tRPC Bearer 저장소를 함께 복원한다.
-        // SecureStore 동기화가 실패하면 화면만 로그인 상태로 두지 않는다.
-        if (!saved.token || !await verifyTokenWithServer(saved.userId, saved.token)) {
-          await clearAllAuthStorage();
-          setIsLoading(false);
+        const storageResult = await transitions.runStorage(generation, async () => {
+          if (Platform.OS === "web") return true;
+          return synchronizeAppSessionToken(saved.token, Auth.setSessionToken);
+        });
+        if (!storageResult.applied) return;
+        if (!storageResult.value) {
+          await clearAndRecordVersion();
           return;
         }
-        if (Platform.OS !== "web") {
-          const synchronized = await synchronizeAppSessionToken(saved.token, Auth.setSessionToken);
-          if (!synchronized) {
-            await clearAllAuthStorage();
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        // 5. 세션 복원 성공
-        setUser(saved);
+        setVisibleUser(generation, saved);
       } catch {
-        await clearAllAuthStorage();
+        await clearAndRecordVersion();
       } finally {
-        setIsLoading(false);
+        finishLoadingIfCurrent(generation);
       }
     }
 
-    restoreSession();
-  }, []);
+    void restoreSession();
+  }, [clearAccountBoundQueries, finishLoadingIfCurrent, setVisibleUser, transitions]);
 
   const login = useCallback(async (authUser: AuthUser, loginId: string, rememberMe: boolean = false) => {
+    const generation = transitions.begin();
+    const previousUser = userRef.current;
+    setVisibleUser(generation, null);
+    setIsLoading(true);
+    await clearAccountBoundQueries();
+
+    // A visible A session is stopped with A's captured credential before B's
+    // credential can be persisted. A late stop request can never read B.
+    if (previousUser) {
+      await stopStoredTrackingAndNotify("업무취소", createLocationStopAuthSnapshot(previousUser));
+    }
+
     const userWithLoginId = { ...authUser, loginId };
-    // tRPC Authorization 헤더용 token을 SecureStore에 저장한다. 자동로그인
-    // 여부와 무관하게 저장 실패는 로그인 성공으로 처리하지 않는다.
-    if (Platform.OS !== "web") {
-      const synchronized = await synchronizeAppSessionToken(authUser.token, Auth.setSessionToken);
-      if (!synchronized) throw new Error("SESSION_TOKEN_STORAGE_FAILED");
+    try {
+      const storageResult = await transitions.runStorage(generation, async () => {
+        if (Platform.OS !== "web") {
+          const synchronized = await synchronizeAppSessionToken(authUser.token, Auth.setSessionToken);
+          if (!synchronized) throw new Error("SESSION_TOKEN_STORAGE_FAILED");
+        }
+        if (rememberMe) {
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));
+        } else {
+          await AsyncStorage.removeItem(STORAGE_KEY);
+          await AsyncStorage.removeItem("fe_remember_me");
+        }
+        await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
+        return true;
+      });
+      if (!storageResult.applied) throw new Error("AUTH_SESSION_SUPERSEDED");
+      if (!setVisibleUser(generation, userWithLoginId)) throw new Error("AUTH_SESSION_SUPERSEDED");
+    } catch (error) {
+      // A failed persistence may have written the bearer before AsyncStorage
+      // failed. Clear both stores before returning an error to the login UI.
+      const cleared = await transitions.runStorage(generation, async () => {
+        await clearAllAuthStorage();
+        await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
+      });
+      if (cleared.applied) setVisibleUser(generation, null);
+      throw error;
+    } finally {
+      finishLoadingIfCurrent(generation);
     }
-    setUser(userWithLoginId);
-    if (rememberMe) {
-      // 자동 로그인 선택 시: AsyncStorage에 세션 저장 (앱 재시작 시도 로그인 유지)
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userWithLoginId));
-      await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
-    } else {
-      // 자동 로그인 미선택 시: AsyncStorage 세션만 삭제 (앱 재시작 시 로그인 필요)
-      // 주의: SecureStore의 APP_SESSION_TOKEN_KEY는 삭제하지 않음 → 앱 사용 중 tRPC 인증 토큰 유지
-      try { await AsyncStorage.removeItem(STORAGE_KEY); } catch {}
-      try { await AsyncStorage.removeItem("fe_remember_me"); } catch {}
-      await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
-    }
-  }, []);
+  }, [clearAccountBoundQueries, finishLoadingIfCurrent, setVisibleUser, transitions]);
 
   const logout = useCallback(async () => {
-    // Capture only the current A credential before clearing it. The location
-    // module invalidates local work first and never reads a later B login for A.
-    const stopSnapshot = createLocationStopAuthSnapshot(user);
-    await stopStoredTrackingAndNotify("업무취소", stopSnapshot);
-    setUser(null);
-    await clearAllAuthStorage();
-    // 세션 버전은 유지 (재설치 감지용)
-    await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
-  }, [user]);
+    const generation = transitions.begin();
+    const previousUser = userRef.current;
+    setVisibleUser(generation, null);
+    await clearAccountBoundQueries();
+    await stopStoredTrackingAndNotify("업무취소", createLocationStopAuthSnapshot(previousUser));
+    await transitions.runStorage(generation, async () => {
+      await clearAllAuthStorage();
+      await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);
+    });
+    finishLoadingIfCurrent(generation);
+  }, [clearAccountBoundQueries, finishLoadingIfCurrent, setVisibleUser, transitions]);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>
