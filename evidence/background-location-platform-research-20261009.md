@@ -150,3 +150,17 @@
    - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`: warm exact `E_LOCATION_UNAUTHORIZED`는 delayed unbound journal이 pending이어도 native stop 1, next callback fetch 0, resumable pointer 보존을 확인했다. delayed old A revoke 이후 replacement B HTTP 1도 유지했다.
    - `LOCATION_TRACKING_LIFECYCLE_RACE_PASS`, `LOCATION_CUSTOM_PACKAGE_ENTRY_HEADLESS_INTEGRATION_PASS`, `LOCATION_TRACKING_RUNTIME_INTEGRATION_PASS`, `LOCATION_STATUS_OVERLAY_OWNER_AND_AGE_CONTRACT_PASS`, `MOBILE_AUTH_SESSION_CONTRACT_PASS`, `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`와 Vitest 3 files/34 tests를 재실행했다. edited-file ESLint 및 `git diff --check` PASS. full TypeScript는 `dad4e7a`와 각각 기존 83 errors, normalized new lines 0이다.
 4. **유지된 경계:** terminal server response는 여전히 inactive marker/pointer clear를 사용한다. permission pending은 terminal을 되살리지 않으며, grant 전 headless upload도 허용하지 않는다. 새 APK build·재서명·운영 호출·merge/deploy는 하지 않았다.
+
+## 2026-10-10 06:52 권한 대기 UI·명시 재개 보완 후보
+
+> **확정 범위:** `c2fcf26` 위 source-level lifecycle/TaskManager/Provider 합성 실행 보완이다. 이 후보는 실제 Android 앱 밖 accepted 공백의 원인을 확정하지 않으며, 권한 승인·작은 상태창·native registration을 server accepted 성공으로 표기하지 않는다. 운영 HTTP·고객/기사 위치·출발/도착·문자·DB에는 접근하지 않았다.
+
+1. **권한 대기는 terminal이 아니다.** confirmed denial/`E_LOCATION_UNAUTHORIZED`는 exact native collection과 upload authority만 먼저 suspend한다. 저장된 request pointer는 유지하고 Provider에도 같은 session을 publish한다. 따라서 권한 대기 화면에서도 기존 업무의 도착·업무 취소 경로는 유지된다.
+2. **재개는 별도 foreground action이다.** 기사 화면은 “권한 확인·공유 재개”를 표시한다. 이 action은 Android 현재 권한만 읽어 승인되면 같은 `requestId` pointer를 native collection으로 restore한다. 새 `location.startTracking` server mutation, 고객 문자, 좌표 읽기, 즉시 upload를 수행하지 않는다. 앱 active reconciliation도 같은 eligibility read를 거치며, 아직 grant 전인 cold/headless TaskManager callback은 HTTP 전에 fail-closed 한다.
+3. **늦은 marker 역전 보호:** permission-pending marker와 permission-resumed acknowledgement는 동일 exact-state identity에 versioned record로 남긴다. 재개 acknowledgement를 기록한 뒤 예전 pending `setItem`이 늦게 끝나도 cold read는 resume record를 우선한다. 재개한 in-memory owner는 pending marker 제거 await가 늦어도 exact owner를 유지하며, 다른 A/B/terminal에는 적용되지 않는다.
+4. **실행 증거:**
+   - `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`: denied existing session은 화면에 같은 request로 남고, explicit approval resume은 native start 1회·same requestId·pending=false를 확인했다.
+   - `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`: actual Provider hook harness에서 permission pending session이 visible이며 resume action이 local API 1회만 호출하고 original requestId를 보존하는 것을 확인했다.
+   - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`: revoke 뒤 approval만으로는 cold callback HTTP 0회, explicit resume 뒤 다음 valid callback HTTP 1회; delayed old pending marker write가 resume acknowledgement 뒤 settle해도 pending=false와 next callback HTTP 1회를 확인했다.
+   - lifecycle/headless/background-sharing contract standalone marker 및 Vitest 4 files/39 tests를 재실행했다. edited-file ESLint errors 0(기존 `tech-schedule.tsx` unused warnings 2개), `git diff --check` PASS. full TypeScript는 `c2fcf26` baseline과 candidate 모두 기존 83 errors, normalized diff 0이다.
+5. **금지/한계:** 이 후보는 새 APK·재서명·merge·Production deploy·공개 링크 변경을 만들지 않았다. 실기기 수용은 새 내부 APK가 독립 code review를 통과한 뒤, 앱 재진입 전 일반 앱 전환·홈·일반 잠금 중 callback → request/body → accepted 시각 증가와 terminal 후 update 0으로 별도 판단한다.

@@ -70,13 +70,17 @@ async function main() {
     await writeFile(join(stubs, "tracking.ts"), `
       let trackingListener: ((state: any) => void) | null = null;
       let debugListener: ((state: any) => void) | null = null;
+      export let permissionPending = true;
+      export let resumeCalls = 0;
       export let latestUnbound: any = null;
       export const appStateEvents: string[] = [];
       export const setLatestUnbound = (value: any) => { latestUnbound = value; };
       export const getLatestUnboundLocationTaskEvent = async () => latestUnbound;
       export const createLocationStopAuthSnapshot = () => ({ technicianUserId: 17, bearerToken: "bearer" });
       export const getPersistedTrackingState = async () => (${JSON.stringify(stateA)});
+      export const isLocationTrackingPermissionPending = async () => permissionPending;
       export const recordLocationTrackingAppState = (next: string) => { appStateEvents.push(next); };
+      export const resumeLocationTrackingAfterPermissionCheck = async () => { resumeCalls += 1; permissionPending = false; return { state: ${JSON.stringify(stateA)}, status: "resumed" }; };
       export const restoreLocationTrackingForUser = async () => null;
       export const startLocationTracking = async () => undefined;
       export const stopStoredTrackingAndNotify = async () => { trackingListener?.(null); };
@@ -126,6 +130,13 @@ async function main() {
     await tick();
     await react.__flush();
     assert.equal(react.__latest().isTracking, true, "provider must receive the active exact tracking session");
+    assert.equal(react.__latest().isPermissionPending, true, "permission-pending work must remain visible so arrival/cancel controls are not lost");
+
+    assert.equal(await react.__latest().resumeTrackingAfterPermissionCheck(), "resumed", "explicit foreground approval resumes only the preserved local session");
+    await react.__flush();
+    assert.equal(tracking.resumeCalls, 1, "resume control must call the local resume API once without a departure/server start path");
+    assert.equal(react.__latest().trackingRequestId, stateA.requestId, "resume must retain the original work identity");
+    assert.equal(react.__latest().isPermissionPending, false, "resumed exact session must not remain visually blocked by a stale pending marker");
 
     native.emitState("background");
     await tick();

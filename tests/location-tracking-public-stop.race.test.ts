@@ -45,7 +45,7 @@ async function main() {
       export default {
         getItem: async (key: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) return inactiveMarkers.get(key) ?? null;
-          if (key.startsWith("location_tracking_permission_pending_v1:")) return permissionMarkers.get(key) ?? null;
+          if (key.startsWith("location_tracking_permission_pending_v1:") || key.startsWith("location_tracking_permission_resumed_v1:")) return permissionMarkers.get(key) ?? null;
           if (key.startsWith("location_tracking_runtime_diagnostics")) return values.get(key) ?? null;
           readCount += 1;
           if (readCount === 1) return globalThis.__read1;
@@ -54,13 +54,13 @@ async function main() {
         },
         setItem: async (key: string, value: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) inactiveMarkers.set(key, value);
-          else if (key.startsWith("location_tracking_permission_pending_v1:")) permissionMarkers.set(key, value);
+          else if (key.startsWith("location_tracking_permission_pending_v1:") || key.startsWith("location_tracking_permission_resumed_v1:")) permissionMarkers.set(key, value);
           else if (key.startsWith("location_tracking_runtime_diagnostics")) values.set(key, value);
           else globalThis.__stored = value;
         },
         removeItem: async (key: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) inactiveMarkers.delete(key);
-          else if (key.startsWith("location_tracking_permission_pending_v1:")) permissionMarkers.delete(key);
+          else if (key.startsWith("location_tracking_permission_pending_v1:") || key.startsWith("location_tracking_permission_resumed_v1:")) permissionMarkers.delete(key);
           else if (key.startsWith("location_tracking_runtime_diagnostics")) values.delete(key);
           else globalThis.__stored = null;
         },
@@ -68,7 +68,7 @@ async function main() {
         multiGet: async (keys: readonly string[]) => keys.map((key) => [
           key,
           key.startsWith("location_tracking_inactive_v1:") ? inactiveMarkers.get(key) ?? null
-            : key.startsWith("location_tracking_permission_pending_v1:") ? permissionMarkers.get(key) ?? null
+            : key.startsWith("location_tracking_permission_pending_v1:") || key.startsWith("location_tracking_permission_resumed_v1:") ? permissionMarkers.get(key) ?? null
               : values.get(key) ?? null,
         ] as [string, string | null]),
       };
@@ -158,10 +158,11 @@ async function main() {
     globals.__backgroundPermission = { status: "denied" };
     const nativeStartsBeforeDeniedRestore = Number(globals.__nativeStarts);
     const nativeStopsBeforeDeniedRestore = Number(globals.__nativeStops);
+    const pendingRestore = await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId);
     assert.equal(
-      await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId),
-      null,
-      "unapproved stored share must not restore or re-register native collection",
+      pendingRestore?.requestId,
+      deniedRestore.requestId,
+      "unapproved stored share must remain visible as the same non-terminal permission-pending work",
     );
     assert.equal(globals.__nativeStarts, nativeStartsBeforeDeniedRestore, "denied restored share must issue zero native starts");
     assert.equal(globals.__nativeStops, nativeStopsBeforeDeniedRestore + 1, "denied restored share must stop its exact existing native task");
@@ -173,9 +174,11 @@ async function main() {
     assert.equal((await tracking.getPersistedTrackingState())?.requestId, deniedRestore.requestId, "approved pending fixture must retain its original session identity");
     assert.equal(tracking.__testLifecycleIntent(), null, "denied predecessor must leave no in-memory owner before an approved restore");
     const nativeStartsBeforeApprovedRestore = Number(globals.__nativeStarts);
-    const restoredApproved = await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId);
-    assert.equal(restoredApproved?.requestId, deniedRestore.requestId, `approved exact pending session must restore normally: ${JSON.stringify(restoredApproved)}`);
+    const resumedApproved = await tracking.resumeLocationTrackingAfterPermissionCheck(deniedRestore.technicianUserId);
+    assert.equal(resumedApproved.status, "resumed", "foreground approval must explicitly resume the same local session without a server start request");
+    assert.equal(resumedApproved.state?.requestId, deniedRestore.requestId, `approved exact pending session must restore normally: ${JSON.stringify(resumedApproved)}`);
     assert.equal(globals.__nativeStarts, nativeStartsBeforeApprovedRestore + 1, "approved restored share may start its exact native collector once");
+    assert.equal(await tracking.isLocationTrackingPermissionPending(deniedRestore), false, "successful exact resume must clear the stale local permission-pending fence");
 
     // A visible optional overlay is revoked immediately when an exact in-memory
     // share stops. It must not wait for delayed Android native cleanup.

@@ -66,6 +66,7 @@ Notifications.setNotificationHandler({
 const TRACKING_STATE_KEY = "location_tracking_state_v2";
 const INACTIVE_TRACKING_PREFIX = "location_tracking_inactive_v1";
 const PERMISSION_PENDING_TRACKING_PREFIX = "location_tracking_permission_pending_v1";
+const PERMISSION_RESUMED_TRACKING_PREFIX = "location_tracking_permission_resumed_v1";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
 const NOTIFICATION_CATEGORY = "FUTURE_ENERGY_LOCATION_TRACKING";
 export const STOP_TRACKING_NOTIFICATION_ACTION = "FUTURE_ENERGY_LOCATION_STOP";
@@ -195,6 +196,7 @@ const inactiveTrackingStateKeys = new Set<string>();
 // approval check. This in-memory fence is diagnostic/visibility only; lifecycle
 // generation invalidation remains the upload authority boundary.
 const permissionPendingTrackingStateKeys = new Set<string>();
+let permissionMarkerSequence = 0;
 
 function stateKey(state: PersistedTrackingState): string {
   return `${state.token}:${state.requestId}:${state.technicianUserId}:${state.startedAt}`;
@@ -294,6 +296,22 @@ function inactiveTrackingKey(state: PersistedTrackingState): string {
 
 function permissionPendingTrackingKey(state: PersistedTrackingState): string {
   return `${PERMISSION_PENDING_TRACKING_PREFIX}:${state.requestId}:${state.technicianUserId}:${state.startedAt}:${state.token}`;
+}
+
+function permissionResumedTrackingKey(state: PersistedTrackingState): string {
+  return `${PERMISSION_RESUMED_TRACKING_PREFIX}:${state.requestId}:${state.technicianUserId}:${state.startedAt}:${state.token}`;
+}
+
+function nextPermissionMarkerVersion(): string {
+  permissionMarkerSequence += 1;
+  return `${String(Date.now()).padStart(15, "0")}:${String(permissionMarkerSequence).padStart(8, "0")}`;
+}
+
+/** Legacy value "1" sorts before all versioned markers. */
+function isNewerPermissionMarker(left: string | null, right: string | null): boolean {
+  if (!left) return false;
+  if (!right) return true;
+  return left.localeCompare(right) > 0;
 }
 
 function emitTrackingState(state: PersistedTrackingState | null): void {
@@ -457,7 +475,7 @@ async function markTrackingStatePermissionPending(
   // Unlike the terminal inactive marker this value never rejects restore or
   // headless adoption by itself. It is evidence that permission must be
   // rechecked before native collection can resume for this exact pointer.
-  await AsyncStorage.setItem(key, "1");
+  await AsyncStorage.setItem(key, nextPermissionMarkerVersion());
 }
 
 async function clearTrackingStatePermissionPending(
@@ -468,10 +486,14 @@ async function clearTrackingStatePermissionPending(
   if (!isStillAuthorized()) return;
   permissionPendingTrackingStateKeys.delete(key);
   try {
-    if (isStillAuthorized()) await AsyncStorage.removeItem(key);
+    // Do not delete the older pending record. A previously issued delayed
+    // setItem could otherwise recreate it after this foreground approval. The
+    // monotonic resume acknowledgement wins during a future cold read.
+    if (isStillAuthorized()) await AsyncStorage.setItem(permissionResumedTrackingKey(state), nextPermissionMarkerVersion());
   } catch {
-    // The marker is informational; a stale one must not prevent a newly
-    // permission-approved exact session from restoring.
+    // The marker is informational; a failed acknowledgement must not delay the
+    // already-authorized in-memory owner, but a later cold runtime will safely
+    // recheck Android permission before it can resume.
   }
 }
 
@@ -482,8 +504,11 @@ async function isTrackingStatePermissionPending(
   if (!isStillAuthorized()) return true;
   const key = permissionPendingTrackingKey(state);
   if (permissionPendingTrackingStateKeys.has(key)) return true;
-  const pending = await AsyncStorage.getItem(key);
-  return !isStillAuthorized() || Boolean(pending);
+  const [pending, resumed] = await Promise.all([
+    AsyncStorage.getItem(key),
+    AsyncStorage.getItem(permissionResumedTrackingKey(state)),
+  ]);
+  return !isStillAuthorized() || isNewerPermissionMarker(pending, resumed);
 }
 
 async function isTrackingStateInactive(
@@ -783,6 +808,45 @@ async function suspendExactTrackingForPermissionDenial(state: PersistedTrackingS
   return true;
 }
 
+/** Returns only whether this exact persisted pointer is locally paused for permission approval. */
+export async function isLocationTrackingPermissionPending(state: PersistedTrackingState): Promise<boolean> {
+  return isTrackingStatePermissionPending(state);
+}
+
+export type ResumeLocationTrackingResult = {
+  state: PersistedTrackingState | null;
+  status: "resumed" | "permission_required" | "unavailable" | "no_matching_session";
+};
+
+/**
+ * Foreground-only recovery for a locally suspended share. It never creates a
+ * server session, re-sends a customer message, reads a coordinate, or uploads.
+ * It only checks Android's already-selected permission and restores the exact
+ * existing pointer when the technician has approved it.
+ */
+export async function resumeLocationTrackingAfterPermissionCheck(
+  userId: number,
+): Promise<ResumeLocationTrackingResult> {
+  if (Platform.OS === "web") return { state: null, status: "unavailable" };
+  const candidate = await getPersistedTrackingState();
+  if (!candidate || candidate.technicianUserId !== userId) {
+    return { state: null, status: "no_matching_session" };
+  }
+
+  const eligibility = await readExistingTrackingPermissionEligibility();
+  if (!eligibility.eligible) {
+    if (eligibility.status === "denied") await suspendExactTrackingForPermissionDenial(candidate);
+    return {
+      state: candidate,
+      status: eligibility.status === "denied" ? "permission_required" : "unavailable",
+    };
+  }
+
+  const restored = await restoreLocationTrackingForUser(userId);
+  if (!restored) return { state: null, status: "unavailable" };
+  return { state: restored, status: "resumed" };
+}
+
 export async function restoreLocationTrackingForUser(userId: number): Promise<PersistedTrackingState | null> {
   if (Platform.OS === "web") return null;
   try {
@@ -802,7 +866,10 @@ export async function restoreLocationTrackingForUser(userId: number): Promise<Pe
       if (!eligibility.eligible) {
         if (eligibility.status === "denied") {
           await suspendExactTrackingForPermissionDenial(candidate);
-          return null;
+          // Keep this non-terminal share visible. Arrival/cancel remain usable,
+          // and a later foreground approval resumes this exact pointer without a
+          // second server session or customer message.
+          return candidate;
         }
         emitDebug({
           serverStatus: "error",
@@ -1641,11 +1708,11 @@ export function registerLocationTrackingTask(): boolean {
         }
         if (!permissionEligibility.value.eligible) {
           if (permissionEligibility.value.status === "denied") {
-            deactivateAfterTerminalResponse(
-              adopted.state,
-              "LOCATION_PERMISSION_DENIED",
-              "위치 권한이 변경되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
-            );
+            // A native callback can observe a newly revoked permission after a
+            // share began. Use the same reversible local suspend as foreground
+            // restore; this is not a terminal server stop.
+            suspendCurrentTrackingForPermissionRevocation(adopted.state);
+            void recordUnboundTaskCallback("TASK_NATIVE_PERMISSION_REVOKED", callbackEnteredAt, taskFence);
           } else {
             await recordUnboundTaskCallback("PERMISSION_CHECK_UNAVAILABLE", callbackEnteredAt, taskFence);
           }

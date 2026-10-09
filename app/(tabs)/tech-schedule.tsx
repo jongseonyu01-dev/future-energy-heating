@@ -76,6 +76,7 @@ export default function TechScheduleScreen() {
   // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
   const {
     isTracking,
+    isPermissionPending,
     trackingToken,
     trackingRequestId,
     trackingUrl,
@@ -86,6 +87,7 @@ export default function TechScheduleScreen() {
     closeStatusOverlay,
     permStatus,
     startTracking,
+    resumeTrackingAfterPermissionCheck,
     stopTracking,
     checkPermissions,
   } = useLocationTracking();
@@ -345,6 +347,23 @@ export default function TechScheduleScreen() {
     }
   };
 
+  const handleResumePermissionPendingTracking = async () => {
+    const result = await resumeTrackingAfterPermissionCheck();
+    if (result === "resumed") {
+      Alert.alert("위치 공유 재개 준비", "기존 업무의 위치 공유를 다시 시작했습니다. 새 위치 저장은 이후 ‘마지막 새 위치 저장’ 시각으로 별도 확인해 주세요.");
+      return;
+    }
+    if (result === "permission_required") {
+      Alert.alert(
+        "위치 권한 확인 필요",
+        "기존 업무는 유지되어 도착·업무 취소를 계속 사용할 수 있습니다. Android 설정에서 위치 권한을 ‘항상 허용’으로 바꾼 뒤 다시 확인해 주세요.",
+        [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }],
+      );
+      return;
+    }
+    Alert.alert("위치 공유 재개 확인", "기존 위치 공유 상태를 확인하지 못했습니다. 도착 또는 업무 취소는 기존 업무 화면에서 계속 사용할 수 있습니다.");
+  };
+
   // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
   useEffect(() => {
     const works = allWorks ?? [];
@@ -414,7 +433,7 @@ export default function TechScheduleScreen() {
 
         {isThisTracking && (
           <View style={s.trackingIndicator}>
-            <Text style={s.trackingIndicatorText}>📍 위치 공유 세션 유지 중 · 수집·저장 별도 확인</Text>
+            <Text style={s.trackingIndicatorText}>{isPermissionPending ? "📍 위치 권한 확인 대기 · 도착·취소 가능" : "📍 위치 공유 세션 유지 중 · 수집·저장 별도 확인"}</Text>
           </View>
         )}
 
@@ -474,6 +493,14 @@ export default function TechScheduleScreen() {
                 {trackingStatusLabel[trackingStatus]}
               </Text>
             </View>
+            {isPermissionPending && (
+              <View style={s.permissionPendingBox}>
+                <Text style={s.permissionPendingText}>위치 권한 확인 대기 중입니다. 기존 업무는 유지되며 도착·업무 취소를 계속 사용할 수 있습니다.</Text>
+                <TouchableOpacity style={s.resumeTrackingBtn} onPress={() => { void handleResumePermissionPendingTracking(); }} activeOpacity={0.8}>
+                  <Text style={s.resumeTrackingBtnText}>권한 확인·공유 재개</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>native 등록</Text>
               <Text style={s.locationStatusValue}>
@@ -978,6 +1005,16 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic' as const,
   },
+  permissionPendingBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+    marginTop: 6,
+  },
+  permissionPendingText: { fontSize: 12, color: '#92400E', fontWeight: '600' as const, lineHeight: 18 },
+  resumeTrackingBtn: { backgroundColor: '#D97706', borderRadius: 8, paddingVertical: 9, alignItems: 'center' },
+  resumeTrackingBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' as const },
   // 탭 바
   selectedDateNotice: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#FFF7ED" },
   selectedDateNoticeText: { color: "#9A3412", fontSize: 14, fontWeight: "700" },

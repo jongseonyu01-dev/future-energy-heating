@@ -12,7 +12,9 @@ import {
   getLatestUnboundLocationTaskEvent,
   createLocationStopAuthSnapshot,
   getPersistedTrackingState,
+  isLocationTrackingPermissionPending,
   recordLocationTrackingAppState,
+  resumeLocationTrackingAfterPermissionCheck,
   restoreLocationTrackingForUser,
   startLocationTracking,
   stopExactStoredTrackingAndNotify,
@@ -42,6 +44,8 @@ import { sameTrackingLifecycleState } from "@/lib/location-tracking-lifecycle";
 
 export interface LocationTrackingContextValue {
   isTracking: boolean;
+  /** A non-terminal existing session is paused while Android location approval is missing. */
+  isPermissionPending: boolean;
   trackingToken: string | null;
   trackingRequestId: number | null;
   trackingUrl: string | null;
@@ -53,6 +57,7 @@ export interface LocationTrackingContextValue {
   closeStatusOverlay: () => Promise<void>;
   permStatus: { foregroundLocation: string; backgroundLocation: string; notification: string };
   startTracking: (params: StartTrackingParams) => Promise<StartTrackingResult>;
+  resumeTrackingAfterPermissionCheck: () => Promise<"resumed" | "permission_required" | "unavailable">;
   stopTracking: (reason: "도착완료" | "업무취소") => Promise<void>;
   checkPermissions: () => Promise<void>;
 }
@@ -72,6 +77,7 @@ export interface StartTrackingResult {
 
 const LocationTrackingContext = createContext<LocationTrackingContextValue>({
   isTracking: false,
+  isPermissionPending: false,
   trackingToken: null,
   trackingRequestId: null,
   trackingUrl: null,
@@ -82,6 +88,7 @@ const LocationTrackingContext = createContext<LocationTrackingContextValue>({
   closeStatusOverlay: async () => {},
   permStatus: { foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." },
   startTracking: async () => ({ ok: false }),
+  resumeTrackingAfterPermissionCheck: async () => "unavailable",
   stopTracking: async () => {},
   checkPermissions: async () => {},
 });
@@ -98,6 +105,7 @@ function stateToView(state: PersistedTrackingState | null) {
 export function LocationTrackingProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAppAuth();
   const [isTracking, setIsTracking] = useState(false);
+  const [isPermissionPending, setIsPermissionPending] = useState(false);
   const [trackingToken, setTrackingToken] = useState<string | null>(null);
   const [trackingRequestId, setTrackingRequestId] = useState<number | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
@@ -110,6 +118,26 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const overlayRequestGeneration = useRef(0);
   const unboundReadGeneration = useRef(0);
   const unboundScope = useRef("");
+  const permissionPendingReadGeneration = useRef(0);
+
+  const refreshPermissionPending = useCallback((state: PersistedTrackingState | null) => {
+    const generation = ++permissionPendingReadGeneration.current;
+    if (!state) {
+      setIsPermissionPending(false);
+      return;
+    }
+    void isLocationTrackingPermissionPending(state).then((pending) => {
+      if (
+        generation === permissionPendingReadGeneration.current
+        && sameTrackingLifecycleState(trackingStateRef.current, state)
+      ) setIsPermissionPending(pending);
+    }).catch(() => {
+      if (
+        generation === permissionPendingReadGeneration.current
+        && sameTrackingLifecycleState(trackingStateRef.current, state)
+      ) setIsPermissionPending(true);
+    });
+  }, []);
 
   const applyState = useCallback((state: PersistedTrackingState | null) => {
     if (!sameTrackingLifecycleState(trackingStateRef.current, state)) {
@@ -121,7 +149,8 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     setTrackingToken(view.trackingToken);
     setTrackingRequestId(view.trackingRequestId);
     setTrackingUrl(view.trackingUrl);
-  }, []);
+    refreshPermissionPending(state);
+  }, [refreshPermissionPending]);
 
   const checkPermissions = useCallback(async () => {
     if (Platform.OS === "web") {
@@ -314,9 +343,22 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     }
   }, [applyState, checkPermissions]);
 
+  const resumeTrackingAfterPermissionCheck = useCallback(async (): Promise<"resumed" | "permission_required" | "unavailable"> => {
+    if (!user?.userId || user.appRole !== "technician") return "unavailable";
+    const result = await resumeLocationTrackingAfterPermissionCheck(user.userId);
+    applyState(result.state);
+    await checkPermissions();
+    return result.status === "resumed"
+      ? "resumed"
+      : result.status === "permission_required"
+        ? "permission_required"
+        : "unavailable";
+  }, [applyState, checkPermissions, user?.appRole, user?.userId]);
+
   return (
     <LocationTrackingContext.Provider value={{
       isTracking,
+      isPermissionPending,
       trackingToken,
       trackingRequestId,
       trackingUrl,
@@ -327,6 +369,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       closeStatusOverlay,
       permStatus,
       startTracking,
+      resumeTrackingAfterPermissionCheck,
       stopTracking,
       checkPermissions,
     }}>

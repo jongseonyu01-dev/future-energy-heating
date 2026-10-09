@@ -46,6 +46,11 @@ async function main() {
         const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
         const unbound = key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:") ? JSON.parse(value) : null;
         const acceptedOutcome = key.startsWith("location_tracking_runtime_diagnostics_accepted_outcome_v1:") ? JSON.parse(value) : null;
+        if (key.startsWith("location_tracking_permission_pending_v1:") && testGlobals.__delayPermissionPendingWrite) {
+          testGlobals.__permissionPendingWriteStarted?.resolve();
+          await testGlobals.__permissionPendingWriteGate;
+          testGlobals.__permissionPendingWriteCompleted?.resolve();
+        }
         if (record?.requestId === testGlobals.__delayInitialDiagnosticRequestId) {
           testGlobals.__initialDiagnosticWriteStarted?.resolve();
           await testGlobals.__initialDiagnosticWriteGate;
@@ -427,6 +432,70 @@ async function main() {
       assert.equal(requests, requestsBeforeDeniedUpload, "denied permission must block an adopted headless callback before HTTP");
       assert.equal(nativeLocation.nativeStopCount(), nativeStopsBeforeDeniedUpload + 1, "denied permission must stop the exact adopted native share");
       Object.assign(globalThis as Record<string, unknown>, { __backgroundPermission: { status: "granted" } });
+
+      // Android approval alone must not let a cold TaskManager callback revive
+      // the local pending pointer. Only the foreground resume control may start
+      // this exact session; afterwards the stale pending marker must no longer
+      // block its next valid callback.
+      const requestsBeforeApprovalOnlyCallback = requests;
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      assert.equal(requests, requestsBeforeApprovalOnlyCallback, "permission approval without explicit foreground resume must issue zero HTTP requests");
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => {
+          requests += 1;
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: true }) };
+        },
+      });
+      const resumedDeniedUpload = await tracking.resumeLocationTrackingAfterPermissionCheck(deniedUploadState.technicianUserId);
+      assert.equal(resumedDeniedUpload.status, "resumed", "explicit foreground resume must retain the original local request pointer");
+      assert.equal(resumedDeniedUpload.state?.requestId, deniedUploadState.requestId, "resume must not create a replacement server/location session");
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      assert.equal(requests, requestsBeforeApprovalOnlyCallback + 1, "exact resumed session must allow its next fresh TaskManager callback once");
+
+      // The permission-pending marker is stored separately from the native
+      // suspend. A delayed old pending write must not recreate a cold-runtime
+      // block after the foreground owner already wrote its resume acknowledgement.
+      const markerRaceState = { ...state, token: "z".repeat(43), requestId: 50603, startedAt: 506_030 };
+      const markerWriteStarted = Promise.withResolvers<void>();
+      const releaseMarkerWrite = Promise.withResolvers<void>();
+      const markerWriteCompleted = Promise.withResolvers<void>();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __backgroundPermission: { status: "denied" },
+        __delayPermissionPendingWrite: true,
+        __permissionPendingWriteStarted: markerWriteStarted,
+        __permissionPendingWriteGate: releaseMarkerWrite.promise,
+        __permissionPendingWriteCompleted: markerWriteCompleted,
+      });
+      await tracking.startLocationTracking(markerRaceState);
+      await taskManager.invokeTask({ error: { code: "E_LOCATION_UNAUTHORIZED", message: "synthetic delayed permission marker" } });
+      await markerWriteStarted.promise;
+      Object.assign(globalThis as Record<string, unknown>, {
+        __backgroundPermission: { status: "granted" },
+        fetch: async () => {
+          requests += 1;
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: true }) };
+        },
+      });
+      const resumedMarkerRace = await tracking.resumeLocationTrackingAfterPermissionCheck(markerRaceState.technicianUserId);
+      assert.equal(resumedMarkerRace.status, "resumed", "foreground approval must resume marker-race session without a server departure request");
+      releaseMarkerWrite.resolve();
+      await markerWriteCompleted.promise;
+      assert.equal(await tracking.isLocationTrackingPermissionPending(markerRaceState), false, "late pending write must not re-block an already resumed exact session");
+      const requestsBeforeMarkerRaceCallback = requests;
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      assert.equal(requests, requestsBeforeMarkerRaceCallback + 1, "resumed marker-race session must allow the next valid callback HTTP");
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayPermissionPendingWrite: false,
+        __permissionPendingWriteStarted: undefined,
+        __permissionPendingWriteGate: undefined,
+        __permissionPendingWriteCompleted: undefined,
+      });
 
       const permissionLateA = { ...state, token: "l".repeat(43), requestId: 50601, startedAt: 506_010 };
       const permissionFreshB = { ...state, token: "m".repeat(43), requestId: 50602, startedAt: 506_020 };

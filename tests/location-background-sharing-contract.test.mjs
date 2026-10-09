@@ -80,7 +80,11 @@ assert.match(context, /getBackgroundPermissionsAsync/, "background location perm
 assert.match(context, /foregroundLocation/, "foreground location permission must have its own UI field");
 assert.match(context, /notification/, "notification permission must have its own UI field");
 assert.match(context, /항상 허용 필요/, "missing background location permission must remain visible to the technician");
+assert.match(context, /isPermissionPending/, "a permission-paused existing session must remain visible in the provider");
+assert.match(context, /resumeTrackingAfterPermissionCheck/, "provider must expose explicit local resume without a new departure flow");
 assert.match(schedule, /isTracking && trackingRequestId !== work\.id/, "departure must block different active customer");
+assert.match(schedule, /권한 확인·공유 재개/, "permission-pending work must expose a dedicated resume control");
+assert.match(schedule, /도착·업무 취소를 계속 사용할 수 있습니다/, "permission-pending work must preserve terminal controls");
 assert.match(schedule, /technicianUserId: userId/, "tracking persistence binds the authenticated technician");
 assert.match(schedule, /notifySessionStop\(result\.token, "업무취소", userId, createLocationStopAuthSnapshot\(user\)\)/, "failed native start must end only the active technician session");
 assert.match(schedule, /lastStoredAt/, "technician UI must show the last actual location save rather than HTTP-only success");

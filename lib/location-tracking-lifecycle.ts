@@ -191,15 +191,18 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const suspendGeneration = this.generation + 1;
     this.generation = suspendGeneration;
     this.intent = null;
-    this.adapter.onStateChanged(null);
     const stillSuspendingOwner = () => suspendGeneration === this.generation && this.intent === null;
     // A stalled local marker must never delay the native stop or permit another
     // callback to upload. Its guard prevents late A persistence from affecting B.
     void this.adapter.markPermissionPending?.(state, stillSuspendingOwner).catch(() => undefined);
+    // Preserve the exact non-terminal work session for foreground arrival,
+    // cancel, and explicit approval. `intent` is already null, so this view
+    // publication cannot revive native collection or upload authority.
+    this.adapter.onStateChanged(state);
     return this.enqueue(async () => {
       await this.adapter.stopNativeCollection(stillSuspendingOwner);
       await this.adapter.clearControlNotification(state, stillSuspendingOwner);
-      if (stillSuspendingOwner()) this.adapter.onStateChanged(null);
+      if (stillSuspendingOwner()) this.adapter.onStateChanged(state);
       return state;
     });
   }
@@ -282,6 +285,11 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
           return false;
         }
 
+        // Clear a prior reversible pause before native collection starts. The
+        // adapter drops its in-memory marker synchronously; its durable removal
+        // stays best effort and never extends the FGS start window.
+        void this.adapter.clearPermissionPending?.(state, () => this.owns(state, startGeneration)).catch(() => undefined);
+
         // Expo Location starts Android's location FGS only while the app is in
         // the foreground. The local control notification is useful status UI,
         // but it must not widen the user-visible departure → FGS start window.
@@ -302,9 +310,6 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
         }
 
         this.adapter.onStateChanged(state);
-        // Do not let cleanup delay the successful native collection start. A
-        // stale marker is informational only; it cannot re-block this owner.
-        void this.adapter.clearPermissionPending?.(state, () => this.owns(state, startGeneration)).catch(() => undefined);
         return true;
       } catch (error) {
         const stillOwnsRuntime = this.owns(state, startGeneration);
@@ -398,8 +403,11 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const state = await this.adapter.read();
     if (!isActive() || !state || readGeneration !== this.generation) return null;
     if (await this.isInactive(state, () => isActive() && readGeneration === this.generation)) return null;
-    if (await this.isPermissionPending(state, () => isActive() && readGeneration === this.generation)) return null;
+    // A foreground-approved runtime clears its in-memory marker before FGS
+    // start while the durable removal may still settle. Its exact current intent
+    // is safe; only a cold runtime with no owner remains blocked by the marker.
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
+    if (await this.isPermissionPending(state, () => isActive() && readGeneration === this.generation)) return null;
     if (!isActive()) return null;
     this.generation += 1;
     this.intent = state;
