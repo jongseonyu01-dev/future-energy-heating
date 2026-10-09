@@ -34,7 +34,14 @@ async function main() {
       const values = new Map<string, string>();
       const testGlobals = globalThis as Record<string, any>;
       export default {
-        getItem: async (key: string) => values.get(key) ?? null,
+        getItem: async (key: string) => {
+          if (key === "location_tracking_state_v2" && testGlobals.__delayOwnerRead) {
+            testGlobals.__delayOwnerRead = false;
+            testGlobals.__ownerReadStarted?.resolve();
+            await testGlobals.__ownerReadGate;
+          }
+          return values.get(key) ?? null;
+        },
       setItem: async (key: string, value: string) => {
         const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
         const unbound = key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:") ? JSON.parse(value) : null;
@@ -155,7 +162,7 @@ async function main() {
       // exercises the actual callback boundary; shrinking it would turn Node
       // loader scheduling into a false deadline result.
       .replace("const TASK_ENTRY_EVENT_BUDGET_MS = 750;", "const TASK_ENTRY_EVENT_BUDGET_MS = 8;")
-      + "\nexport const __publishCallbackDeadlineForTest = publishCallbackDeadline;\n";
+      + "\nexport const __publishCallbackDeadlineForTest = publishCallbackDeadline;\nexport const __beginDebugCallbackForTest = (state: PersistedTrackingState) => beginDebugCallback(state, trackingLifecycle.captureGeneration());\n";
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     let requests = 0;
@@ -174,7 +181,10 @@ async function main() {
       assert.equal(tracking.registerLocationTrackingTask(), true, "custom entry must register the TaskManager handler before callback delivery");
       const taskManager = await import(pathToFileURL(join(stubs, "task-manager.ts")).href);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
-        diagnosticRecords: () => { requestId: number; attemptCount: number; lastErrorCode?: string | null }[];
+        diagnosticRecords: () => {
+          requestId: number; attemptCount: number; lastErrorCode?: string | null;
+          lastCallbackAt?: number | null; lastMeasuredAt?: number | null; lastStoredAt?: number | null;
+        }[];
         acceptedOutcomes: () => { requestId: number }[];
         unboundTaskEvents: () => { observedAt: number; code: string }[];
       };
@@ -262,15 +272,35 @@ async function main() {
       // An abort/timeout is also a started fetch. Conversely, a missing
       // credential is rejected before fetch and therefore remains at zero.
       const timeoutState = { ...state, token: "q".repeat(43), requestId: 505, startedAt: 505_000 };
+      const ownerReadStarted = Promise.withResolvers<void>();
+      const ownerReadGate = Promise.withResolvers<void>();
+      const timeoutUpdates: { serverStatus?: string; serverError?: string | null; lastCallbackDeadlineAt?: number | null }[] = [];
+      const unsubscribeTimeout = tracking.subscribeDebug((next: typeof timeoutUpdates[number]) => timeoutUpdates.push(next));
       Object.assign(globalThis as Record<string, unknown>, {
+        __delayOwnerRead: true,
+        __ownerReadStarted: ownerReadStarted,
+        __ownerReadGate: ownerReadGate.promise,
         fetch: async () => new Promise<never>(() => {}),
       });
       await tracking.startLocationTracking(timeoutState);
-      await taskManager.invokeTask({
+      const timedOutCallback = taskManager.invokeTask({
         data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
+      await ownerReadStarted.promise;
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 2));
+      ownerReadGate.resolve();
+      await timedOutCallback;
       await waitForDiagnostics();
       assert.equal(maxAttempts(timeoutState.requestId), 1, "timed-out fetch must retain one started attempt");
+      assert.equal(timeoutUpdates.at(-1)?.serverStatus, "error", "the current callback deadline must not be hidden merely because its own attempt began after callback entry");
+      assert.equal(timeoutUpdates.at(-1)?.serverError, "위치 전송 시간 제한으로 저장 여부를 확인하지 못했습니다.");
+      assert.ok(timeoutUpdates.at(-1)?.lastCallbackDeadlineAt, "the current callback deadline must retain its observed timestamp");
+      unsubscribeTimeout();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayOwnerRead: false,
+        __ownerReadStarted: null,
+        __ownerReadGate: null,
+      });
 
       const noCredentialState = { ...state, token: "n".repeat(43), requestId: 506, startedAt: 506_000 };
       Object.assign(globalThis as Record<string, unknown>, { __tokenGate: Promise.resolve(null) });
@@ -375,6 +405,28 @@ async function main() {
         __acceptedDiagnosticWriteGate: null,
       });
 
+      // A valid callback must persist callback/measurement evidence after fetch
+      // begins, even if this scope had no prior diagnostic summary. This remains
+      // detached from the HTTP critical path.
+      const normalPersistenceState = { ...state, token: "u".repeat(43), requestId: 50621, startedAt: 506_210 };
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) }),
+      });
+      await tracking.startLocationTracking(normalPersistenceState);
+      const normalMeasuredAt = Date.now();
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: normalMeasuredAt, coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const latest = storage.diagnosticRecords().filter((record) => record.requestId === normalPersistenceState.requestId).at(-1);
+        if (latest?.lastCallbackAt && latest.lastMeasuredAt && latest.lastStoredAt) break;
+        await waitForDiagnostics();
+      }
+      const normalPersisted = storage.diagnosticRecords().filter((record) => record.requestId === normalPersistenceState.requestId).at(-1);
+      assert.ok(normalPersisted?.lastCallbackAt, "normal callback must persist its entry timestamp after fetch starts");
+      assert.equal(normalPersisted?.lastMeasuredAt, normalMeasuredAt, "normal callback must persist its measurement timestamp without coordinates");
+      assert.ok(normalPersisted?.lastStoredAt, "accepted callback must retain server save evidence");
+
       // A first-session diagnostic setItem can stall after native collection
       // has started. It must not prevent a later valid TaskManager callback
       // from issuing HTTP while the UI start promise is still pending.
@@ -465,7 +517,9 @@ async function main() {
       assert.equal(displayUpdates.at(-1)?.lastStoredAt, firstStoredAt, "pending fetch must retain the prior stored timestamp as history");
       responseGates[1]!.resolve({ ok: true, status: 200, json: async () => ({ success: true, accepted: false }) });
       await secondDisplayCallback;
-      await waitForDiagnostics();
+      for (let attempt = 0; attempt < 50 && displayUpdates.at(-1)?.serverStatus !== "ignored"; attempt += 1) {
+        await waitForDiagnostics();
+      }
       assert.equal(displayUpdates.at(-1)?.serverStatus, "ignored", "ignored response must publish its own terminal display state");
       unsubscribeDisplay();
 
@@ -532,6 +586,27 @@ async function main() {
       const sameSessionRecords = storage.diagnosticRecords().filter((record) => record.requestId === sameSessionState.requestId);
       assert.equal(sameSessionRecords.some((record) => record.lastErrorCode === "CALLBACK_DEADLINE_EXCEEDED"), false, "late A deadline must not persist over B accepted evidence");
       unsubscribeSameSession();
+
+      // Timestamp order is not ownership: A callback's attempt can start after
+      // its entry. A later B callback owns the view, so A's late deadline must
+      // not overwrite B even within the same exact session.
+      const callbackOwnerState = { ...state, token: "v".repeat(43), requestId: 511, startedAt: 511_000 };
+      const ownerUpdates: { serverStatus?: string; serverError?: string | null }[] = [];
+      const unsubscribeOwner = tracking.subscribeDebug((next: typeof ownerUpdates[number]) => ownerUpdates.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) }),
+      });
+      await tracking.startLocationTracking(callbackOwnerState);
+      const staleOwner = tracking.__beginDebugCallbackForTest(callbackOwnerState);
+      assert.ok(staleOwner, "test setup must create A callback ownership before B enters");
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      tracking.__publishCallbackDeadlineForTest(callbackOwnerState, Date.now() - 5_000, staleOwner);
+      await waitForDiagnostics();
+      assert.equal(ownerUpdates.at(-1)?.serverStatus, "stored", "late A deadline must not overwrite B callback's verified accepted state");
+      assert.equal(ownerUpdates.at(-1)?.serverError, null);
+      unsubscribeOwner();
     } finally {
       Object.assign(globalThis as Record<string, unknown>, { fetch: originalFetch });
     }

@@ -73,9 +73,19 @@
 
 1. **same-session 늦은 deadline:** callback A의 늦은 deadline은 현재 session만 같아도 callback B의 newer callback/attempt/accepted 시각이 있으면 화면·journal을 error로 바꾸지 않는다. TaskManager B accepted 뒤 test-only delayed A deadline delivery를 실행해 stored/null error와 persisted deadline error 부재를 확인했다.
 2. **복귀 accepted와 과거 오류:** immutable accepted outcome 병합은 같은 scope의 더 이전 `NETWORK_TIMEOUT`만 해소한다. 더 새 callback의 error/terminal은 과거 accepted가 지우지 않는다. same-callback deadline은 verified accepted 뒤의 local false deadline인 경우에만 별도로 해소한다.
-3. **정확한 accepted count retention:** summary에는 `acceptedOutcomeThrough` checkpoint를 기록한다. 아직 checkpoint되지 않은 immutable outcome은 24개 retention으로 제거하지 않는다. 새 reader에서 30개 outcome을 정확히 한 번 합산하고, summary write 후 checkpoint된 30개만 정리하는 회귀를 실행했다.
+3. **정확한 accepted count retention:** summary에는 immutable `acceptedOutcomeIds`를 기록한다. timestamp/checkpoint 순서는 지연 `setItem`이 실제로 합산됐다는 증거가 아니므로, exact event ID가 durable summary에 있을 때만 해당 event key를 정리한다. 새 reader에서 30개 outcome을 정확히 한 번 합산하고, summary write 후 exact ID가 반영된 event만 정리하는 회귀를 실행했다.
 4. **초기 diagnostics I/O:** callback entry/adoption 이전에는 session diagnostics `ensure/update`를 await하지 않는다. 시작의 첫 diagnostics `setItem`을 hold한 상태에서도 FGS start 뒤 valid TaskManager callback의 fetch가 시작되는 통합 회귀를 실행했다. owner/credential/measurement/terminal fence는 그대로 필수 경계다.
 5. **검증 결과:** `npx vitest run tests/location-runtime-diagnostics.test.ts tests/location-callback-isolation.test.ts --reporter=dot`은 2 files/22 tests PASS, TaskManager integration은 final marker PASS, lifecycle/headless/public-stop/context/overlay/auth 계약도 별도 PASS했다. edited-module ESLint는 errors 0(기존 `tech-schedule.tsx` unused warning 2개), `git diff --check` PASS, full TypeScript는 e29 기준과 각 83 errors/normalized diff 0이다.
+
+## 2026-10-09 20:19 Codex runtime2019 4건 후속 보완
+
+> **확정 범위:** 아래 네 항목은 source-level synthetic storage/clock/HTTP 재현의 diagnostics 결함과 후보 수정이다. 실제 단말의 3~4분 accepted 공백 원인으로 확정하지 않으며, 운영 HTTP·고객/기사 위치·출발/도착·DB에는 접근하지 않았다.
+
+1. **현재 callback deadline의 소유권:** 같은 callback에서 request start는 당연히 callback entry보다 늦다. 이를 후속 callback으로 오인하던 timestamp 비교를 제거하고, session generation + callback lease로 A/B를 구분했다. 따라서 현재 callback의 10초 만료는 `CALLBACK_DEADLINE`으로 종결되며, 실제 후속 B callback만 A deadline의 화면·journal write를 막는다. owner read를 2ms 지연한 뒤 pending fetch가 10초를 넘는 actual TaskManager 회귀와 A owner → B accepted → A deadline delivery 회귀를 추가했다.
+2. **늦은 accepted outcome:** B가 먼저 summary에 반영된 뒤 A outcome `setItem`이 늦게 끝나도 observedAt/checkpoint 시각만으로 A를 skip/delete하지 않는다. immutable event ID가 summary에 실제 반영된 경우에만 compaction한다. 이 event가 다음 summary write에서 정확히 한 번 합산되어 storedCount 2로 복원되는 gate-based 회귀를 추가했다.
+3. **두 Store summary/compaction 교차:** 동일 storage/scope의 Store instances는 shared scope lock으로 summary mutation을 직렬화한다. deadline이 기존 immutable write를 detach하면 lock을 해제해 다음 callback을 막지 않고, late A record는 immutable journal merge가 B의 `storedCount`/accepted·stored 시각 floor를 보존한다. summary setItem gate 중 두 번째 Store update가 대기하고, compaction 뒤에도 `1`/non-null을 보존하는 회귀를 추가했다.
+4. **정상 callback·measurement 복원:** HTTP가 실제 시작된 뒤에만 비차단 summary update로 `lastCallbackAt`, `lastMeasuredAt`, native registration/check, attempt를 남긴다. pre-request diagnostic await를 되살리지 않았다. summary가 전혀 없는 scope에서도 immutable accepted outcome + 첫 update가 callback/measurement/attempt/stored evidence를 생성하는 store 회귀와 actual TaskManager 통합 회귀를 추가했다.
+5. **실행 결과:** `node --import tsx tests/location-taskmanager-terminal.integration.test.ts` → `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`; `npx vitest run tests/location-callback-isolation.test.ts tests/location-runtime-diagnostics.test.ts --reporter=dot` → 2 files/25 tests PASS. 이후 기존 위치·인증 Vitest 6 files/46 tests 및 standalone terminal/headless/owner/auth 12개 final markers도 PASS했다. 이는 Android 실기기/Production accepted 성공이 아닌 합성 실행 결과다.
 
 ## 아직 미확정인 것
 

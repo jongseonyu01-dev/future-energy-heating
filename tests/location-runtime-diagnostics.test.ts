@@ -241,6 +241,124 @@ describe("세션별 위치 런타임 진단", () => {
     expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(0);
   });
 
+  it("checkpoint 뒤 늦게 도착한 accepted outcome도 정확히 한 번 복원하고 그 뒤에만 정리한다", async () => {
+    const values = new Map<string, string>();
+    const lateStarted = Promise.withResolvers<void>();
+    const lateGate = Promise.withResolvers<void>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        const parsed = JSON.parse(value) as { acceptedAt?: number };
+        if (parsed.acceptedAt === 300_100) {
+          lateStarted.resolve();
+          await lateGate.promise;
+        }
+        values.set(key, value);
+      },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+      removeItem: async (key) => { values.delete(key); },
+    };
+    const writer = new LocationRuntimeDiagnosticsStore(storage);
+    await writer.begin(stateA, 300_000);
+    const delayedA = writer.recordAcceptedOutcome(stateA, {
+      callbackAt: 300_100, attemptStartedAt: 300_100, responseHeadersAt: 300_100,
+      responseBodyAt: 300_100, acceptedAt: 300_100, storedAt: 300_100,
+    }, 300_100);
+    await lateStarted.promise;
+    await writer.recordAcceptedOutcome(stateA, {
+      callbackAt: 300_200, attemptStartedAt: 300_200, responseHeadersAt: 300_200,
+      responseBodyAt: 300_200, acceptedAt: 300_200, storedAt: 300_200,
+    }, 300_200);
+    await writer.patch(stateA, { nativeRegistration: "registered" });
+    lateGate.resolve();
+    await delayedA;
+
+    const beforeLateCheckpoint = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(beforeLateCheckpoint).toMatchObject({ storedCount: 2, lastStoredAt: 300_200 });
+    expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(1);
+
+    await writer.patch(stateA, { lastNativeCheckAt: 300_300 });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const restored = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(restored).toMatchObject({ storedCount: 2, lastStoredAt: 300_200 });
+    expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(0);
+  });
+
+  it("같은 storage의 두 Store가 summary·compaction과 교차해도 accepted 증거를 0/null로 되돌리지 않는다", async () => {
+    const values = new Map<string, string>();
+    const firstSummaryStarted = Promise.withResolvers<void>();
+    const firstSummaryGate = Promise.withResolvers<void>();
+    let holdFirstSummary = true;
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        const parsed = JSON.parse(value) as { storedCount?: number };
+        if (holdFirstSummary && key.includes("location_tracking_runtime_diagnostics_v2:") && parsed.storedCount === 1) {
+          holdFirstSummary = false;
+          firstSummaryStarted.resolve();
+          await firstSummaryGate.promise;
+        }
+        values.set(key, value);
+      },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+      removeItem: async (key) => { values.delete(key); },
+    };
+    const first = new LocationRuntimeDiagnosticsStore(storage);
+    const second = new LocationRuntimeDiagnosticsStore(storage);
+    await first.begin(stateA, 400_000);
+    await first.recordAcceptedOutcome(stateA, {
+      callbackAt: 400_100, attemptStartedAt: 400_100, responseHeadersAt: 400_100,
+      responseBodyAt: 400_100, acceptedAt: 400_100, storedAt: 400_100,
+    }, 400_100);
+    const checkpointing = first.patch(stateA, { nativeRegistration: "registered" });
+    await firstSummaryStarted.promise;
+    let secondSettled = false;
+    const staleSecond = second.patch(stateA, { lastAppState: "background", lastAppStateAt: 400_200 })
+      .then(() => { secondSettled = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(secondSettled).toBe(false);
+    firstSummaryGate.resolve();
+    await Promise.all([checkpointing, staleSecond]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(0);
+
+    // The second Store proceeds only after the first checkpoint/compaction and
+    // must retain the durable accepted floor instead of writing 0/null.
+    const restored = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(restored).toMatchObject({ storedCount: 1, lastAcceptedAt: 400_100, lastStoredAt: 400_100 });
+  });
+
+  it("summary가 없는 정상 callback도 fetch 뒤 비차단 update로 callback·measurement를 복원한다", async () => {
+    const values = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await diagnostics.recordAcceptedOutcome(stateA, {
+      callbackAt: 500_100, attemptStartedAt: 500_110, responseHeadersAt: 500_120,
+      responseBodyAt: 500_130, acceptedAt: 500_130, storedAt: 500_130,
+    }, 500_130);
+    await diagnostics.update(stateA, (current) => ({
+      ...current,
+      lastCallbackAt: 500_100,
+      lastMeasuredAt: 500_090,
+      lastUploadStartedAt: 500_110,
+      attemptCount: current.attemptCount + 1,
+    }));
+    await expect(new LocationRuntimeDiagnosticsStore(storage).read(stateA)).resolves.toMatchObject({
+      lastCallbackAt: 500_100,
+      lastMeasuredAt: 500_090,
+      attemptCount: 1,
+      storedCount: 1,
+      lastStoredAt: 500_130,
+    });
+  });
+
   it("복귀 뒤에도 최근 오류를 보이고 오래된 uploading은 유지하지 않는다", async () => {
     const storage = memoryStorage();
     const diagnostics = new LocationRuntimeDiagnosticsStore(storage);

@@ -166,11 +166,18 @@ type DebugUploadOwner = {
   generation: number;
   attemptId: number;
 };
+type DebugCallbackOwner = {
+  key: string;
+  generation: number;
+  callbackId: number;
+};
 // A persisted diagnostic describes an earlier event. It must never turn an
 // already-started current request back into "stored", and a late A callback
 // must never publish over a replacement B session's debug view.
 let activeDebugUploadOwner: DebugUploadOwner | null = null;
 let nextDebugUploadAttemptId = 0;
+let activeDebugCallbackOwner: DebugCallbackOwner | null = null;
+let nextDebugCallbackId = 0;
 // The durable marker protects a fresh JS runtime; this in-memory fence closes
 // the window before a delayed AsyncStorage.setItem settles in the current
 // TaskManager runtime.
@@ -183,6 +190,21 @@ function stateKey(state: PersistedTrackingState): string {
 function isCurrentDebugOwner(state: PersistedTrackingState, generation: number): boolean {
   return trackingLifecycle.isGenerationCurrent(generation)
     && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state);
+}
+
+function beginDebugCallback(state: PersistedTrackingState, generation: number): DebugCallbackOwner | null {
+  if (!isCurrentDebugOwner(state, generation)) return null;
+  const owner = { key: stateKey(state), generation, callbackId: ++nextDebugCallbackId };
+  activeDebugCallbackOwner = owner;
+  return owner;
+}
+
+function ownsCurrentDebugCallback(state: PersistedTrackingState, owner: DebugCallbackOwner | undefined): boolean {
+  return Boolean(owner
+    && activeDebugCallbackOwner?.key === owner.key
+    && activeDebugCallbackOwner.generation === owner.generation
+    && activeDebugCallbackOwner.callbackId === owner.callbackId
+    && isCurrentDebugOwner(state, owner.generation));
 }
 
 function beginDebugUpload(state: PersistedTrackingState, generation: number): number | null {
@@ -208,9 +230,16 @@ function finishDebugUpload(state: PersistedTrackingState, generation: number, at
   return true;
 }
 
-function clearDebugUploadForState(state: PersistedTrackingState): void {
+function clearActiveDebugUploadForState(state: PersistedTrackingState): void {
   if (activeDebugUploadOwner?.key === stateKey(state)) {
     activeDebugUploadOwner = null;
+  }
+}
+
+function clearDebugUploadForState(state: PersistedTrackingState): void {
+  clearActiveDebugUploadForState(state);
+  if (activeDebugCallbackOwner?.key === stateKey(state)) {
+    activeDebugCallbackOwner = null;
   }
 }
 
@@ -610,6 +639,7 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
   const overlayOwner = activateLocationStatusOverlayOwner(state);
   void synchronizeLocationStatusOverlayOwner(overlayOwner).catch(() => undefined);
   activeDebugUploadOwner = null;
+  activeDebugCallbackOwner = null;
   lastUploadMeasurement = { key: stateKey(state), measuredAt: 0 };
   await runtimeDiagnostics.begin(state);
   const diagnostics = await runtimeDiagnostics.patch(state, {
@@ -697,17 +727,28 @@ export async function getCurrentLocationFull(): Promise<{
   }
 }
 
-function publishCallbackDeadline(state: PersistedTrackingState, callbackAt?: number): void {
+function publishCallbackDeadline(
+  state: PersistedTrackingState,
+  callbackAt?: number,
+  callbackOwner?: DebugCallbackOwner,
+): void {
   if (!sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)) return;
-  // A and B may be callbacks for the same active session. If B entered after A
-  // and already owns a newer visible stage/result, A's local deadline is stale
-  // evidence and must not turn B's accepted/uploading state into an error.
-  if (callbackAt && (
+  // A and B may be callbacks for the same active session. Their timestamps are
+  // not ownership: a current callback necessarily starts its HTTP attempt after
+  // it entered. Only a newer callback lease can make this deadline stale. The
+  // timestamp fallback remains for legacy direct callers that have no lease.
+  if (callbackOwner) {
+    if (!ownsCurrentDebugCallback(state, callbackOwner)) return;
+  } else if (callbackAt && (
     (debugState.lastCallbackAt !== null && debugState.lastCallbackAt > callbackAt)
     || (debugState.lastAttemptAt !== null && debugState.lastAttemptAt > callbackAt)
     || (debugState.lastAcceptedAt !== null && debugState.lastAcceptedAt >= callbackAt)
   )) return;
-  clearDebugUploadForState(state);
+  const canPublishDeadline = () => sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)
+    && (!callbackOwner || ownsCurrentDebugCallback(state, callbackOwner));
+  // Keep this callback lease until its bounded error evidence is scheduled. A
+  // stop/replacement still clears both leases through clearDebugUploadForState.
+  clearActiveDebugUploadForState(state);
   const now = Date.now();
   emitDebug({
     serverStatus: "error",
@@ -724,8 +765,8 @@ function publishCallbackDeadline(state: PersistedTrackingState, callbackAt?: num
     lastCallbackStage: "CALLBACK_DEADLINE",
     lastCallbackStageAt: now,
     lastCallbackStageElapsedMs: callbackAt ? Math.max(0, now - callbackAt) : null,
-  }, () => sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state))
-    .then(emitPersistedDiagnostics)
+  }, canPublishDeadline)
+    .then((diagnostics) => emitPersistedDiagnostics(diagnostics, canPublishDeadline))
     .catch(() => undefined);
 }
 
@@ -843,10 +884,14 @@ export async function sendLocationToServer(
   capturedBearerToken?: string,
   taskFence?: TaskCallbackDeadlineFence,
   callbackAt = Date.now(),
+  suppliedCallbackOwner?: DebugCallbackOwner,
 ): Promise<void> {
   const isActive = () => taskStillActive(taskFence);
-  const callbackGeneration = trackingLifecycle.captureGeneration();
-  const canPublishCurrentCallback = () => isActive() && isCurrentDebugOwner(state, callbackGeneration);
+  const callbackGeneration = suppliedCallbackOwner?.generation ?? trackingLifecycle.captureGeneration();
+  const callbackOwner = suppliedCallbackOwner ?? beginDebugCallback(state, callbackGeneration);
+  const canPublishCurrentCallback = () => isActive()
+    && isCurrentDebugOwner(state, callbackGeneration)
+    && ownsCurrentDebugCallback(state, callbackOwner ?? undefined);
   const now = Date.now();
   const key = stateKey(state);
   if (!isActive()) return;
@@ -862,7 +907,7 @@ export async function sendLocationToServer(
   });
   const initialOwner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, callbackGeneration, isActive));
   if (initialOwner.kind !== "VALUE") {
-    if (!isActive()) publishCallbackDeadline(state, callbackAt);
+    if (!isActive()) publishCallbackDeadline(state, callbackAt, callbackOwner ?? undefined);
     return;
   }
   if (!initialOwner.value) return;
@@ -904,6 +949,13 @@ export async function sendLocationToServer(
       // exact session so terminal invalidation cannot reopen upload authority.
       void runtimeDiagnostics.update(state, (current) => ({
         ...current,
+        // These are callback facts observed before the started HTTP request.
+        // Persist them only after fetch invocation, never as a pre-request
+        // await, so a missing/slow summary cannot consume the callback budget.
+        lastCallbackAt: Math.max(current.lastCallbackAt ?? 0, callbackAt) || null,
+        lastMeasuredAt: Math.max(current.lastMeasuredAt ?? 0, queuedLocation.measuredAt) || null,
+        nativeRegistration: "registered",
+        lastNativeCheckAt: Math.max(current.lastNativeCheckAt ?? 0, callbackAt) || null,
         lastUploadStartedAt: startedAt,
         attemptCount: current.attemptCount + 1,
       }), authorize).then((attempted) => {
@@ -1144,7 +1196,7 @@ export async function sendLocationToServer(
   });
 
   const queuedResult = await withinTaskDeadline(taskFence, () => queuedUpload);
-  if (queuedResult.kind !== "VALUE" || !isActive()) publishCallbackDeadline(state, callbackAt);
+  if (queuedResult.kind !== "VALUE" || !isActive()) publishCallbackDeadline(state, callbackAt, callbackOwner ?? undefined);
 }
 
 export async function notifySessionStop(
@@ -1390,9 +1442,12 @@ export function registerLocationTrackingTask(): boolean {
         }
         const callbackAt = callbackEnteredAt;
         const callbackGeneration = trackingLifecycle.captureGeneration();
+        const callbackOwner = beginDebugCallback(adopted.state, callbackGeneration);
+        if (!callbackOwner) return;
         const canPublish = () => taskFence.isActive()
           && trackingLifecycle.isGenerationCurrent(callbackGeneration)
-          && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state);
+          && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state)
+          && ownsCurrentDebugCallback(adopted.state, callbackOwner);
         // Initial callback observation is in-memory only. Durable diagnostics
         // begin after the actual fetch is invoked, so a slow AsyncStorage read
         // or write can never consume this callback's HTTP/body budget.
@@ -1429,7 +1484,7 @@ export function registerLocationTrackingTask(): boolean {
           heading: latest.coords.heading ?? null,
           accuracy: latest.coords.accuracy ?? null,
           measuredAt: Number(latest.timestamp),
-        }, adopted.bearerToken, taskFence, callbackAt);
+        }, adopted.bearerToken, taskFence, callbackAt, callbackOwner);
       });
     }
     return true;

@@ -221,7 +221,10 @@ function normalizeAppStateMarker(value: unknown): LocationAppStateMarker | null 
 function normalizeOutcomeIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const ids = value.filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= 80);
-  return [...new Set(ids)].slice(-64);
+  // These identifiers are only retained until their immutable event keys have
+  // been removed after a durable summary write. Truncating this acknowledgement
+  // list before compaction can make a delayed event count twice or disappear.
+  return [...new Set(ids)];
 }
 
 function normalizeOutcomeCheckpoint(value: unknown): string | null {
@@ -313,21 +316,6 @@ function isNewerAcceptedOutcome(left: AcceptedLocationOutcomeEvent, right: Accep
   return left.eventId > right.eventId;
 }
 
-function acceptedOutcomeAtOrBeforeCheckpoint(
-  outcome: AcceptedLocationOutcomeEvent,
-  checkpoint: string | null,
-): boolean {
-  if (!checkpoint) return false;
-  const timestampMatch = /^(\d+)-/.exec(checkpoint);
-  const checkpointObservedAt = timestampMatch ? Number(timestampMatch[1]) : NaN;
-  if (!Number.isFinite(checkpointObservedAt)) return false;
-  const checkpointSequence = operationSequence(checkpoint);
-  const outcomeSequence = operationSequence(outcome.eventId);
-  if (outcome.observedAt !== checkpointObservedAt) return outcome.observedAt < checkpointObservedAt;
-  if (outcomeSequence !== checkpointSequence) return outcomeSequence <= checkpointSequence;
-  return outcome.eventId <= checkpoint;
-}
-
 function isNewer(left: LocationRuntimeDiagnostics, right: LocationRuntimeDiagnostics): boolean {
   if (left.updatedAt !== right.updatedAt) return left.updatedAt > right.updatedAt;
   const leftSequence = operationSequence(left.operationId);
@@ -345,6 +333,13 @@ function isNewer(left: LocationRuntimeDiagnostics, right: LocationRuntimeDiagnos
  * is intentionally stronger than replacing a shared write queue after timeout.
  */
 export class LocationRuntimeDiagnosticsStore {
+  /**
+   * Multiple JS module instances can construct Stores over the same AsyncStorage
+   * object. Summary mutations for one scope need a shared lock across those
+   * instances; otherwise an old reader can append 0/null after another instance
+   * has checkpointed and compacted accepted evidence.
+   */
+  private static readonly scopeWrites = new WeakMap<object, Map<string, Promise<unknown>>>();
   private writes: Promise<unknown> = Promise.resolve();
   private sequence = 0;
 
@@ -356,6 +351,24 @@ export class LocationRuntimeDiagnosticsStore {
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.writes.then(operation, operation);
     this.writes = next.catch(() => undefined);
+    return next;
+  }
+
+  private enqueueScopeWrite<T>(state: TrackingLifecycleState, operation: () => Promise<T>): Promise<T> {
+    const storage = this.storage as object;
+    let locks = LocationRuntimeDiagnosticsStore.scopeWrites.get(storage);
+    if (!locks) {
+      locks = new Map<string, Promise<unknown>>();
+      LocationRuntimeDiagnosticsStore.scopeWrites.set(storage, locks);
+    }
+    const key = this.scopePrefix(state);
+    const previous = locks.get(key) ?? Promise.resolve();
+    const next = previous.then(operation, operation);
+    const settled = next.catch(() => undefined);
+    locks.set(key, settled);
+    void settled.finally(() => {
+      if (locks?.get(key) === settled) locks.delete(key);
+    });
     return next;
   }
 
@@ -394,6 +407,11 @@ export class LocationRuntimeDiagnosticsStore {
    */
   public releaseExpiredWork(): void {
     this.writes = Promise.resolve();
+    // A deadline may detach an already-issued immutable write. Do not let its
+    // shared per-scope lock hold a following callback hostage; late A remains
+    // safe because it appends its own record and the reader merges durable
+    // accepted evidence instead of replacing B's summary.
+    LocationRuntimeDiagnosticsStore.scopeWrites.get(this.storage as object)?.clear();
   }
 
   private async recordsForScope(
@@ -459,16 +477,69 @@ export class LocationRuntimeDiagnosticsStore {
     for (const record of recordsResult.records) {
       if (!newest || isNewer(record, newest)) newest = record;
     }
-    return newest ? { kind: "VALUE", value: newest } : this.legacyRecord(state, guard);
+    return newest
+      ? { kind: "VALUE", value: this.mergeDurableAcceptedSummaries(newest, recordsResult.records) }
+      : this.legacyRecord(state, guard);
+  }
+
+  /**
+   * Two runtime instances can read/write the same immutable summary journal.
+   * The most recently started operation may have read an older summary before a
+   * different instance checkpointed accepted evidence. Preserve that durable
+   * acceptance floor instead of allowing the later stale write to erase it.
+   */
+  private mergeDurableAcceptedSummaries(
+    newest: LocationRuntimeDiagnostics,
+    records: readonly LocationRuntimeDiagnostics[],
+  ): LocationRuntimeDiagnostics {
+    const normalizedNewest = normalizeDiagnostics(newest);
+    const acknowledged = new Set(normalizedNewest.acceptedOutcomeIds);
+    let storedCount = normalizedNewest.storedCount;
+    let attemptCount = normalizedNewest.attemptCount;
+    let lastAcceptedAt = normalizedNewest.lastAcceptedAt;
+    let lastStoredAt = normalizedNewest.lastStoredAt;
+    let lastResponseAt = normalizedNewest.lastResponseAt;
+    let lastResponseHeadersAt = normalizedNewest.lastResponseHeadersAt;
+    let lastResponseBodyAt = normalizedNewest.lastResponseBodyAt;
+    let checkpoint = normalizedNewest.acceptedOutcomeThrough;
+
+    for (const record of records) {
+      const candidate = normalizeDiagnostics(record);
+      for (const id of candidate.acceptedOutcomeIds) acknowledged.add(id);
+      storedCount = Math.max(storedCount, candidate.storedCount);
+      attemptCount = Math.max(attemptCount, candidate.attemptCount);
+      lastAcceptedAt = Math.max(lastAcceptedAt ?? 0, candidate.lastAcceptedAt ?? 0) || null;
+      lastStoredAt = Math.max(lastStoredAt ?? 0, candidate.lastStoredAt ?? 0) || null;
+      lastResponseAt = Math.max(lastResponseAt ?? 0, candidate.lastResponseAt ?? 0) || null;
+      lastResponseHeadersAt = Math.max(lastResponseHeadersAt ?? 0, candidate.lastResponseHeadersAt ?? 0) || null;
+      lastResponseBodyAt = Math.max(lastResponseBodyAt ?? 0, candidate.lastResponseBodyAt ?? 0) || null;
+      if (candidate.acceptedOutcomeThrough && (!checkpoint || candidate.acceptedOutcomeThrough > checkpoint)) {
+        checkpoint = candidate.acceptedOutcomeThrough;
+      }
+    }
+    return normalizeDiagnostics({
+      ...normalizedNewest,
+      acceptedOutcomeIds: [...acknowledged],
+      acceptedOutcomeThrough: checkpoint,
+      attemptCount,
+      storedCount,
+      lastAcceptedAt,
+      lastStoredAt,
+      lastResponseAt,
+      lastResponseHeadersAt,
+      lastResponseBodyAt,
+    });
   }
 
   /** Merges independent accepted events before a summary mutation can checkpoint them. */
   private async readMergedUnsafe(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<DiagnosticsReadResult> {
     const result = await this.readUnsafe(state, guard);
-    if (result.kind === "FAILED" || !result.value || !active(guard)) return result;
     const outcomes = await this.acceptedOutcomesForScope(state, guard);
+    if (result.kind === "FAILED" || !active(guard)) return result;
+    const current = result.value ?? (outcomes.length > 0 ? createLocationRuntimeDiagnostics(state, Date.now(), this.nextOperationId(Date.now())) : null);
+    if (!current) return { kind: "VALUE", value: null };
     return active(guard)
-      ? { kind: "VALUE", value: this.mergeAcceptedOutcomes(result.value, outcomes) }
+      ? { kind: "VALUE", value: this.mergeAcceptedOutcomes(current, outcomes) }
       : { kind: "VALUE", value: null };
   }
 
@@ -505,10 +576,19 @@ export class LocationRuntimeDiagnosticsStore {
     current: LocationRuntimeDiagnostics,
     outcomes: readonly AcceptedLocationOutcomeEvent[],
   ): LocationRuntimeDiagnostics {
-    let merged = normalizeDiagnostics(current);
+    const presentOutcomeIds = new Set(outcomes.map((outcome) => outcome.eventId));
+    // After a successful getAllKeys listing, IDs whose immutable event keys were
+    // already compacted no longer need acknowledgement slots. Keep them only on
+    // storage implementations that cannot enumerate outcome keys.
+    const retainedIds = this.storage.getAllKeys
+      ? normalizeDiagnostics(current).acceptedOutcomeIds.filter((id) => presentOutcomeIds.has(id))
+      : normalizeDiagnostics(current).acceptedOutcomeIds;
+    let merged = normalizeDiagnostics({ ...current, acceptedOutcomeIds: retainedIds });
     for (const outcome of [...outcomes].sort((left, right) => isNewerAcceptedOutcome(left, right) ? 1 : -1)) {
-      if (merged.acceptedOutcomeIds.includes(outcome.eventId)
-        || acceptedOutcomeAtOrBeforeCheckpoint(outcome, merged.acceptedOutcomeThrough)) continue;
+      // A delayed write can carry an older observedAt than a summary checkpoint
+      // written by a newer callback. Only this exact durable eventId proves the
+      // event was already counted; timestamp order alone cannot safely prune it.
+      if (merged.acceptedOutcomeIds.includes(outcome.eventId)) continue;
       const belongsToCurrentCallback = merged.lastCallbackAt === outcome.callbackAt;
       const shouldAdvanceVisibleStage = !merged.lastCallbackAt || merged.lastCallbackAt <= outcome.callbackAt;
       const clearsOlderError = Boolean(
@@ -518,7 +598,7 @@ export class LocationRuntimeDiagnosticsStore {
           || (merged.lastErrorAt !== null && merged.lastErrorAt <= outcome.acceptedAt && shouldAdvanceVisibleStage)
         ),
       );
-      const acceptedOutcomeIds = [...merged.acceptedOutcomeIds, outcome.eventId].slice(-64);
+      const acceptedOutcomeIds = [...merged.acceptedOutcomeIds, outcome.eventId];
       merged = normalizeDiagnostics({
         ...merged,
         acceptedOutcomeIds,
@@ -556,7 +636,19 @@ export class LocationRuntimeDiagnosticsStore {
   ): Promise<boolean> {
     if (!active(guard)) return false;
     try {
-      await this.storage.setItem(`${this.scopePrefix(state)}${value.operationId}`, JSON.stringify(value));
+      // A different JS runtime can checkpoint and compact an accepted outcome
+      // between this Store's earlier read and this immutable summary write.
+      // Re-read the durable journal immediately before append and carry its
+      // accepted floor forward, so this stale operation cannot reset 1/null to
+      // 0/null after the event key has already been compacted.
+      const latest = this.storage.getAllKeys
+        ? await this.readMergedUnsafe(state, guard)
+        : null;
+      if (!active(guard)) return false;
+      const mergedValue = latest?.kind === "VALUE" && latest.value
+        ? this.mergeDurableAcceptedSummaries(value, [latest.value])
+        : value;
+      await this.storage.setItem(`${this.scopePrefix(state)}${mergedValue.operationId}`, JSON.stringify(mergedValue));
       if (!active(guard)) return false;
       void this.pruneScope(state);
       void this.pruneAcceptedOutcomes(state);
@@ -583,12 +675,11 @@ export class LocationRuntimeDiagnosticsStore {
   }
 
   public async read(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
-    const result = await this.readUnsafe(state, guard);
+    const result = await this.readMergedUnsafe(state, guard);
     if (result.kind === "FAILED") return null;
     const { value: current } = result;
     if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
-    const outcomes = await this.acceptedOutcomesForScope(state, guard);
-    return active(guard) ? this.mergeAcceptedOutcomes(current, outcomes) : null;
+    return current;
   }
 
   /**
@@ -727,10 +818,10 @@ export class LocationRuntimeDiagnosticsStore {
       if (summary.kind === "FAILED" || !summary.value) return;
       const normalized = normalizeDiagnostics(summary.value);
       const acknowledged = new Set(normalized.acceptedOutcomeIds);
-      const stale = events.filter(({ event }) => (
-        acknowledged.has(event.eventId)
-        || acceptedOutcomeAtOrBeforeCheckpoint(event, normalized.acceptedOutcomeThrough)
-      ));
+      // Only a durably written exact event id may delete an immutable outcome.
+      // A timestamp/checkpoint can precede a delayed setItem and is not proof of
+      // that outcome having been folded into storedCount.
+      const stale = events.filter(({ event }) => acknowledged.has(event.eventId));
       await Promise.all(stale.map(({ key }) => this.storage.removeItem!(key).catch(() => undefined)));
     } catch {
       // Outcome retention is deliberately best effort. An unacknowledged event
@@ -745,11 +836,11 @@ export class LocationRuntimeDiagnosticsStore {
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
     const id = this.nextOperationId(now);
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.enqueueScopeWrite(state, async () => {
       if (!active(guard)) return null;
       const next = createLocationRuntimeDiagnostics(state, now, id);
       return (await this.writeUnsafe(state, next, guard)) ? next : null;
-    });
+    }));
   }
 
   /** Creates a legacy/missing record only when this exact scope has no record. */
@@ -759,7 +850,7 @@ export class LocationRuntimeDiagnosticsStore {
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
     const id = this.nextOperationId(now);
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.enqueueScopeWrite(state, async () => {
       const result = await this.readUnsafe(state, guard);
       if (result.kind === "FAILED") return null;
       const { value: current } = result;
@@ -767,7 +858,7 @@ export class LocationRuntimeDiagnosticsStore {
       if (current) return current;
       const next = createLocationRuntimeDiagnostics(state, now, id);
       return (await this.writeUnsafe(state, next, guard)) ? next : null;
-    });
+    }));
   }
 
   public patch(
@@ -777,11 +868,13 @@ export class LocationRuntimeDiagnosticsStore {
   ): Promise<LocationRuntimeDiagnostics | null> {
     const now = Date.now();
     const id = this.nextOperationId(now);
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.enqueueScopeWrite(state, async () => {
       const result = await this.readMergedUnsafe(state, guard);
       if (result.kind === "FAILED") return null;
-      const { value: current } = result;
-      if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
+      if (result.value && !sameDiagnosticScope(result.value, diagnosticScopeOf(state))) return null;
+      if (!result.value && !this.storage.getAllKeys) return null;
+      const current = result.value ?? createLocationRuntimeDiagnostics(state, now, id);
+      if (!active(guard) || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       // A late same-callback deadline write has no authority over a response
       // already accepted after that callback. A genuinely newer callback has a
       // later lastCallbackAt and still records its own failure normally.
@@ -793,7 +886,7 @@ export class LocationRuntimeDiagnosticsStore {
         : patch;
       const next = normalizeDiagnostics({ ...current, ...effectivePatch, updatedAt: now, operationId: id });
       return (await this.writeUnsafe(state, next, guard)) ? next : null;
-    });
+    }));
   }
 
   /** Applies a current-scope transformation without trusting module-memory counters. */
@@ -804,15 +897,17 @@ export class LocationRuntimeDiagnosticsStore {
   ): Promise<LocationRuntimeDiagnostics | null> {
     const now = Date.now();
     const id = this.nextOperationId(now);
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.enqueueScopeWrite(state, async () => {
       const result = await this.readMergedUnsafe(state, guard);
       if (result.kind === "FAILED") return null;
-      const { value: current } = result;
-      if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
+      if (result.value && !sameDiagnosticScope(result.value, diagnosticScopeOf(state))) return null;
+      if (!result.value && !this.storage.getAllKeys) return null;
+      const current = result.value ?? createLocationRuntimeDiagnostics(state, now, id);
+      if (!active(guard) || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       const next = normalizeDiagnostics({ ...update(current), updatedAt: now, operationId: id });
       if (!active(guard) || !sameDiagnosticScope(next, diagnosticScopeOf(state))) return null;
       return (await this.writeUnsafe(state, next, guard)) ? next : null;
-    });
+    }));
   }
 
   /** Retains an ended session summary for the next in-app inspection without reviving it. */
