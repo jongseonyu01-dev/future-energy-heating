@@ -45,6 +45,14 @@ export interface KeyValueStorage {
 
 export type DiagnosticsOperationGuard = () => boolean;
 
+type ScopeRecordsResult =
+  | { kind: "VALUE"; records: LocationRuntimeDiagnostics[] }
+  | { kind: "FAILED" };
+
+type DiagnosticsReadResult =
+  | { kind: "VALUE"; value: LocationRuntimeDiagnostics | null }
+  | { kind: "FAILED" };
+
 export function diagnosticScopeOf(state: TrackingLifecycleState): LocationRuntimeDiagnosticScope {
   return {
     requestId: state.requestId,
@@ -135,9 +143,19 @@ function active(guard?: DiagnosticsOperationGuard): boolean {
   return !guard || guard();
 }
 
+function operationSequence(value: string): number {
+  const match = /-(\d+)$/.exec(value);
+  return match ? Number(match[1]) : -1;
+}
+
 function isNewer(left: LocationRuntimeDiagnostics, right: LocationRuntimeDiagnostics): boolean {
-  return left.updatedAt > right.updatedAt
-    || (left.updatedAt === right.updatedAt && left.operationId > right.operationId);
+  if (left.updatedAt !== right.updatedAt) return left.updatedAt > right.updatedAt;
+  const leftSequence = operationSequence(left.operationId);
+  const rightSequence = operationSequence(right.operationId);
+  if (leftSequence !== rightSequence) return leftSequence > rightSequence;
+  // A stable final tie-breaker handles legacy/runtime-prefixed IDs without
+  // letting `...-9` incorrectly outrank `...-10` as a string comparison.
+  return left.operationId > right.operationId;
 }
 
 /**
@@ -188,17 +206,17 @@ export class LocationRuntimeDiagnosticsStore {
   private async recordsForScope(
     state: TrackingLifecycleState,
     guard?: DiagnosticsOperationGuard,
-  ): Promise<LocationRuntimeDiagnostics[]> {
-    if (!active(guard)) return [];
+  ): Promise<ScopeRecordsResult> {
+    if (!active(guard)) return { kind: "VALUE", records: [] };
     const prefix = this.scopePrefix(state);
     try {
       const keys = this.storage.getAllKeys ? await this.storage.getAllKeys() : [];
-      if (!active(guard)) return [];
+      if (!active(guard)) return { kind: "VALUE", records: [] };
       const matching = keys.filter((key) => key.startsWith(prefix));
       const pairs = this.storage.multiGet
         ? await this.storage.multiGet(matching)
         : await Promise.all(matching.map(async (key) => [key, await this.storage.getItem(key)] as [string, string | null]));
-      if (!active(guard)) return [];
+      if (!active(guard)) return { kind: "VALUE", records: [] };
       const records: LocationRuntimeDiagnostics[] = [];
       for (const [, raw] of pairs) {
         if (!raw) continue;
@@ -211,19 +229,22 @@ export class LocationRuntimeDiagnosticsStore {
           // A corrupt diagnostic is never allowed to block a location callback.
         }
       }
-      return records;
+      return { kind: "VALUE", records };
     } catch {
-      return [];
+      // A storage failure is not evidence that this scope is empty. In
+      // particular, ensure() must not append a blank journal record that masks
+      // existing counters or an error after the next successful read.
+      return { kind: "FAILED" };
     }
   }
 
-  private async legacyRecord(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
-    if (!active(guard)) return null;
+  private async legacyRecord(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<DiagnosticsReadResult> {
+    if (!active(guard)) return { kind: "VALUE", value: null };
     try {
       const raw = await this.storage.getItem(this.legacyKey());
-      if (!active(guard) || !raw) return null;
+      if (!active(guard) || !raw) return { kind: "VALUE", value: null };
       const parsed: unknown = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || !sameDiagnosticScope(parsed as LocationRuntimeDiagnosticScope, diagnosticScopeOf(state))) return null;
+      if (!parsed || typeof parsed !== "object" || !sameDiagnosticScope(parsed as LocationRuntimeDiagnosticScope, diagnosticScopeOf(state))) return { kind: "VALUE", value: null };
       const candidate = parsed as Partial<LocationRuntimeDiagnostics>;
       const updatedAt = normalizeTimestamp(candidate.lastStoredAt)
         ?? normalizeTimestamp(candidate.lastResponseAt)
@@ -231,20 +252,21 @@ export class LocationRuntimeDiagnosticsStore {
         ?? normalizeTimestamp(candidate.lastCallbackAt)
         ?? state.startedAt;
       const converted = { ...candidate, schemaVersion: 1, updatedAt, operationId: `legacy-${updatedAt}` } as LocationRuntimeDiagnostics;
-      return isValidDiagnostics(converted) ? normalizeDiagnostics(converted) : null;
+      return { kind: "VALUE", value: isValidDiagnostics(converted) ? normalizeDiagnostics(converted) : null };
     } catch {
-      return null;
+      return { kind: "FAILED" };
     }
   }
 
-  private async readUnsafe(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
-    const records = await this.recordsForScope(state, guard);
-    if (!active(guard)) return null;
+  private async readUnsafe(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<DiagnosticsReadResult> {
+    const recordsResult = await this.recordsForScope(state, guard);
+    if (recordsResult.kind === "FAILED") return recordsResult;
+    if (!active(guard)) return { kind: "VALUE", value: null };
     let newest: LocationRuntimeDiagnostics | null = null;
-    for (const record of records) {
+    for (const record of recordsResult.records) {
       if (!newest || isNewer(record, newest)) newest = record;
     }
-    return newest ?? await this.legacyRecord(state, guard);
+    return newest ? { kind: "VALUE", value: newest } : this.legacyRecord(state, guard);
   }
 
   private async writeUnsafe(
@@ -267,7 +289,9 @@ export class LocationRuntimeDiagnosticsStore {
   /** Keeps a bounded immutable journal without making callback completion wait for cleanup. */
   private async pruneScope(state: TrackingLifecycleState): Promise<void> {
     if (!this.storage.removeItem) return;
-    const records = await this.recordsForScope(state);
+    const result = await this.recordsForScope(state);
+    if (result.kind === "FAILED") return;
+    const { records } = result;
     if (records.length <= 24) return;
     const stale = [...records]
       .sort((left, right) => isNewer(left, right) ? -1 : 1)
@@ -278,7 +302,9 @@ export class LocationRuntimeDiagnosticsStore {
   }
 
   public async read(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
-    const current = await this.readUnsafe(state, guard);
+    const result = await this.readUnsafe(state, guard);
+    if (result.kind === "FAILED") return null;
+    const { value: current } = result;
     return active(guard) && sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
   }
 
@@ -304,7 +330,9 @@ export class LocationRuntimeDiagnosticsStore {
   ): Promise<LocationRuntimeDiagnostics | null> {
     const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(state, guard);
+      const result = await this.readUnsafe(state, guard);
+      if (result.kind === "FAILED") return null;
+      const { value: current } = result;
       if (!active(guard)) return null;
       if (current) return current;
       const next = createLocationRuntimeDiagnostics(state, now, id);
@@ -320,7 +348,9 @@ export class LocationRuntimeDiagnosticsStore {
     const now = Date.now();
     const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(state, guard);
+      const result = await this.readUnsafe(state, guard);
+      if (result.kind === "FAILED") return null;
+      const { value: current } = result;
       if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       const next = normalizeDiagnostics({ ...current, ...patch, updatedAt: now, operationId: id });
       return (await this.writeUnsafe(state, next, guard)) ? next : null;
@@ -336,7 +366,9 @@ export class LocationRuntimeDiagnosticsStore {
     const now = Date.now();
     const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(state, guard);
+      const result = await this.readUnsafe(state, guard);
+      if (result.kind === "FAILED") return null;
+      const { value: current } = result;
       if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
       const next = normalizeDiagnostics({ ...update(current), updatedAt: now, operationId: id });
       if (!active(guard) || !sameDiagnosticScope(next, diagnosticScopeOf(state))) return null;

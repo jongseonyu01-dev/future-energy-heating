@@ -41,6 +41,7 @@ async function main() {
     const lifecycle = new TrackingLifecycleCoordinator(adapterFor(calls));
     assert.equal(await lifecycle.start(state), true);
     assert.ok(await lifecycle.stopForTerminalResponse(state), "terminal response must stop its exact native session");
+    await new Promise<void>((resolve) => setImmediate(resolve));
     assert.ok(calls.includes("native:stop"));
     assert.equal(await lifecycle.isCurrent(state), false);
 

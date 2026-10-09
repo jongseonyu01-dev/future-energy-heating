@@ -51,6 +51,7 @@ Notifications.setNotificationHandler({
 });
 
 const TRACKING_STATE_KEY = "location_tracking_state_v2";
+const INACTIVE_TRACKING_PREFIX = "location_tracking_inactive_v1";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
 const NOTIFICATION_CATEGORY = "FUTURE_ENERGY_LOCATION_TRACKING";
 export const STOP_TRACKING_NOTIFICATION_ACTION = "FUTURE_ENERGY_LOCATION_STOP";
@@ -135,9 +136,17 @@ let lastUploadMeasurement = { key: "", measuredAt: 0 };
 let trackingNotificationId: string | null = null;
 const uploadQueue = new LatestOnlyUploadQueue<LocationSample>();
 const runtimeDiagnostics = new LocationRuntimeDiagnosticsStore(AsyncStorage);
+// The durable marker protects a fresh JS runtime; this in-memory fence closes
+// the window before a delayed AsyncStorage.setItem settles in the current
+// TaskManager runtime.
+const inactiveTrackingStateKeys = new Set<string>();
 
 function stateKey(state: PersistedTrackingState): string {
   return `${state.token}:${state.requestId}:${state.technicianUserId}:${state.startedAt}`;
+}
+
+function inactiveTrackingKey(state: PersistedTrackingState): string {
+  return `${INACTIVE_TRACKING_PREFIX}:${state.requestId}:${state.technicianUserId}:${state.startedAt}:${state.token}`;
 }
 
 function emitTrackingState(state: PersistedTrackingState | null): void {
@@ -199,7 +208,14 @@ export async function getPersistedTrackingState(): Promise<PersistedTrackingStat
     const raw = await AsyncStorage.getItem(TRACKING_STATE_KEY);
     if (!raw) return null;
     const value: unknown = JSON.parse(raw);
-    return validState(value) ? value : null;
+    if (!validState(value)) return null;
+    // A terminal marker is a fail-closed authority boundary. It is independent
+    // of best-effort cleanup of the legacy pointer, so a fresh headless runtime
+    // cannot re-adopt an A session after a 409/401/403/404 terminal response.
+    const inactiveKey = inactiveTrackingKey(value);
+    if (inactiveTrackingStateKeys.has(inactiveKey)) return null;
+    const inactive = await AsyncStorage.getItem(inactiveKey);
+    return inactive ? null : value;
   } catch {
     return null;
   }
@@ -209,10 +225,46 @@ async function saveTrackingState(state: PersistedTrackingState): Promise<void> {
   await AsyncStorage.setItem(TRACKING_STATE_KEY, JSON.stringify(state));
 }
 
-async function clearTrackingStateIfSame(state: PersistedTrackingState): Promise<void> {
+async function markTrackingStateInactive(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<void> {
+  if (!isStillAuthorized()) return;
+  const key = inactiveTrackingKey(state);
+  inactiveTrackingStateKeys.add(key);
+  await AsyncStorage.setItem(key, "1");
+}
+
+async function isTrackingStateInactive(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<boolean> {
+  if (!isStillAuthorized()) return true;
+  const key = inactiveTrackingKey(state);
+  if (inactiveTrackingStateKeys.has(key)) return true;
+  const inactive = await AsyncStorage.getItem(key);
+  return !isStillAuthorized() || Boolean(inactive);
+}
+
+async function clearTrackingStateIfSame(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<void> {
   try {
-    const current = await getPersistedTrackingState();
-    if (sameTrackingLifecycleState(current, state)) await AsyncStorage.removeItem(TRACKING_STATE_KEY);
+    if (!isStillAuthorized()) return;
+    const firstRaw = await AsyncStorage.getItem(TRACKING_STATE_KEY);
+    if (!isStillAuthorized() || !firstRaw) return;
+    const first: unknown = JSON.parse(firstRaw);
+    if (!validState(first) || !sameTrackingLifecycleState(first, state)) return;
+    // A delayed first read may be an A snapshot from before B's save. Re-read
+    // immediately before removeItem, then check the generation guard again so
+    // old cleanup cannot erase a replacement's shared pointer.
+    const currentRaw = await AsyncStorage.getItem(TRACKING_STATE_KEY);
+    if (!isStillAuthorized() || !currentRaw) return;
+    const current: unknown = JSON.parse(currentRaw);
+    if (!validState(current) || !sameTrackingLifecycleState(current, state)) return;
+    if (!isStillAuthorized()) return;
+    await AsyncStorage.removeItem(TRACKING_STATE_KEY);
   } catch {
     // Local invalidation is already recorded in the lifecycle; storage cleanup is best effort.
   }
@@ -626,18 +678,6 @@ export async function sendLocationToServer(
     if (guardedResult.kind !== "VALUE" || !isActive()) return;
     const guarded = guardedResult.value;
 
-    // Count only after the request function actually called fetch. A stalled
-    // credential/diagnostic read therefore cannot fabricate a request attempt.
-    if (requestStartedAt !== null) {
-      const attempted = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
-        ...current,
-        lastUploadStartedAt: requestStartedAt,
-        attemptCount: current.attemptCount + 1,
-      }), isActive));
-      if (attempted.kind !== "VALUE" || !isActive()) return;
-      emitPersistedDiagnostics(attempted.value);
-    }
-
     if (guarded.kind === "STALE") return;
     if (guarded.kind === "MISSING_CREDENTIAL") {
       const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
@@ -660,6 +700,27 @@ export async function sendLocationToServer(
     }
 
     const response = guarded.response;
+    // The HTTP status alone is sufficient for these terminal outcomes. This
+    // authority decision must not wait for the best-effort attempt counter;
+    // otherwise a stalled setItem would let a later TaskManager callback upload
+    // the same terminal session again.
+    if ([401, 403, 404, 409].includes(response.status)) {
+      deactivateAfterTerminalResponse(state);
+      return;
+    }
+
+    // Count only after fetch actually started, but never allow a stalled
+    // diagnostic write to delay a server terminal decision or body parsing.
+    if (requestStartedAt !== null) {
+      void withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
+        ...current,
+        lastUploadStartedAt: requestStartedAt,
+        attemptCount: current.attemptCount + 1,
+      }), isActive)).then((attempted) => {
+        if (attempted.kind === "VALUE" && isActive()) emitPersistedDiagnostics(attempted.value);
+      }).catch(() => undefined);
+    }
+
     const responseBodyBudgetMs = taskFence
       ? Math.min(RESPONSE_BODY_TIMEOUT_MS, taskFence.remainingMs())
       : RESPONSE_BODY_TIMEOUT_MS;
@@ -814,6 +875,8 @@ const trackingLifecycle = new TrackingLifecycleCoordinator<PersistedTrackingStat
   read: getPersistedTrackingState,
   save: saveTrackingState,
   clearIfSame: clearTrackingStateIfSame,
+  markInactive: markTrackingStateInactive,
+  isInactive: isTrackingStateInactive,
   showControlNotification: ensureControlNotification,
   clearControlNotification,
   isNativeCollectionRegistered: isNativeLocationTaskRegistered,
@@ -880,6 +943,14 @@ if (Platform.OS !== "web") {
           emitDebug({ serverStatus: "error", serverError: "유효한 최근 위치 측정값이 없어 전송하지 않았습니다.", source: "foreground-service-task" });
           return;
         }
+        // Capture before the first adoption read. A later B start advances this
+        // generation, so A's deadline cannot publish a preparation error over
+        // B's active or idle UI state.
+        const preparationGeneration = trackingLifecycle.captureGeneration();
+        const publishPreparationFailure = (message: string) => {
+          if (!trackingLifecycle.isGenerationCurrent(preparationGeneration)) return;
+          emitDebug({ serverStatus: "error", serverError: message, source: "foreground-service-task" });
+        };
         const adoptedResult = await taskFence.run(() => adoptHeadlessTrackingWithCredential({
           lifecycle: trackingLifecycle,
           getBearerToken: async () => {
@@ -890,16 +961,12 @@ if (Platform.OS !== "web") {
           isActive: () => taskFence.isActive(),
         }));
         if (adoptedResult.kind !== "VALUE" || !taskFence.isActive()) {
-          emitDebug({
-            serverStatus: "error",
-            serverError: "위치 전송 준비 시간 제한으로 저장 여부를 확인하지 못했습니다.",
-            source: "foreground-service-task",
-          });
+          publishPreparationFailure("위치 전송 준비 시간 제한으로 저장 여부를 확인하지 못했습니다.");
           return;
         }
         const adopted = adoptedResult.value;
         if (!adopted) {
-          emitDebug({ serverStatus: "error", serverError: "현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.", source: "foreground-service-task" });
+          publishPreparationFailure("현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.");
           return;
         }
         const lat = Number(latest.coords?.latitude);

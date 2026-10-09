@@ -131,6 +131,73 @@ describe("세션별 위치 런타임 진단", () => {
       vi.useRealTimers();
     }
   });
+  it("getAllKeys 실패를 빈 기록으로 오인해 기존 오류·카운터를 가리지 않는다", async () => {
+    const values = new Map<string, string>();
+    let failListing = false;
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => {
+        if (failListing) throw new Error("TEMPORARY_LIST_FAILURE");
+        return [...values.keys()];
+      },
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await diagnostics.begin(stateA, 1_000);
+    await diagnostics.update(stateA, (current) => ({
+      ...current,
+      attemptCount: 7,
+      storedCount: 6,
+      lastErrorCode: "NETWORK_TIMEOUT",
+      lastErrorAt: 1_100,
+    }));
+
+    failListing = true;
+    expect(await diagnostics.ensure(stateA, 1_200)).toBeNull();
+    failListing = false;
+    await expect(diagnostics.read(stateA)).resolves.toMatchObject({
+      attemptCount: 7,
+      storedCount: 6,
+      lastErrorCode: "NETWORK_TIMEOUT",
+    });
+  });
+
+  it("같은 밀리초에는 operation-10을 operation-9보다 최신으로 선택한다", async () => {
+    const prefix = "location_tracking_runtime_diagnostics_v2:91:41:91000:";
+    const base = {
+      schemaVersion: 1 as const,
+      requestId: stateA.requestId,
+      technicianUserId: stateA.technicianUserId,
+      startedAt: stateA.startedAt,
+      updatedAt: 5_000,
+      nativeRegistration: "registered" as const,
+      lastNativeCheckAt: null,
+      lastCallbackAt: null,
+      lastMeasuredAt: null,
+      lastUploadStartedAt: null,
+      lastResponseAt: null,
+      lastStoredAt: null,
+      lastErrorCode: null,
+      lastErrorAt: null,
+      attemptCount: 0,
+      storedCount: 0,
+      ignoredCount: 0,
+      finalizedAt: null,
+    };
+    const values = new Map<string, string>([
+      [`${prefix}5000-9`, JSON.stringify({ ...base, operationId: "5000-9", attemptCount: 9 })],
+      [`${prefix}5000-10`, JSON.stringify({ ...base, operationId: "5000-10", attemptCount: 10 })],
+    ]);
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await expect(diagnostics.read(stateA)).resolves.toMatchObject({ operationId: "5000-10", attemptCount: 10 });
+  });
 });
 
 describe("위치 응답 본문 유한시간 경계", () => {

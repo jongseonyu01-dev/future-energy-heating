@@ -32,7 +32,6 @@ async function main() {
   let nativeStops = 0;
   const read1 = deferred<string | null>();
   const read2 = deferred<string | null>();
-  let readCount = 0;
   let stored = JSON.stringify(stateA);
 
   try {
@@ -40,15 +39,23 @@ async function main() {
     await writeFile(join(stubs, "react-native.ts"), 'export const Platform = { OS: "android" };\n');
     await writeFile(join(stubs, "async-storage.ts"), `
       let readCount = 0;
+      const markers = new Map<string, string>();
       export default {
-        getItem: async () => {
+        getItem: async (key: string) => {
+          if (key.startsWith("location_tracking_inactive_v1:")) return markers.get(key) ?? null;
           readCount += 1;
           if (readCount === 1) return globalThis.__read1;
           if (readCount === 2) return globalThis.__read2;
           return globalThis.__stored;
         },
-        setItem: async (_key: string, value: string) => { globalThis.__stored = value; },
-        removeItem: async () => { globalThis.__stored = null; },
+        setItem: async (key: string, value: string) => {
+          if (key.startsWith("location_tracking_inactive_v1:")) markers.set(key, value);
+          else globalThis.__stored = value;
+        },
+        removeItem: async (key: string) => {
+          if (key.startsWith("location_tracking_inactive_v1:")) markers.delete(key);
+          else globalThis.__stored = null;
+        },
       };
     `);
     await writeFile(join(stubs, "notifications.ts"), `

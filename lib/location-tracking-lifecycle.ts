@@ -59,7 +59,12 @@ export function matchesTrackingStopAction(
 export interface TrackingLifecycleAdapter<T extends TrackingLifecycleState> {
   read: () => Promise<T | null>;
   save: (state: T) => Promise<void>;
-  clearIfSame: (state: T) => Promise<void>;
+  /** Legacy pointer cleanup must recheck the authorization guard before mutation. */
+  clearIfSame: (state: T, isStillAuthorized?: () => boolean) => Promise<void>;
+  /** Persists a per-session inactive marker before best-effort cleanup. */
+  markInactive?: (state: T, isStillAuthorized?: () => boolean) => Promise<void>;
+  /** Rejects a terminal session before restore or headless adoption. */
+  isInactive?: (state: T, isStillAuthorized?: () => boolean) => Promise<boolean>;
   showControlNotification: (state: T) => Promise<void>;
   clearControlNotification: (state: T | null, isStillAuthorized?: () => boolean) => Promise<void>;
   /** Registration state only; it is not proof of a future callback or server persistence. */
@@ -86,6 +91,15 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     return this.intent;
   }
 
+  /** Captured before an await so a stale preparation cannot publish over B. */
+  public captureGeneration(): number {
+    return this.generation;
+  }
+
+  public isGenerationCurrent(generation: number): boolean {
+    return generation === this.generation;
+  }
+
   private enqueue<R>(operation: () => Promise<R>): Promise<R> {
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);
@@ -94,6 +108,23 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
 
   private owns(state: T, generation: number): boolean {
     return generation === this.generation && sameTrackingLifecycleState(this.intent, state);
+  }
+
+  private async isInactive(state: T, guard: () => boolean = () => true): Promise<boolean> {
+    if (!guard()) return true;
+    if (!this.adapter.isInactive) return false;
+    try {
+      return Boolean(await this.adapter.isInactive(state, guard));
+    } catch {
+      // A failed terminal-marker read is fail-closed: duplicate location uploads
+      // are less safe than requiring an explicit new start.
+      return true;
+    }
+  }
+
+  private async markInactive(state: T, guard: () => boolean = () => true): Promise<void> {
+    if (!guard() || !this.adapter.markInactive) return;
+    await this.adapter.markInactive(state, guard).catch(() => undefined);
   }
 
   public invalidate(state?: T | null): void {
@@ -109,18 +140,22 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
   ): Promise<boolean> {
     if (!isActive() || !this.owns(state, expectedGeneration)) return false;
     const persisted = await this.adapter.read();
-    return isActive() && this.owns(state, expectedGeneration) && sameTrackingLifecycleState(persisted, state);
+    if (!isActive() || !this.owns(state, expectedGeneration) || !sameTrackingLifecycleState(persisted, state)) return false;
+    return !(await this.isInactive(state, () => isActive() && this.owns(state, expectedGeneration)));
   }
 
   private beginStop(state: T): Promise<T> {
     // Atomic section: no await before invalidating the exact captured owner.
-    this.generation += 1;
+    const stopGeneration = this.generation + 1;
+    this.generation = stopGeneration;
     this.intent = null;
+    const stillStoppingOwner = () => stopGeneration === this.generation && this.intent === null;
     return this.enqueue(async () => {
-      await this.adapter.clearIfSame(state);
-      await this.adapter.clearControlNotification(state);
-      await this.adapter.stopNativeCollection();
-      this.adapter.onStateChanged(null);
+      await this.markInactive(state, stillStoppingOwner);
+      await this.adapter.clearIfSame(state, stillStoppingOwner);
+      await this.adapter.clearControlNotification(state, stillStoppingOwner);
+      await this.adapter.stopNativeCollection(stillStoppingOwner);
+      if (stillStoppingOwner()) this.adapter.onStateChanged(null);
       return state;
     });
   }
@@ -148,10 +183,17 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
   public completeInvalidatedTerminalCleanup(state: T): Promise<void> {
     const terminalGeneration = this.generation;
     const stillTerminalOwner = () => terminalGeneration === this.generation && this.intent === null;
+    // Start the marker outside the serialized cleanup queue. Platform adapters
+    // can synchronously fence their in-memory owner before their durable write
+    // awaits, so a following TaskManager callback cannot re-adopt terminal A.
+    const inactiveMarker = this.markInactive(state, stillTerminalOwner);
     return this.enqueue(async () => {
+      // This marker is independent from the following tracking-state read. A
+      // hung cleanup must not make a later TaskManager runtime adopt terminal A.
+      await settleWithin(() => inactiveMarker);
       await settleWithin(() => this.adapter.stopNativeCollection(stillTerminalOwner));
       await Promise.all([
-        settleWithin(() => this.adapter.clearIfSame(state)),
+        settleWithin(() => this.adapter.clearIfSame(state, stillTerminalOwner)),
         settleWithin(() => this.adapter.clearControlNotification(state, stillTerminalOwner)),
       ]);
     });
@@ -168,12 +210,16 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       if (coldStopGeneration !== this.generation || this.intent) return null;
       const state = await this.adapter.read();
       if (!state || coldStopGeneration !== this.generation || this.intent) return null;
+      if (await this.isInactive(state, () => coldStopGeneration === this.generation && !this.intent)) return null;
       // No await occurs between this final ownership check and local invalidation.
       this.generation += 1;
-      await this.adapter.clearIfSame(state);
-      await this.adapter.clearControlNotification(state);
-      await this.adapter.stopNativeCollection();
-      this.adapter.onStateChanged(null);
+      const stoppedGeneration = this.generation;
+      const stillStoppingOwner = () => stoppedGeneration === this.generation && this.intent === null;
+      await this.markInactive(state, stillStoppingOwner);
+      await this.adapter.clearIfSame(state, stillStoppingOwner);
+      await this.adapter.clearControlNotification(state, stillStoppingOwner);
+      await this.adapter.stopNativeCollection(stillStoppingOwner);
+      if (stillStoppingOwner()) this.adapter.onStateChanged(null);
       return state;
     });
   }
@@ -188,14 +234,14 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       try {
         if (!options.restore) await this.adapter.save(state);
         if (!this.owns(state, startGeneration)) {
-          await this.adapter.clearIfSame(state);
+          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
           return false;
         }
 
         await this.adapter.showControlNotification(state);
         if (!this.owns(state, startGeneration)) {
           await this.adapter.clearControlNotification(state);
-          await this.adapter.clearIfSame(state);
+          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
           return false;
         }
 
@@ -203,7 +249,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
         if (!this.owns(state, startGeneration)) {
           await this.adapter.stopNativeCollection();
           await this.adapter.clearControlNotification(state);
-          await this.adapter.clearIfSame(state);
+          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
           return false;
         }
 
@@ -217,7 +263,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
           await this.adapter.stopNativeCollection();
           await this.adapter.clearControlNotification(state);
         }
-        await this.adapter.clearIfSame(state);
+        await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
         if (stillOwnsRuntime) this.adapter.onStateChanged(null);
         throw error;
       }
@@ -233,6 +279,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const readGeneration = this.generation;
     const state = await this.adapter.read();
     if (!state) return null;
+    if (await this.isInactive(state, () => readGeneration === this.generation)) return null;
     if (state.technicianUserId !== userId) {
       if (readGeneration === this.generation && !this.intent) {
         this.intent = state;
@@ -262,6 +309,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     // proceeds independently while this old A observation is still pending.
     const persisted = await this.adapter.read();
     if (!this.owns(state, recoveryGeneration) || !sameTrackingLifecycleState(persisted, state)) return "superseded";
+    if (await this.isInactive(state, () => this.owns(state, recoveryGeneration))) return "superseded";
     const registered = await this.adapter.isNativeCollectionRegistered();
     if (!this.owns(state, recoveryGeneration)) return "superseded";
     if (registered) return "registered";
@@ -291,6 +339,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     if (!isActive()) return null;
     const state = await this.adapter.read();
     if (!isActive() || !state || readGeneration !== this.generation) return null;
+    if (await this.isInactive(state, () => isActive() && readGeneration === this.generation)) return null;
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
     if (!isActive()) return null;
     this.generation += 1;
@@ -332,6 +381,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const readGeneration = this.generation;
     const state = await this.adapter.read();
     if (!state || readGeneration !== this.generation || this.intent) return null;
+    if (await this.isInactive(state, () => readGeneration === this.generation && !this.intent)) return null;
     this.intent = state;
     return this.beginStop(state);
   }
@@ -341,6 +391,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const readGeneration = this.generation;
     const state = await this.adapter.read();
     if (!state || !predicate(state) || readGeneration !== this.generation || this.intent) return null;
+    if (await this.isInactive(state, () => readGeneration === this.generation && !this.intent)) return null;
     this.intent = state;
     return this.beginStop(state);
   }
@@ -357,6 +408,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     if (!sameTrackingLifecycleState(persisted, state)
       || readGeneration !== this.generation
       || this.intent) return null;
+    if (await this.isInactive(state, () => readGeneration === this.generation && !this.intent)) return null;
     this.intent = state;
     return this.beginStop(state);
   }
