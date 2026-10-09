@@ -238,14 +238,18 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
           return false;
         }
 
-        await this.adapter.showControlNotification(state);
+        // Expo Location starts Android's location FGS only while the app is in
+        // the foreground. The local control notification is useful status UI,
+        // but it must not widen the user-visible departure → FGS start window.
+        // It also remains separate from proof of GPS callback/server storage.
+        await this.adapter.startNativeCollection();
         if (!this.owns(state, startGeneration)) {
-          await this.adapter.clearControlNotification(state);
+          await this.adapter.stopNativeCollection();
           await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
           return false;
         }
 
-        await this.adapter.startNativeCollection();
+        await this.adapter.showControlNotification(state);
         if (!this.owns(state, startGeneration)) {
           await this.adapter.stopNativeCollection();
           await this.adapter.clearControlNotification(state);

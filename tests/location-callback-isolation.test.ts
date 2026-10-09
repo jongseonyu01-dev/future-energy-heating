@@ -169,6 +169,7 @@ describe("불변 위치 진단", () => {
       startedAt: stateA.startedAt,
       updatedAt: 10_000,
       operationId: "10000-1",
+      buildLabel: null,
       nativeRegistration: "registered" as const,
       lastNativeCheckAt: null,
       lastCallbackAt: 10_000,

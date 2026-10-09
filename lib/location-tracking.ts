@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import Constants from "expo-constants";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
 import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";
@@ -34,7 +35,10 @@ import {
   type TrackingStopReason,
 } from "@/lib/location-tracking-lifecycle";
 import { runGuardedLocationUpload } from "@/lib/location-upload-guard";
-import { adoptHeadlessTrackingWithCredential } from "@/lib/location-tracking-runtime";
+import {
+  adoptHeadlessTrackingWithCredential,
+  adoptHeadlessTrackingWithCredentialResult,
+} from "@/lib/location-tracking-runtime";
 import {
   createTaskDeadline,
   TaskCallbackDeadlineFence,
@@ -108,6 +112,7 @@ export interface LocationDebugState {
   lastNativeCheckAt: number | null;
   lastCallbackAt: number | null;
   lastMeasuredAt: number | null;
+  buildLabel: string | null;
 }
 
 type LocationSample = {
@@ -128,7 +133,7 @@ let debugState: LocationDebugState = {
   lat: null, lng: null, accuracy: null, speed: null, heading: null,
   lastAttemptAt: null, lastResponseAt: null, lastStoredAt: null,
   serverStatus: "idle", serverError: null, attemptCount: 0, storedCount: 0, ignoredCount: 0, source: "",
-  nativeRegistration: "unknown", lastNativeCheckAt: null, lastCallbackAt: null, lastMeasuredAt: null,
+  nativeRegistration: "unknown", lastNativeCheckAt: null, lastCallbackAt: null, lastMeasuredAt: null, buildLabel: null,
 };
 const debugListeners: ((state: LocationDebugState) => void)[] = [];
 const trackingStateListeners: ((state: PersistedTrackingState | null) => void)[] = [];
@@ -233,6 +238,14 @@ function emitDebug(patch: Partial<LocationDebugState>) {
   for (const listener of debugListeners) listener({ ...debugState });
 }
 
+function diagnosticBuildLabel(): string | null {
+  const version = Constants.nativeAppVersion ?? Constants.expoConfig?.version;
+  const build = Constants.nativeBuildVersion
+    ?? (typeof Constants.expoConfig?.android?.versionCode === "number" ? String(Constants.expoConfig.android.versionCode) : null);
+  if (!version && !build) return null;
+  return version && build ? `${version} (${build})` : version ?? build ?? null;
+}
+
 function emitPersistedDiagnostics(
   diagnostics: LocationRuntimeDiagnostics | null,
   canPublish: () => boolean = () => true,
@@ -254,6 +267,7 @@ function emitPersistedDiagnostics(
     attemptCount: diagnostics.attemptCount,
     storedCount: diagnostics.storedCount,
     ignoredCount: diagnostics.ignoredCount,
+    buildLabel: diagnostics.buildLabel,
     // A prior accepted write remains useful history while a later request is
     // actually pending, but it is not proof that that later request is stored.
     ...(hasCurrentDebugUpload()
@@ -533,6 +547,7 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
   const diagnostics = await runtimeDiagnostics.patch(state, {
     nativeRegistration: "registered",
     lastNativeCheckAt: Date.now(),
+    buildLabel: diagnosticBuildLabel(),
   });
   emitPersistedDiagnostics(diagnostics);
   emitDebug({
@@ -657,6 +672,29 @@ async function withinDiagnosticsDeadline<T>(
 
 function taskStillActive(fence: TaskCallbackDeadlineFence | undefined): boolean {
   return !fence || fence.isActive();
+}
+
+// This is intentionally much smaller than the complete callback budget. It
+// permits a headless callback to leave a privacy-safe breadcrumb when adoption
+// cannot establish an exact session, without allowing a stalled diagnostic
+// write to consume the HTTP/cleanup budget. The isolated record is never
+// rendered as an A/B session error.
+const TASK_ENTRY_EVENT_BUDGET_MS = 750;
+
+async function recordUnboundTaskCallback(
+  code: string,
+  observedAt: number,
+  parentFence: TaskCallbackDeadlineFence,
+): Promise<void> {
+  const entryBudgetMs = Math.min(TASK_ENTRY_EVENT_BUDGET_MS, parentFence.remainingMs());
+  if (entryBudgetMs <= 0) return;
+  const entryFence = new TaskCallbackDeadlineFence(createTaskDeadline(entryBudgetMs));
+  const result = await entryFence.run(() => runtimeDiagnostics.recordUnboundTaskEvent(
+    code,
+    observedAt,
+    () => parentFence.isActive() && entryFence.isActive(),
+  ));
+  if (result.kind === "EXPIRED") runtimeDiagnostics.releaseExpiredWork();
 }
 
 export async function sendLocationToServer(
@@ -1032,8 +1070,9 @@ if (Platform.OS !== "web") {
     if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {
         const taskFence = new TaskCallbackDeadlineFence(createTaskDeadline(TASK_CALLBACK_TOTAL_BUDGET_MS));
+        const callbackEnteredAt = Date.now();
         if (error) {
-          emitDebug({ serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다.", source: "foreground-service-task" });
+          await recordUnboundTaskCallback("TASK_NATIVE_ERROR", callbackEnteredAt, taskFence);
           return;
         }
         const taskLocations = (Array.isArray(data?.locations) ? data.locations : []) as {
@@ -1042,42 +1081,54 @@ if (Platform.OS !== "web") {
         }[];
         const latest = selectNewestFreshLocation(taskLocations, Date.now(), MAX_MEASUREMENT_AGE_MS);
         if (!latest) {
-          emitDebug({ serverStatus: "error", serverError: "유효한 최근 위치 측정값이 없어 전송하지 않았습니다.", source: "foreground-service-task" });
+          await recordUnboundTaskCallback("NO_FRESH_MEASUREMENT", callbackEnteredAt, taskFence);
           return;
         }
         // Capture before the first adoption read. A later B start advances this
         // generation, so A's deadline cannot publish a preparation error over
         // B's active or idle UI state.
         const preparationGeneration = trackingLifecycle.captureGeneration();
-        const publishPreparationFailure = (message: string) => {
-          if (!trackingLifecycle.isGenerationCurrent(preparationGeneration)) return;
-          emitDebug({ serverStatus: "error", serverError: message, source: "foreground-service-task" });
-        };
-        const adoptedResult = await taskFence.run(() => adoptHeadlessTrackingWithCredential({
-          lifecycle: trackingLifecycle,
-          getBearerToken: async () => {
-            if (!taskFence.isActive()) return null;
-            const token = await getStoredLocationBearerToken();
-            return taskFence.isActive() && buildLocationRequestHeaders(token) ? token : null;
-          },
-          isActive: () => taskFence.isActive(),
-        }));
+        // Keep a small, dedicated tail budget for the unbound timeout marker.
+        // Otherwise a stalled credential/read could consume all 10 seconds and
+        // make "callback entered but adoption timed out" indistinguishable from
+        // a callback that was never observed.
+        const adoptionBudgetMs = Math.max(0, taskFence.remainingMs() - TASK_ENTRY_EVENT_BUDGET_MS);
+        if (adoptionBudgetMs <= 0) {
+          await recordUnboundTaskCallback("ADOPTION_TIMEOUT", callbackEnteredAt, taskFence);
+          return;
+        }
+        const adoptionFence = new TaskCallbackDeadlineFence(createTaskDeadline(adoptionBudgetMs));
+        let adoptedResult: TaskDeadlineResult<Awaited<ReturnType<typeof adoptHeadlessTrackingWithCredentialResult>>>;
+        try {
+          adoptedResult = await adoptionFence.run(() => adoptHeadlessTrackingWithCredentialResult({
+            lifecycle: trackingLifecycle,
+            getBearerToken: async () => {
+              if (!taskFence.isActive() || !adoptionFence.isActive()) return null;
+              const token = await getStoredLocationBearerToken();
+              return taskFence.isActive() && adoptionFence.isActive() && buildLocationRequestHeaders(token) ? token : null;
+            },
+            isActive: () => taskFence.isActive() && adoptionFence.isActive(),
+          }));
+        } catch {
+          await recordUnboundTaskCallback("ADOPTION_ERROR", callbackEnteredAt, taskFence);
+          return;
+        }
         if (adoptedResult.kind !== "VALUE" || !taskFence.isActive()) {
-          publishPreparationFailure("위치 전송 준비 시간 제한으로 저장 여부를 확인하지 못했습니다.");
+          await recordUnboundTaskCallback("ADOPTION_TIMEOUT", callbackEnteredAt, taskFence);
           return;
         }
         const adopted = adoptedResult.value;
-        if (!adopted) {
-          publishPreparationFailure("현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.");
+        if (adopted.kind !== "ADOPTED") {
+          if (adopted.kind !== "INACTIVE") {
+            await recordUnboundTaskCallback(
+              adopted.kind === "NO_CREDENTIAL" ? "NO_CREDENTIAL" : "NO_ADOPTABLE_SESSION",
+              callbackEnteredAt,
+              taskFence,
+            );
+          }
           return;
         }
-        const lat = Number(latest.coords?.latitude);
-        const lng = Number(latest.coords?.longitude);
-        if (!latest.coords || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-          emitDebug({ serverStatus: "error", serverError: "위치 좌표 형식을 확인하지 못했습니다.", source: "foreground-service-task" });
-          return;
-        }
-        const callbackAt = Date.now();
+        const callbackAt = callbackEnteredAt;
         const ensured = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.ensure(
           adopted.state,
           callbackAt,
@@ -1099,6 +1150,23 @@ if (Platform.OS !== "web") {
           return;
         }
         emitPersistedDiagnostics(callbackDiagnostics.value);
+        const lat = Number(latest.coords?.latitude);
+        const lng = Number(latest.coords?.longitude);
+        if (!latest.coords || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+          const coordinateDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(adopted.state, {
+            lastErrorCode: "COORDINATE_INVALID",
+            lastErrorAt: Date.now(),
+          }, () => taskFence.isActive()));
+          if (coordinateDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
+            publishCallbackDeadline(adopted.state);
+            return;
+          }
+          emitPersistedDiagnostics(coordinateDiagnostics.value);
+          if (sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state)) {
+            emitDebug({ serverStatus: "error", serverError: "위치 좌표 형식을 확인하지 못했습니다.", source: "foreground-service-task" });
+          }
+          return;
+        }
         await sendLocationToServer(adopted.state, {
           lat,
           lng,

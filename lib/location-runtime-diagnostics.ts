@@ -19,6 +19,8 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
   /** Captured when this immutable diagnostic operation begins, not when I/O finally commits. */
   updatedAt: number;
   operationId: string;
+  /** App version/build only; excludes package identity, tokens, and user data. */
+  buildLabel: string | null;
   nativeRegistration: NativeRegistrationState;
   lastNativeCheckAt: number | null;
   lastCallbackAt: number | null;
@@ -33,6 +35,17 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
   storedCount: number;
   ignoredCount: number;
   finalizedAt: number | null;
+}
+
+/**
+ * A callback can arrive before a fresh JS runtime has safely adopted a saved
+ * session. This deliberately remains module-scoped: it never guesses which
+ * A/B session owns the event and never stores a token, customer, or coordinate.
+ */
+export interface UnboundLocationTaskEvent {
+  schemaVersion: 1;
+  observedAt: number;
+  code: string;
 }
 
 export interface KeyValueStorage {
@@ -85,6 +98,7 @@ export function createLocationRuntimeDiagnostics(
     ...diagnosticScopeOf(state),
     updatedAt: now,
     operationId: id,
+    buildLabel: null,
     nativeRegistration: "unknown",
     lastNativeCheckAt: null,
     lastCallbackAt: null,
@@ -114,6 +128,7 @@ function isValidDiagnostics(value: unknown): value is LocationRuntimeDiagnostics
     && isFiniteTimestamp(candidate.startedAt)
     && isFiniteTimestamp(candidate.updatedAt)
     && typeof candidate.operationId === "string" && candidate.operationId.length > 0 && candidate.operationId.length <= 80
+    && (candidate.buildLabel === null || candidate.buildLabel === undefined || (typeof candidate.buildLabel === "string" && candidate.buildLabel.length <= 64))
     && ["unknown", "registered", "not_registered", "restart_failed"].includes(String(candidate.nativeRegistration))
     && Number.isSafeInteger(candidate.attemptCount) && (candidate.attemptCount as number) >= 0
     && Number.isSafeInteger(candidate.storedCount) && (candidate.storedCount as number) >= 0
@@ -127,6 +142,7 @@ function normalizeTimestamp(value: unknown): number | null {
 function normalizeDiagnostics(value: LocationRuntimeDiagnostics): LocationRuntimeDiagnostics {
   return {
     ...value,
+    buildLabel: typeof value.buildLabel === "string" && value.buildLabel.length <= 64 ? value.buildLabel : null,
     lastNativeCheckAt: normalizeTimestamp(value.lastNativeCheckAt),
     lastCallbackAt: normalizeTimestamp(value.lastCallbackAt),
     lastMeasuredAt: normalizeTimestamp(value.lastMeasuredAt),
@@ -137,6 +153,16 @@ function normalizeDiagnostics(value: LocationRuntimeDiagnostics): LocationRuntim
     finalizedAt: normalizeTimestamp(value.finalizedAt),
     lastErrorCode: typeof value.lastErrorCode === "string" && value.lastErrorCode.length <= 96 ? value.lastErrorCode : null,
   };
+}
+
+function isValidUnboundTaskEvent(value: unknown): value is UnboundLocationTaskEvent {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<UnboundLocationTaskEvent>;
+  return candidate.schemaVersion === 1
+    && isFiniteTimestamp(candidate.observedAt)
+    && typeof candidate.code === "string"
+    && candidate.code.length > 0
+    && candidate.code.length <= 96;
 }
 
 function active(guard?: DiagnosticsOperationGuard): boolean {
@@ -186,6 +212,10 @@ export class LocationRuntimeDiagnosticsStore {
 
   private legacyKey(): string {
     return this.keyPrefix.replace(/_v2$/, "_v1");
+  }
+
+  private unboundTaskEventKey(): string {
+    return this.keyPrefix.replace(/_v2$/, "_task_event_v1");
   }
 
   private nextOperationId(now: number): string {
@@ -306,6 +336,42 @@ export class LocationRuntimeDiagnosticsStore {
     if (result.kind === "FAILED") return null;
     const { value: current } = result;
     return active(guard) && sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
+  }
+
+  /**
+   * Stores only the latest callback event that could not be safely associated
+   * with a session. It intentionally bypasses the session journal queue: a
+   * hung A diagnostic read must not consume a later callback's bounded entry
+   * window. Callers still provide a fence so a timed-out callback cannot publish
+   * a late UI update after a replacement session starts.
+   */
+  public async recordUnboundTaskEvent(
+    code: string,
+    observedAt = Date.now(),
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<UnboundLocationTaskEvent | null> {
+    const event: UnboundLocationTaskEvent = { schemaVersion: 1, observedAt, code };
+    if (!isValidUnboundTaskEvent(event) || !active(guard)) return null;
+    try {
+      await this.storage.setItem(this.unboundTaskEventKey(), JSON.stringify(event));
+      return active(guard) ? event : null;
+    } catch {
+      // This event is diagnostic-only and must never block a TaskManager callback.
+      return null;
+    }
+  }
+
+  /** Reads the module-scoped event without assigning it to any active session. */
+  public async readUnboundTaskEvent(guard?: DiagnosticsOperationGuard): Promise<UnboundLocationTaskEvent | null> {
+    if (!active(guard)) return null;
+    try {
+      const raw = await this.storage.getItem(this.unboundTaskEventKey());
+      if (!active(guard) || !raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      return isValidUnboundTaskEvent(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Starts an exact replacement diagnostic scope after a new local share starts. */

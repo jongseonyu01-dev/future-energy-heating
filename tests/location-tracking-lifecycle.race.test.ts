@@ -93,7 +93,8 @@ async function main() {
     assert.deepEqual(await pending, { kind: "STALE" });
   }
 
-  // B: stop during delayed notification start cannot revive native collection.
+  // B: native FGS must start before auxiliary notification work; a stop while
+  // that work is delayed must still fence and clean the native collector.
   {
     const notification = deferred<void>();
     const fixture = buildAdapter({
@@ -111,7 +112,7 @@ async function main() {
     assert.ok(await pendingStop);
     assert.equal(fixture.readStored(), null);
     assert.ok(fixture.calls.includes("native:stop"));
-    assert.ok(!fixture.calls.includes("native:start"));
+    assert.ok(fixture.calls.includes("native:start"), "FGS start must not wait for the optional control notification");
   }
 
   // P1: a storage snapshot returned after A stop and B start cannot clear B.

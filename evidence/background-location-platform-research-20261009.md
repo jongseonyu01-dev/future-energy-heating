@@ -1,47 +1,38 @@
-# Android/Expo 백그라운드 위치 조사 근거 — 2026-10-09
 
-## 외부 공식 문서
+## P1 후속 소스 조사·후보 보완 — 2026-10-09 15:xx KST
 
-1. [Expo Location SDK 문서](https://docs.expo.dev/versions/latest/sdk/location/)
-   - `startLocationUpdatesAsync`는 백그라운드에서도 위치 업데이트를 받는 TaskManager 등록 API이며, 태스크는 전역 범위에서 `TaskManager.defineTask`로 정의해야 한다.
-   - Android에서 앱을 강제 종료하면 위치 백그라운드 작업이 자동 재시작되지 않는다. 최근 앱 목록에서 제거했을 때의 동작도 제조사에 따라 달라질 수 있다.
-   - Android `FOREGROUND_SERVICE`/`FOREGROUND_SERVICE_LOCATION`은 앱이 열려 있다가 백그라운드가 된 상태의 위치 접근에 쓰이며, `ACCESS_BACKGROUND_LOCATION`은 별도 권한이다.
-   - `hasStartedLocationUpdatesAsync`는 **등록 여부**를 반환하며 최근 callback, 실제 FGS 프로세스 생존, HTTP 응답/서버 저장을 보장하는 API로 문서화되어 있지 않다.
-   - URL: https://docs.expo.dev/versions/latest/sdk/location/
+### 확인된 소스 사실 (실기기 원인 확정 아님)
 
-2. [Expo TaskManager SDK 문서](https://docs.expo.dev/versions/latest/sdk/task-manager/)
-   - 전역 범위 task 정의가 필요하다. 백그라운드 실행은 JS 앱을 기동해 task를 실행한 뒤 UI 없이 종료될 수 있으므로 React Provider/화면 상태를 실행 근거로 쓸 수 없다.
-   - 등록 task는 세션 간 persistent storage에 보존될 수 있다.
-   - URL: https://docs.expo.dev/versions/latest/sdk/task-manager/
+1. 설치 후보의 `expo-location 19.0.8` Android `LocationModule.kt`는 `foregroundService` 옵션으로 `startLocationUpdatesAsync`를 호출할 때 앱이 전경이 아니면 `ForegroundServiceStartNotAllowedException`을 던진다. `LocationTaskConsumer.didRegister()`는 `startLocationUpdates()` 뒤 `maybeStartForegroundService()`를 호출하며, 후자는 `AppForegroundedSingleton.isForegrounded`가 false면 FGS 시작 없이 return한다.
+2. 같은 native `startLocationUpdates()`는 `requestLocationUpdates()`의 `SecurityException`을 로그만 남기고 return한다. 반면 `hasStartedLocationUpdatesAsync`는 TaskManager consumer 등록 여부만 반환한다. 따라서 `registered=true`는 FGS·GPS·TaskManager JS callback·HTTP·서버 accepted의 증거가 아니다.
+3. `expo-task-manager 14.0.9` `TaskService`는 headless app을 로드한 뒤 task manager에 대기 event를 넘기며, consumer/task를 찾지 못하면 task intent를 취소할 수 있다. 앱 `package.json` main은 `expo-router/entry`; Expo Router `_ctx.android.js`는 app route context를 require한다. 후보의 `app/_layout.tsx`는 모듈 import 단계에서 `LocationTrackingProvider` → `location-tracking`을 import한다.
+4. 실제 root-module import만 수행하고 `RootLayout()` 렌더를 호출하지 않는 독립 harness에서 `TaskManager.defineTask("FUTURE_ENERGY_LOCATION_TASK")`가 정확히 한 번 호출되었다 (`LOCATION_HEADLESS_ENTRY_INTEGRATION_PASS`). 이는 현재 source entry의 회귀 방지 증거이지 Android 기기에서 callback이 실제 도착한다는 증거는 아니다.
+5. Production Vercel 배포 `dpl_FSLz4gm7BJYcJBfcgray4y6uahf3`은 read-only 조회에서 `READY`, Git commit `4f49b140c3b4f86685933dc1cc53fa5083d66cd6`으로 확인되었다. 그 commit 및 현재 remote `main`의 `public/web/track.html` blob은 모두 `d60964b0445e019331ef281543f78b77d00d1818`이다. 따라서 delayed 상태가 generic waiting으로 덮이는 문제는 **현재 Production source identity와 일치하는 소스 버그**다. 실제 고객 세션의 최초 실패 지점은 여전히 미확정이다.
 
-3. [Android Developers — Foreground service types: location](https://developer.android.com/develop/background-work/services/fgs/service-types#location)
-   - Android 14+에서 location FGS type과 `FOREGROUND_SERVICE_LOCATION` 선언이 필요하고, 위치 서비스가 켜져 있으며 coarse/fine 권한이 필요하다.
-   - 위치 권한은 while-in-use 제한 대상이므로 앱이 이미 백그라운드일 때 location FGS를 새로 만들려면 `ACCESS_BACKGROUND_LOCATION`이 필요하다. 이는 **출발 시 전경에서 이미 FGS를 시작한 뒤 앱 전환한 경우와 구분**해야 한다.
-   - URL: https://developer.android.com/develop/background-work/services/fgs/service-types#location
+### 이번 후보 보완
 
-## 설치된 후보의 실제 Expo Android 소스 대조
+- 위치 lifecycle은 native FGS 시작을 보조 control notification보다 먼저 수행한다. 출발 버튼 처리 중 보조 알림 I/O가 FGS의 전경 시작 window를 넓히지 않도록 한 최소 순서 변경이며, notification이 callback/HTTP/저장을 보장한다고 주장하지 않는다.
+- TaskManager callback은 entry 시각을 확보한다. session 채택 전 native error·빈/오래된 측정·adoption timeout·no credential은 token/좌표/고객정보 없이 module-scoped unbound event (`TASK_NATIVE_ERROR`, `NO_FRESH_MEASUREMENT`, `ADOPTION_TIMEOUT`, `NO_CREDENTIAL`, `NO_ADOPTABLE_SESSION`)로만 남긴다. 이 event는 A/B 어느 세션에도 임의 귀속하거나 기사 화면 오류로 publish하지 않는다.
+- headless adoption 후 exact session이 확인되면 callback entry time, latest measurement time, native registration check, coordinate-invalid error를 기존 immutable session journal에 기록한다. request start, response, accepted server `updatedAt`, terminal/error 분류, non-sensitive app version/build label은 기존 session diagnostics에 유지된다.
+- unbound marker에는 callback 전체 10초 deadline 중 최대 750ms tail budget만 배정한다. 준비 I/O가 멎으면 marker가 callback 전체 예산을 소모하지 않으며, timed-out 작업은 fence를 다시 확인해 late UI/state publication 권한을 얻지 못한다.
 
-- 검사 버전: `expo 54.0.29`, `expo-location 19.0.8`, `expo-task-manager 14.0.9`, `react-native 0.81.5`.
-- `expo-location` `LocationModule.kt`:
-  - `startLocationUpdatesAsync`는 `foregroundService` 옵션이 있으면 background permission 없이 foreground location/FGS 권한으로 task를 등록한다.
-  - 앱이 전경이 아니면 `ForegroundServiceStartNotAllowedException`을 낸다.
-  - `hasStartedLocationUpdatesAsync`는 TaskManager consumer 등록 여부만 확인한다.
-- `LocationTaskConsumer.kt`:
-  - location PendingIntent broadcast → Job → TaskManager JS task 실행 경로를 사용한다.
-  - FGS `LocationTaskService`는 location updates와 별개이며, service 자체는 `START_REDELIVER_INTENT`를 반환하고 `killServiceOnDestroy:false`이면 recent-task 제거 시 자체 종료 요청을 하지 않는다.
-  - `LocationTaskConsumer`는 background 상태에서 deferred locations의 Android 기본값(`deferredUpdatesDistance` 0, `deferredUpdatesInterval` 0)에 따라 dispatch한다. JS callback/HTTP가 막힌 상황을 native FGS 알림만으로 알 수 없다.
+### 고객 지도 표시 수정 범위
 
-## 구현/검수 원칙
+- `DELAYED`/`LEGACY_RECEIPT_DELAYED`는 server가 좌표를 `null`로 제공하는 정책을 유지한다. 지도 초기화에도 같은 delay-specific empty message를 전달해 generic “기사 위치 수신 대기”로 덮이지 않게 했다.
+- `CURRENT` map flow, `DELAYED`, `UNAVAILABLE` first-signal wait, Kakao SDK failure, polling/network failure를 실행 harness로 분리했다 (`TRACK_LOCATION_DISPLAY_INTEGRATION_PASS`). stale coordinates are never rendered as current.
 
-- 별도 sticky 중지 알림과 Expo native FGS 알림은 서로 독립적이므로 하나가 남아도 다른 하나나 callback/HTTP가 살아 있다는 증거가 아니다.
-- 화면 debug state는 module memory이므로 앱/JS runtime 재생성 뒤의 현재 상태 근거가 될 수 없다.
-- 복귀 시 `restoreForUser()`가 persisted intent만 보고 return하면 native task가 이미 외부 중단된 경우 재시작을 보장하지 못한다.
-- 진단은 session-bound persisted record에 callback 시작/HTTP 시작/응답/accepted 저장 시각과 오류 분류를 기록하고, 화면 복귀 때 registered 여부·최근 진단·현재 소유자를 대조해야 한다.
-- `fetch()` 반환 이후 `response.json()`에도 별도 유한 시간 경계가 필요하다. 단일 queue가 JSON 본문 대기로 영구 점유되어 최신 callback을 막지 않게 해야 한다.
-- 위 공식/소스 조사는 실제 Android 기기에서의 실행 성공 증거가 아니다. 새 APK 전 실기기에서 다른 앱 전환·잠금 중 accepted 저장 시각의 증가를 확인해야 한다.
+### 지속 상태 UI 선택
 
-## TaskManager 작업 예산 대조 — 코드 보완 근거
+| 후보 | 권한/플랫폼 조건 | 판단 |
+| --- | --- | --- |
+| 기존 Android location FGS ongoing notification | 기존 location FGS/알림 구성, status-bar notification | **채택 후보.** 최소 추가 권한이며 앱 열기·기존 중지 action의 비민감 상태 surface로 사용한다. 마지막 accepted 저장 경과는 저장 증거가 있을 때만 표시하고, 고객명·주소·좌표는 표시하지 않는다. |
+| Overlay/bubble | Draw over other apps는 Android Special app access이며 Settings에서 별도 승인 필요 | **미채택.** 추가 특별 권한과 policy/UX 부담이 있어 현재 P1 근본 원인 해결 전 도입하지 않는다. |
+| PiP | Activity 등록·PiP 전환 필요; Android 문서는 video playback/video call/navigation 중심 | **미채택.** location callback/FGS/잠금 생존을 보장하지 않으며, 작은 UI 입력성도 제한적이다. |
 
-- 잠금된 `expo-task-manager` `TaskService.java`에는 `MAX_TASK_EXECUTION_TIME_MS = 15000`와 async job의 `finishJobAfterTimeout(..., 15000)`, timeout 시 `jobFinished(params, false)`가 있다.
-- 후보는 이 native job 경계보다 낮게 **fetch 8초**와 **응답 본문 2초**를 따로 제한하고, headless callback 안의 지연 재시도 루프는 제거한다. 이로써 `fetch`가 반환된 뒤 무제한 `response.json()`이 최신 측정 queue를 잡는 빈틈을 줄인다.
-- 이 시간값은 TaskManager가 JS를 정확히 15초에 강제 중단한다는 주장이나 이번 실기기 중단의 확정 원인이 아니다. native callback·HTTP·서버 `accepted:true` 저장은 세션별로 각각 기록·대조해야 한다.
+- 공식 근거: [Android FGS overview](https://developer.android.com/develop/background-work/services/fgs), [special permissions](https://developer.android.com/training/permissions/requesting-special), [PiP guide](https://developer.android.com/develop/ui/views/picture-in-picture), [Expo Location](https://docs.expo.dev/versions/latest/sdk/location/), [Expo TaskManager](https://docs.expo.dev/versions/latest/sdk/task-manager/).
+
+### 이번 단계의 명확한 한계
+
+- Android 실기기에서 다른 앱 전환·일반 화면 잠금 **중**, 앱을 다시 열기 전 callback·HTTP response·서버 accepted 저장 시각이 계속 증가하는 증거는 아직 없다.
+- Android force-stop, OEM battery restriction, 권한 철회는 일반 앱 전환/화면 잠금과 다르며 이번 source harness로 해결을 주장할 수 없다.
+- APK54는 변경·재빌드·교체하지 않았다. source review 전 새 APK·main merge·Production 배포·운영 위치 호출은 하지 않는다.

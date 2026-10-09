@@ -64,6 +64,32 @@ describe("세션별 위치 런타임 진단", () => {
     expect(next).toMatchObject({ nativeRegistration: "registered", lastCallbackAt: null, lastStoredAt: null });
   });
 
+  it("세션을 아직 채택하지 못한 callback은 A/B 진단에 귀속하지 않는다", async () => {
+    const values = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await diagnostics.begin(stateA, 1_000);
+    await expect(diagnostics.recordUnboundTaskEvent("NO_CREDENTIAL", 1_100)).resolves.toEqual({
+      schemaVersion: 1,
+      observedAt: 1_100,
+      code: "NO_CREDENTIAL",
+    });
+    await expect(diagnostics.read(stateA)).resolves.toMatchObject({
+      requestId: stateA.requestId,
+      lastCallbackAt: null,
+      lastErrorCode: null,
+    });
+    await expect(diagnostics.readUnboundTaskEvent()).resolves.toMatchObject({
+      observedAt: 1_100,
+      code: "NO_CREDENTIAL",
+    });
+  });
+
   it("복귀 뒤에도 최근 오류를 보이고 오래된 uploading은 유지하지 않는다", async () => {
     const storage = memoryStorage();
     const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
@@ -171,6 +197,7 @@ describe("세션별 위치 런타임 진단", () => {
       technicianUserId: stateA.technicianUserId,
       startedAt: stateA.startedAt,
       updatedAt: 5_000,
+      buildLabel: null,
       nativeRegistration: "registered" as const,
       lastNativeCheckAt: null,
       lastCallbackAt: null,

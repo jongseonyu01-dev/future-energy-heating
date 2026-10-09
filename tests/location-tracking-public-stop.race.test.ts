@@ -79,6 +79,7 @@ async function main() {
       export const getCurrentPositionAsync = async () => null;
     `);
     await writeFile(join(stubs, "task-manager.ts"), 'export const isTaskDefined = () => true; export const defineTask = () => undefined;\n');
+    await writeFile(join(stubs, "constants.ts"), 'export default { nativeAppVersion: "test", nativeBuildVersion: "0", expoConfig: null };\n');
     await writeFile(join(stubs, "oauth.ts"), 'export const getApiBaseUrl = () => "https://invalid.example";\n');
     await writeFile(join(stubs, "auth.ts"), 'export const getSessionToken = async () => null; export const getUserInfo = async () => null;\n');
     await writeFile(join(stubs, "request-auth.ts"), 'export const buildLocationRequestHeaders = () => null; export const formatLocationRequestFailure = () => "";\n');
@@ -90,12 +91,13 @@ async function main() {
       .replace('import * as Notifications from "expo-notifications";', 'import * as Notifications from "./stubs/notifications.ts";')
       .replace('import * as Location from "expo-location";', 'import * as Location from "./stubs/location.ts";')
       .replace('import * as TaskManager from "expo-task-manager";', 'import * as TaskManager from "./stubs/task-manager.ts";')
+      .replace('import Constants from "expo-constants";', 'import Constants from "./stubs/constants.ts";')
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
       .replace('} from "@/lib/location-tracking-lifecycle";', `} from ${JSON.stringify(join(root, "lib/location-tracking-lifecycle.ts"))};`)
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
-      .replace('import { adoptHeadlessTrackingWithCredential } from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`);
+      .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`);
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     Object.assign(globalThis as Record<string, unknown>, {

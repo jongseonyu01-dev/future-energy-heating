@@ -50,6 +50,9 @@ async function main() {
       export const diagnosticRecords = () => [...values.entries()]
         .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_v2:"))
         .map(([, value]) => JSON.parse(value));
+      export const unboundTaskEvents = () => [...values.entries()]
+        .filter(([key]) => key === "location_tracking_runtime_diagnostics_task_event_v1")
+        .map(([, value]) => JSON.parse(value));
     `);
     await writeFile(join(stubs, "notifications.ts"), `
       export const IosAuthorizationStatus = { PROVISIONAL: 3 };
@@ -77,6 +80,7 @@ async function main() {
       export const defineTask = (_name: string, callback: (payload: unknown) => Promise<void>) => { task = callback; };
       export const invokeTask = async (payload: unknown) => { if (!task) throw new Error("TASK_NOT_REGISTERED"); await task(payload); };
     `);
+    await writeFile(join(stubs, "constants.ts"), 'export default { nativeAppVersion: "test", nativeBuildVersion: "0", expoConfig: null };\n');
     await writeFile(join(stubs, "oauth.ts"), 'export const getApiBaseUrl = () => "https://invalid.example";\n');
     await writeFile(join(stubs, "auth.ts"), 'export const getSessionToken = async () => globalThis.__tokenGate ? await globalThis.__tokenGate : "technician-bearer"; export const getUserInfo = async () => null;\n');
     await writeFile(join(stubs, "request-auth.ts"), `
@@ -91,6 +95,7 @@ async function main() {
       .replace('import * as Notifications from "expo-notifications";', 'import * as Notifications from "./stubs/notifications.ts";')
       .replace('import * as Location from "expo-location";', 'import * as Location from "./stubs/location.ts";')
       .replace('import * as TaskManager from "expo-task-manager";', 'import * as TaskManager from "./stubs/task-manager.ts";')
+      .replace('import Constants from "expo-constants";', 'import Constants from "./stubs/constants.ts";')
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
@@ -100,13 +105,14 @@ async function main() {
       .replace('import { parseJsonWithin } from "@/lib/location-upload-response";', `import { parseJsonWithin } from ${JSON.stringify(join(root, "lib/location-upload-response.ts"))};`)
       .replace('} from "@/lib/location-tracking-lifecycle";', `} from ${JSON.stringify(join(root, "lib/location-tracking-lifecycle.ts"))};`)
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
-      .replace('import { adoptHeadlessTrackingWithCredential } from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`)
+      .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`)
       .replace('} from "@/lib/location-task-budget";', `} from ${JSON.stringify(join(root, "lib/location-task-budget.ts"))};`)
       // Preserve a bounded callback deadline while leaving enough scheduling
       // room for the genuine terminal path. A 4ms Node transform was flaky and
       // could expire before the mocked immediate HTTP response was classified.
       .replace("const TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000;", "const TASK_CALLBACK_NETWORK_BUDGET_MS = 40;")
-      .replace("const RESPONSE_BODY_TIMEOUT_MS = 2_000;", "const RESPONSE_BODY_TIMEOUT_MS = 5;");
+      .replace("const RESPONSE_BODY_TIMEOUT_MS = 2_000;", "const RESPONSE_BODY_TIMEOUT_MS = 5;")
+      .replace("const TASK_ENTRY_EVENT_BUDGET_MS = 750;", "const TASK_ENTRY_EVENT_BUDGET_MS = 8;");
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     let requests = 0;
@@ -122,6 +128,7 @@ async function main() {
       const taskManager = await import(`${pathToFileURL(join(stubs, "task-manager.ts")).href}?v=${Date.now()}`);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
         diagnosticRecords: () => { requestId: number; attemptCount: number }[];
+        unboundTaskEvents: () => { observedAt: number; code: string }[];
       };
       const waitForDiagnostics = async () => {
         await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
@@ -219,7 +226,29 @@ async function main() {
       });
       await waitForDiagnostics();
       assert.equal(maxAttempts(noCredentialState.requestId), 0, "credential failure before fetch must retain zero attempts");
+      assert.equal(storage.unboundTaskEvents().at(-1)?.code, "NO_CREDENTIAL", "unbound credential failure must be durable without guessing a session owner");
       Object.assign(globalThis as Record<string, unknown>, { __tokenGate: null });
+
+      // Callback arrival and preparation failures are distinct from a callback
+      // that has not been observed. Neither may be attributed to the active
+      // customer session before adoption succeeds.
+      await taskManager.invokeTask({ error: new Error("SYNTHETIC_NATIVE_TASK_ERROR") });
+      assert.equal(storage.unboundTaskEvents().at(-1)?.code, "TASK_NATIVE_ERROR");
+      await taskManager.invokeTask({ data: { locations: [] } });
+      assert.equal(storage.unboundTaskEvents().at(-1)?.code, "NO_FRESH_MEASUREMENT");
+
+      const invalidCoordinateState = { ...state, token: "i".repeat(43), requestId: 5061, startedAt: 506_100 };
+      await tracking.startLocationTracking(invalidCoordinateState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: "not-a-number", longitude: 127.45, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      const invalidDiagnostics = storage.diagnosticRecords()
+        .filter((record) => record.requestId === invalidCoordinateState.requestId)
+        .at(-1) as { lastCallbackAt?: number; lastErrorCode?: string; attemptCount?: number } | undefined;
+      assert.ok(invalidDiagnostics?.lastCallbackAt, "adopted callback must persist its entry timestamp before coordinate validation");
+      assert.equal(invalidDiagnostics?.lastErrorCode, "COORDINATE_INVALID");
+      assert.equal(invalidDiagnostics?.attemptCount, 0, "coordinate rejection before fetch must retain zero attempts");
 
       // A stored result is historical evidence only. A following actual fetch
       // must remain "uploading" until its own response is classified.

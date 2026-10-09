@@ -596,6 +596,7 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>native 등록: {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]} · 확인: {formatTrackingTime(debugState?.lastNativeCheckAt)}</Text>
           <Text style={s.debugRow}>마지막 Task callback: {formatTrackingTime(debugState?.lastCallbackAt)} · 마지막 측정: {formatTrackingTime(debugState?.lastMeasuredAt)}</Text>
           <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
+          <Text style={s.debugRow}>앱 빌드: {debugState?.buildLabel || '기록 전'}</Text>
           <Text style={[s.debugRow, { color: trackingStatusColor[trackingStatus] }]}>
             서버 상태: {trackingStatusLabel[trackingStatus]}{debugState?.serverError ? ` — ${debugState.serverError}` : ''}
           </Text>
