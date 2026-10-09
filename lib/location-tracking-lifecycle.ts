@@ -338,10 +338,15 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
    * A stop/logout/new start while `read()` is pending changes generation, so the
    * stale saved A is never passed to `startNativeCollection()`.
    */
-  public async restoreForUser(userId: number): Promise<T | null> {
+  public async restoreForUser(userId: number, expectedState?: T): Promise<T | null> {
     const readGeneration = this.generation;
     const state = await this.adapter.read();
     if (!state) return null;
+    // A foreground permission-confirmation result belongs only to the exact
+    // saved work it started with. If logout, terminal stop, or a replacement
+    // share changed the pointer while permission UI was open, do not inspect or
+    // stop that newer state on behalf of old A.
+    if (expectedState && !sameTrackingLifecycleState(state, expectedState)) return null;
     if (await this.isInactive(state, () => readGeneration === this.generation)) return null;
     if (state.technicianUserId !== userId) {
       if (readGeneration === this.generation && !this.intent) {

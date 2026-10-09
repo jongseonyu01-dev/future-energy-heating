@@ -92,7 +92,7 @@ async function main() {
       export const stopLocationUpdatesAsync = async () => { globalThis.__nativeStops += 1; if (globalThis.__nativeStopGate) await globalThis.__nativeStopGate; };
       export const requestForegroundPermissionsAsync = async () => ({ status: "granted" });
       export const getForegroundPermissionsAsync = async () => globalThis.__foregroundPermission ?? ({ status: "granted" });
-      export const getBackgroundPermissionsAsync = async () => globalThis.__backgroundPermission ?? ({ status: "granted" });
+      export const getBackgroundPermissionsAsync = async () => { if (globalThis.__backgroundPermissionGate) { globalThis.__backgroundPermissionReadStarted?.resolve(); return await globalThis.__backgroundPermissionGate; } return globalThis.__backgroundPermission ?? ({ status: "granted" }); };
       export const getCurrentPositionAsync = async () => null;
     `);
     await writeFile(join(stubs, "task-manager.ts"), 'export const isTaskDefined = () => true; export const defineTask = () => undefined;\n');
@@ -179,6 +179,37 @@ async function main() {
     assert.equal(resumedApproved.state?.requestId, deniedRestore.requestId, `approved exact pending session must restore normally: ${JSON.stringify(resumedApproved)}`);
     assert.equal(globals.__nativeStarts, nativeStartsBeforeApprovedRestore + 1, "approved restored share may start its exact native collector once");
     assert.equal(await tracking.isLocationTrackingPermissionPending(deniedRestore), false, "successful exact resume must clear the stale local permission-pending fence");
+
+    // When this exact share is already current, Android Settings → app active
+    // must suspend it immediately from the restore permission check. No later
+    // native location callback is needed to trigger the local stop.
+    const nativeStopsBeforeWarmDenied = Number(globals.__nativeStops);
+    globals.__backgroundPermission = { status: "denied" };
+    const warmDenied = await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId);
+    await tick();
+    assert.equal(warmDenied?.requestId, deniedRestore.requestId, "denied current work remains visible as permission-pending");
+    assert.equal(globals.__nativeStops, nativeStopsBeforeWarmDenied + 1, "denied current work must stop native collection during the permission check itself");
+    assert.equal(await tracking.isLocationTrackingPermissionPending(deniedRestore), true, "denied current work must publish its reversible permission-pending marker");
+
+    // A delayed foreground approval for old A cannot revive it after the user
+    // ended A or moved to another work B.
+    const permissionGate = deferred<{ status: string }>();
+    globals.__backgroundPermission = undefined;
+    globals.__backgroundPermissionReadStarted = { resolve: () => permissionGate.resolve({ status: "granted" }) };
+    // Replace the resolver with an observable gate after the resume starts.
+    const resumeReadStarted = deferred<void>();
+    globals.__backgroundPermissionReadStarted = resumeReadStarted;
+    globals.__backgroundPermissionGate = permissionGate.promise;
+    const lateResumeA = tracking.resumeLocationTrackingAfterPermissionCheck(deniedRestore.technicianUserId, deniedRestore);
+    await resumeReadStarted.promise;
+    const replacementB = { ...deniedRestore, token: "b".repeat(43), requestId: 93, startedAt: 93_000 };
+    await tracking.startLocationTracking(replacementB);
+    permissionGate.resolve({ status: "granted" });
+    const lateResumeResult = await lateResumeA;
+    assert.equal(lateResumeResult.status, "no_matching_session", "late A permission approval must not apply after B replaces the pointer");
+    assert.equal(tracking.__testLifecycleIntent()?.requestId, replacementB.requestId, "late A must not stop or replace current B");
+    globals.__backgroundPermissionGate = null;
+    globals.__backgroundPermissionReadStarted = null;
 
     // A visible optional overlay is revoked immediately when an exact in-memory
     // share stops. It must not wait for delayed Android native cleanup.

@@ -72,15 +72,21 @@ async function main() {
       let debugListener: ((state: any) => void) | null = null;
       export let permissionPending = true;
       export let resumeCalls = 0;
+      export let resumeGate: Promise<void> | null = null;
+      export let resumeResult: any = { state: ${JSON.stringify(stateA)}, status: "resumed" };
       export let latestUnbound: any = null;
       export const appStateEvents: string[] = [];
       export const setLatestUnbound = (value: any) => { latestUnbound = value; };
+      export const setPermissionPending = (value: boolean) => { permissionPending = value; };
+      export const setResumeGate = (value: Promise<void> | null) => { resumeGate = value; };
+      export const setResumeResult = (value: any) => { resumeResult = value; };
+      export const emitTrackingState = (value: any) => trackingListener?.(value);
       export const getLatestUnboundLocationTaskEvent = async () => latestUnbound;
       export const createLocationStopAuthSnapshot = () => ({ technicianUserId: 17, bearerToken: "bearer" });
       export const getPersistedTrackingState = async () => (${JSON.stringify(stateA)});
       export const isLocationTrackingPermissionPending = async () => permissionPending;
       export const recordLocationTrackingAppState = (next: string) => { appStateEvents.push(next); };
-      export const resumeLocationTrackingAfterPermissionCheck = async () => { resumeCalls += 1; permissionPending = false; return { state: ${JSON.stringify(stateA)}, status: "resumed" }; };
+      export const resumeLocationTrackingAfterPermissionCheck = async () => { resumeCalls += 1; if (resumeGate) await resumeGate; permissionPending = false; return resumeResult; };
       export const restoreLocationTrackingForUser = async () => null;
       export const startLocationTracking = async () => undefined;
       export const stopStoredTrackingAndNotify = async () => { trackingListener?.(null); };
@@ -137,6 +143,36 @@ async function main() {
     assert.equal(tracking.resumeCalls, 1, "resume control must call the local resume API once without a departure/server start path");
     assert.equal(react.__latest().trackingRequestId, stateA.requestId, "resume must retain the original work identity");
     assert.equal(react.__latest().isPermissionPending, false, "resumed exact session must not remain visually blocked by a stale pending marker");
+
+    // Permission confirmation can finish after the technician ends A or opens
+    // another work B. The late A result must not clear, overwrite, or restart B.
+    const delayedResume = Promise.withResolvers<void>();
+    tracking.setPermissionPending(true);
+    tracking.setResumeResult({ state: stateA, status: "resumed" });
+    tracking.setResumeGate(delayedResume.promise);
+    const lateAResume = react.__latest().resumeTrackingAfterPermissionCheck();
+    await tick();
+    const stateB = { ...stateA, token: "b".repeat(43), requestId: 72, startedAt: 72_000 };
+    tracking.emitTrackingState(stateB);
+    await react.__flush();
+    delayedResume.resolve();
+    assert.equal(await lateAResume, "unavailable", "late A permission result must be cancelled after a different work B becomes current");
+    await react.__flush();
+    assert.equal(react.__latest().trackingRequestId, stateB.requestId, "late A must not overwrite B's visible work");
+
+    const delayedEndedResume = Promise.withResolvers<void>();
+    tracking.setPermissionPending(true);
+    tracking.setResumeResult({ state: stateB, status: "resumed" });
+    tracking.setResumeGate(delayedEndedResume.promise);
+    const lateEndedResume = react.__latest().resumeTrackingAfterPermissionCheck();
+    await tick();
+    tracking.emitTrackingState(null);
+    await react.__flush();
+    delayedEndedResume.resolve();
+    assert.equal(await lateEndedResume, "unavailable", "late permission result must be cancelled after arrival/cancel/logout clears the work");
+    await react.__flush();
+    assert.equal(react.__latest().trackingRequestId, null, "late ended-work result must not revive an old share");
+    tracking.setResumeGate(null);
 
     native.emitState("background");
     await tick();

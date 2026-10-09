@@ -164,3 +164,18 @@
    - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`: revoke 뒤 approval만으로는 cold callback HTTP 0회, explicit resume 뒤 다음 valid callback HTTP 1회; delayed old pending marker write가 resume acknowledgement 뒤 settle해도 pending=false와 next callback HTTP 1회를 확인했다.
    - lifecycle/headless/background-sharing contract standalone marker 및 Vitest 4 files/39 tests를 재실행했다. edited-file ESLint errors 0(기존 `tech-schedule.tsx` unused warnings 2개), `git diff --check` PASS. full TypeScript는 `c2fcf26` baseline과 candidate 모두 기존 83 errors, normalized diff 0이다.
 5. **금지/한계:** 이 후보는 새 APK·재서명·merge·Production deploy·공개 링크 변경을 만들지 않았다. 실기기 수용은 새 내부 APK가 독립 code review를 통과한 뒤, 앱 재진입 전 일반 앱 전환·홈·일반 잠금 중 callback → request/body → accepted 시각 증가와 terminal 후 update 0으로 별도 판단한다.
+
+
+## 2026-10-10 07:34 권한 변경 즉시 일시중지·늦은 재개 결과 격리 후보
+
+> **확정 범위:** 이 항목은 `f5b78fe` 위 source-level lifecycle/Provider/TaskManager 합성 실행의 두 권한 경합 결함과 최소 보완이다. APK56에서 관측된 앱 밖 accepted 공백의 실제 원인을 확정하지 않는다. 운영 HTTP·고객/기사 위치·출발/도착·문자·DB는 호출하지 않았다.
+
+1. **현재 공유 중 권한 거부:** foreground AppState 복귀의 non-interactive permission read가 `denied`를 확인할 때, 기존 코드의 cold `suspendStoredExact()`만 사용하면 current in-memory `intent`는 즉시 native collection/upload authority를 fence하지 못할 수 있었다. 이제 same exact current state이면 `suspendKnownExact()`로 generation·upload authority·overlay owner를 먼저 무효화하고 native stop을 이어서 시작한다. 따라서 다음 location callback을 기다리지 않으며, session pointer는 terminal로 지우지 않고 permission-pending으로 유지한다.
+2. **권한 재개 결과 소유권:** “권한 확인·공유 재개”는 클릭 당시의 exact state를 입력으로 잡고, Android permission read 뒤 persisted pointer를 다시 비교한다. 업무 도착/취소·logout·다른 계정·다른 업무 B가 그 사이 발생하면 `no_matching_session`으로 종료한다. `restoreForUser`도 expected pointer가 아니면 native collection을 시작하지 않는다. Provider는 동일 exact state가 바뀔 때 resume generation을 즉시 취소하므로 늦은 A 결과가 B 화면을 clear/overwrite/restart하지 못한다.
+3. **AppState와 native callback의 동일 정책:** AppState active reconciliation은 `restoreLocationTrackingForUser()`를 통해 위 exact permission suspend를 사용하고, native `E_LOCATION_UNAUTHORIZED` 및 headless permission eligibility denial은 이미 동일 `suspendCurrentTrackingForPermissionRevocation()`으로 upload authority를 first-step으로 무효화한다. 권한 대기 중에는 기존 업무의 도착·취소만 유지하며, 명시 foreground 재개 전 native re-registration·새 server session·고객 문자·좌표 read·강제 upload를 실행하지 않는다.
+4. **실행 증거:**
+   - `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`: current exact A의 denied restore가 다음 callback 없이 native stop을 시작하고 permission-pending pointer를 유지함, delayed A permission approval 중 B start 후 A result가 `no_matching_session`이며 B intent를 보존함을 실제 transformed tracking module로 확인했다.
+   - `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`: actual Provider hook harness에서 delayed A permission result 뒤 B state와 terminal/null state를 차례로 전달해, late result가 B trackingRequestId를 덮지 않고 종료된 A를 되살리지 않음을 확인했다. 재개 버튼은 pending 중 disabled/spinner로 중복 query도 막는다.
+   - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`와 `tests/location-permission-flow.test.ts` 8 cases PASS: native callback permission revoke와 headless denied path는 HTTP 전에 exact session suspend/return하며, new departure의 permission denial은 server session 0회다.
+   - 추가 보호 suite: `LOCATION_CUSTOM_PACKAGE_ENTRY_HEADLESS_INTEGRATION_PASS`, `LOCATION_TRACKING_LIFECYCLE_RACE_PASS`, `LOCATION_STATUS_OVERLAY_OWNER_AND_AGE_CONTRACT_PASS`, `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`; Vitest `location-runtime-diagnostics`, `location-callback-isolation`, `location-permission-flow` 3 files/34 tests PASS. Edited-file ESLint는 errors 0, 기존 `tech-schedule.tsx` unused warning 2개는 그대로다.
+5. **남은 한계:** Android real-device에서 permission Settings의 실제 AppState transition, 승인 뒤 explicit same-work resume, 일반 앱 전환·홈·잠금 중 callback → HTTP → accepted 지속은 새 검수 APK 이후 별도 증거가 필요하다. 이 후보는 APK build·재서명·merge·Production deploy·실제 운영 호출을 만들지 않는다.

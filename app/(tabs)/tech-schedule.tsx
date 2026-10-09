@@ -77,6 +77,7 @@ export default function TechScheduleScreen() {
   const {
     isTracking,
     isPermissionPending,
+    isPermissionResumeChecking,
     trackingToken,
     trackingRequestId,
     trackingUrl,
@@ -348,6 +349,7 @@ export default function TechScheduleScreen() {
   };
 
   const handleResumePermissionPendingTracking = async () => {
+    if (isPermissionResumeChecking) return;
     const result = await resumeTrackingAfterPermissionCheck();
     if (result === "resumed") {
       Alert.alert("위치 공유 재개 준비", "기존 업무의 위치 공유를 다시 시작했습니다. 새 위치 저장은 이후 ‘마지막 새 위치 저장’ 시각으로 별도 확인해 주세요.");
@@ -496,8 +498,15 @@ export default function TechScheduleScreen() {
             {isPermissionPending && (
               <View style={s.permissionPendingBox}>
                 <Text style={s.permissionPendingText}>위치 권한 확인 대기 중입니다. 기존 업무는 유지되며 도착·업무 취소를 계속 사용할 수 있습니다.</Text>
-                <TouchableOpacity style={s.resumeTrackingBtn} onPress={() => { void handleResumePermissionPendingTracking(); }} activeOpacity={0.8}>
-                  <Text style={s.resumeTrackingBtnText}>권한 확인·공유 재개</Text>
+                <TouchableOpacity
+                  style={[s.resumeTrackingBtn, isPermissionResumeChecking && s.btnDisabled]}
+                  onPress={() => { void handleResumePermissionPendingTracking(); }}
+                  activeOpacity={0.8}
+                  disabled={isPermissionResumeChecking}
+                >
+                  {isPermissionResumeChecking
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={s.resumeTrackingBtnText}>권한 확인·공유 재개</Text>}
                 </TouchableOpacity>
               </View>
             )}

@@ -46,6 +46,8 @@ export interface LocationTrackingContextValue {
   isTracking: boolean;
   /** A non-terminal existing session is paused while Android location approval is missing. */
   isPermissionPending: boolean;
+  /** A foreground-only permission recheck is in progress for the exact visible work. */
+  isPermissionResumeChecking: boolean;
   trackingToken: string | null;
   trackingRequestId: number | null;
   trackingUrl: string | null;
@@ -78,6 +80,7 @@ export interface StartTrackingResult {
 const LocationTrackingContext = createContext<LocationTrackingContextValue>({
   isTracking: false,
   isPermissionPending: false,
+  isPermissionResumeChecking: false,
   trackingToken: null,
   trackingRequestId: null,
   trackingUrl: null,
@@ -106,6 +109,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const { user, isLoading } = useAppAuth();
   const [isTracking, setIsTracking] = useState(false);
   const [isPermissionPending, setIsPermissionPending] = useState(false);
+  const [isPermissionResumeChecking, setIsPermissionResumeChecking] = useState(false);
   const [trackingToken, setTrackingToken] = useState<string | null>(null);
   const [trackingRequestId, setTrackingRequestId] = useState<number | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
@@ -119,6 +123,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const unboundReadGeneration = useRef(0);
   const unboundScope = useRef("");
   const permissionPendingReadGeneration = useRef(0);
+  const permissionResumeGeneration = useRef(0);
 
   const refreshPermissionPending = useCallback((state: PersistedTrackingState | null) => {
     const generation = ++permissionPendingReadGeneration.current;
@@ -142,6 +147,11 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const applyState = useCallback((state: PersistedTrackingState | null) => {
     if (!sameTrackingLifecycleState(trackingStateRef.current, state)) {
       overlayRequestGeneration.current += 1;
+      // A permission result is valid only for the exact work that requested it.
+      // Cancel it before state A is replaced, stopped, logged out, or reconciled
+      // to another account/work so it cannot apply a late result to B.
+      permissionResumeGeneration.current += 1;
+      setIsPermissionResumeChecking(false);
     }
     trackingStateRef.current = state;
     const view = stateToView(state);
@@ -345,20 +355,41 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
 
   const resumeTrackingAfterPermissionCheck = useCallback(async (): Promise<"resumed" | "permission_required" | "unavailable"> => {
     if (!user?.userId || user.appRole !== "technician") return "unavailable";
-    const result = await resumeLocationTrackingAfterPermissionCheck(user.userId);
-    applyState(result.state);
-    await checkPermissions();
-    return result.status === "resumed"
-      ? "resumed"
-      : result.status === "permission_required"
-        ? "permission_required"
-        : "unavailable";
+    const expectedState = trackingStateRef.current;
+    if (!expectedState || expectedState.technicianUserId !== user.userId) return "unavailable";
+    const expectedScope = `technician:${user.userId}`;
+    const requestGeneration = ++permissionResumeGeneration.current;
+    setIsPermissionResumeChecking(true);
+    const isStillCurrentRequest = () => (
+      requestGeneration === permissionResumeGeneration.current
+      && sameTrackingLifecycleState(trackingStateRef.current, expectedState)
+      && user?.appRole === "technician"
+      && `technician:${user.userId}` === expectedScope
+    );
+    try {
+      const result = await resumeLocationTrackingAfterPermissionCheck(user.userId, expectedState);
+      if (!isStillCurrentRequest()) return "unavailable";
+      // Do not let a late old-A result clear, replace, or start a new work view.
+      applyState(result.state);
+      await checkPermissions();
+      if (!isStillCurrentRequest()) return "unavailable";
+      return result.status === "resumed"
+        ? "resumed"
+        : result.status === "permission_required"
+          ? "permission_required"
+          : "unavailable";
+    } finally {
+      if (requestGeneration === permissionResumeGeneration.current) {
+        setIsPermissionResumeChecking(false);
+      }
+    }
   }, [applyState, checkPermissions, user?.appRole, user?.userId]);
 
   return (
     <LocationTrackingContext.Provider value={{
       isTracking,
       isPermissionPending,
+      isPermissionResumeChecking,
       trackingToken,
       trackingRequestId,
       trackingUrl,

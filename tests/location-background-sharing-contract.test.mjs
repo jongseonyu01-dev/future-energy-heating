@@ -82,6 +82,9 @@ assert.match(context, /notification/, "notification permission must have its own
 assert.match(context, /항상 허용 필요/, "missing background location permission must remain visible to the technician");
 assert.match(context, /isPermissionPending/, "a permission-paused existing session must remain visible in the provider");
 assert.match(context, /resumeTrackingAfterPermissionCheck/, "provider must expose explicit local resume without a new departure flow");
+assert.match(context, /permissionResumeGeneration/, "late permission results must be cancelled when the visible work changes");
+assert.match(tracking, /expectedState\?: PersistedTrackingState/, "permission resume must bind to the exact saved work");
+assert.match(tracking, /suspendCurrentTrackingForPermissionRevocation\(state\)/, "current permission denial must invalidate upload authority before waiting for another callback");
 assert.match(schedule, /isTracking && trackingRequestId !== work\.id/, "departure must block different active customer");
 assert.match(schedule, /권한 확인·공유 재개/, "permission-pending work must expose a dedicated resume control");
 assert.match(schedule, /도착·업무 취소를 계속 사용할 수 있습니다/, "permission-pending work must preserve terminal controls");
