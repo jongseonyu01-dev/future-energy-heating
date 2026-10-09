@@ -42,7 +42,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "futureenergytech",
-  version: "1.1.53",
+  version: "1.1.54",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    versionCode: 53,
+    versionCode: 54,
     allowBackup: false,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
