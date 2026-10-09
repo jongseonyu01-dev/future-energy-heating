@@ -179,3 +179,15 @@
    - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`와 `tests/location-permission-flow.test.ts` 8 cases PASS: native callback permission revoke와 headless denied path는 HTTP 전에 exact session suspend/return하며, new departure의 permission denial은 server session 0회다.
    - 추가 보호 suite: `LOCATION_CUSTOM_PACKAGE_ENTRY_HEADLESS_INTEGRATION_PASS`, `LOCATION_TRACKING_LIFECYCLE_RACE_PASS`, `LOCATION_STATUS_OVERLAY_OWNER_AND_AGE_CONTRACT_PASS`, `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`; Vitest `location-runtime-diagnostics`, `location-callback-isolation`, `location-permission-flow` 3 files/34 tests PASS. Edited-file ESLint는 errors 0, 기존 `tech-schedule.tsx` unused warning 2개는 그대로다.
 5. **남은 한계:** Android real-device에서 permission Settings의 실제 AppState transition, 승인 뒤 explicit same-work resume, 일반 앱 전환·홈·잠금 중 callback → HTTP → accepted 지속은 새 검수 APK 이후 별도 증거가 필요하다. 이 후보는 APK build·재서명·merge·Production deploy·실제 운영 호출을 만들지 않는다.
+
+## 2026-10-10 07:49 로그아웃·계정 전환 시작 중 늦은 재개 취소 후보
+
+> **확정 범위:** 아래는 `8cf531a` 위 source-level lifecycle/Provider 합성 재현 보완이다. 실제 단말의 위치 수집·TaskManager·HTTP·accepted 공백 원인을 확정하지 않으며, 운영 HTTP·고객/기사 위치·출발/도착·문자·DB에는 접근하지 않았다.
+
+1. **수정 전 경계:** 권한 확인·공유 재개는 클릭 시점의 `user` React closure와 work generation만 확인했다. `logout()`/새 `login()`은 인증 transition을 동기적으로 시작하지만 React Provider가 `user=null` 또는 B를 render하기 전, 늦은 Android permission 결과가 old A의 lifecycle restore를 호출해 native collection을 다시 시작할 수 있었다.
+2. **최소 보완:** `AuthSessionTransition.capture()`로 클릭 시 인증 세대를 잡고, logout·계정 전환이 `begin()`을 호출하는 즉시 guard를 false로 만든다. 이 guard는 Provider의 explicit resume와 AppState active reconciliation에서 전달되며, tracking의 persisted read·permission read·restore와 lifecycle의 serialized start/native start/control notification 앞뒤에서 재검사한다. stale A guard는 native start를 호출하지 않으며, stale cleanup도 B collection을 stop하지 않는다.
+3. **실행 증거:**
+   - `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`: denied pending A의 Android permission query를 hold한 뒤 auth guard를 false로 바꾸고 grant를 해제했다. 결과는 `no_matching_session`, native start 증가 `0`, in-memory upload authority `null`이다.
+   - `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`: actual Provider hook harness에서 same A의 resume 요청 후 React rerender 전에 auth transition만 증가시켜도 결과는 `unavailable`, synthetic native resume start 증가 `0`이다.
+   - `tests/auth-session-transition.test.ts`는 logout/account replacement `begin()`이 storage/native cleanup await 전 captured recovery guard를 동기 취소함을 확인했다. terminal/headless/owner/auth 보호 suite와 `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`도 재실행했다.
+4. **품질 경계:** focused Vitest 4 files/38 tests 및 standalone terminal/headless/lifecycle/public-stop/context markers PASS, edited-file ESLint errors 0, `git diff --check` PASS. full TypeScript는 parent `8cf531a`와 candidate 모두 기존 83 errors이고 수정 파일 신규 오류는 없다. 전역 TypeScript PASS나 Android 실기기 PASS로 표기하지 않는다.

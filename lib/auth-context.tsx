@@ -29,6 +29,10 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  /** Captures the synchronous auth boundary for external async recovery work. */
+  captureAuthTransition: () => number;
+  /** True only while the captured account transition still owns this app session. */
+  isAuthTransitionCurrent: (generation: number) => boolean;
   /** rememberMe=true면 기기에 세션을 저장(자동 로그인), false면 앱 재시작 시 로그아웃 */
   login: (user: AuthUser, loginId: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -37,6 +41,8 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoading: true,
+  captureAuthTransition: () => 0,
+  isAuthTransitionCurrent: () => false,
   login: async () => {},
   logout: async () => {},
 });
@@ -117,6 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const finishLoadingIfCurrent = useCallback((generation: number) => {
     if (transitions.isCurrent(generation)) setIsLoading(false);
   }, [transitions]);
+
+  // `transitions.begin()` runs synchronously at login/logout initiation. These
+  // callbacks deliberately read the ref-backed generation rather than React
+  // state, so a permission-resume promise cannot restart A in the small window
+  // before Provider effects observe `user=null` or account B.
+  const captureAuthTransition = useCallback(() => transitions.capture(), [transitions]);
+  const isAuthTransitionCurrent = useCallback((generation: number) => transitions.isCurrent(generation), [transitions]);
 
   useEffect(() => {
     const generation = transitions.begin();
@@ -248,7 +261,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearAccountBoundQueries, finishLoadingIfCurrent, setVisibleUser, transitions]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      isLoading,
+      captureAuthTransition,
+      isAuthTransitionCurrent,
+      login,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   );

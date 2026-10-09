@@ -106,7 +106,12 @@ function stateToView(state: PersistedTrackingState | null) {
 }
 
 export function LocationTrackingProvider({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAppAuth();
+  const {
+    user,
+    isLoading,
+    captureAuthTransition,
+    isAuthTransitionCurrent,
+  } = useAppAuth();
   const [isTracking, setIsTracking] = useState(false);
   const [isPermissionPending, setIsPermissionPending] = useState(false);
   const [isPermissionResumeChecking, setIsPermissionResumeChecking] = useState(false);
@@ -282,20 +287,31 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   useEffect(() => {
     let cancelled = false;
     const generation = ownerReconciliation.begin();
+    const authTransition = captureAuthTransition();
+    const isAuthCurrent = () => isAuthTransitionCurrent(authTransition);
     void reconcileLocationTrackingOwner({
       generation,
-      isCurrent: () => !cancelled && ownerReconciliation.isCurrent(generation),
+      isCurrent: () => !cancelled && isAuthCurrent() && ownerReconciliation.isCurrent(generation),
       isAuthLoading: isLoading,
       technicianUserId: user?.userId,
       isTechnician: user?.appRole === "technician",
       getPersistedState: getPersistedTrackingState,
       stopExactStoredState: async (state) => stopExactStoredTrackingAndNotify(state, "업무취소"),
-      restoreForUser: restoreLocationTrackingForUser,
+      restoreForUser: (userId) => restoreLocationTrackingForUser(userId, { isStillAuthorized: isAuthCurrent }),
       applyState,
       checkPermissions,
     });
     return () => { cancelled = true; };
-  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation]);
+  }, [
+    applyState,
+    captureAuthTransition,
+    checkPermissions,
+    isAuthTransitionCurrent,
+    isLoading,
+    ownerReconciliation,
+    user?.appRole,
+    user?.userId,
+  ]);
 
   // Returning to the app does not itself upload a coordinate. It only compares
   // the exact persisted session with Android's registration marker, then lets
@@ -311,21 +327,33 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       refreshUnboundTaskEvent();
       let cancelled = false;
       const generation = ownerReconciliation.begin();
+      const authTransition = captureAuthTransition();
+      const isAuthCurrent = () => isAuthTransitionCurrent(authTransition);
       void reconcileLocationTrackingOwner({
         generation,
-        isCurrent: () => !cancelled && ownerReconciliation.isCurrent(generation),
+        isCurrent: () => !cancelled && isAuthCurrent() && ownerReconciliation.isCurrent(generation),
         isAuthLoading: isLoading,
         technicianUserId: user.userId,
         isTechnician: true,
         getPersistedState: getPersistedTrackingState,
         stopExactStoredState: async (state) => stopExactStoredTrackingAndNotify(state, "업무취소"),
-        restoreForUser: restoreLocationTrackingForUser,
+        restoreForUser: (userId) => restoreLocationTrackingForUser(userId, { isStillAuthorized: isAuthCurrent }),
         applyState,
         checkPermissions,
       }).finally(() => { cancelled = true; });
     });
     return () => subscription.remove();
-  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation, refreshUnboundTaskEvent]);
+  }, [
+    applyState,
+    captureAuthTransition,
+    checkPermissions,
+    isAuthTransitionCurrent,
+    isLoading,
+    ownerReconciliation,
+    refreshUnboundTaskEvent,
+    user?.appRole,
+    user?.userId,
+  ]);
 
   const startTracking = useCallback(async (params: StartTrackingParams): Promise<StartTrackingResult> => {
     const existing = await getPersistedTrackingState();
@@ -358,6 +386,10 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     const expectedState = trackingStateRef.current;
     if (!expectedState || expectedState.technicianUserId !== user.userId) return "unavailable";
     const expectedScope = `technician:${user.userId}`;
+    // Auth transitions advance synchronously before React rerenders. Capturing
+    // this value closes the logout/login window where the old `user` closure is
+    // still present while Android's permission query is pending.
+    const authTransition = captureAuthTransition();
     const requestGeneration = ++permissionResumeGeneration.current;
     setIsPermissionResumeChecking(true);
     const isStillCurrentRequest = () => (
@@ -365,9 +397,14 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       && sameTrackingLifecycleState(trackingStateRef.current, expectedState)
       && user?.appRole === "technician"
       && `technician:${user.userId}` === expectedScope
+      && isAuthTransitionCurrent(authTransition)
     );
     try {
-      const result = await resumeLocationTrackingAfterPermissionCheck(user.userId, expectedState);
+      const result = await resumeLocationTrackingAfterPermissionCheck(
+        user.userId,
+        expectedState,
+        isStillCurrentRequest,
+      );
       if (!isStillCurrentRequest()) return "unavailable";
       // Do not let a late old-A result clear, replace, or start a new work view.
       applyState(result.state);
@@ -383,7 +420,14 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
         setIsPermissionResumeChecking(false);
       }
     }
-  }, [applyState, checkPermissions, user?.appRole, user?.userId]);
+  }, [
+    applyState,
+    captureAuthTransition,
+    checkPermissions,
+    isAuthTransitionCurrent,
+    user?.appRole,
+    user?.userId,
+  ]);
 
   return (
     <LocationTrackingContext.Provider value={{

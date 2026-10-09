@@ -44,6 +44,20 @@ describe("authentication transition generation", () => {
     expect(persistedUser).toBe("B");
   });
 
+  it("revokes an externally captured recovery guard as soon as logout or account replacement begins", () => {
+    const transitions = new AuthSessionTransition();
+    const activeA = transitions.begin();
+    const capturedForPermissionResume = transitions.capture();
+
+    expect(capturedForPermissionResume).toBe(activeA);
+    expect(transitions.isCurrent(capturedForPermissionResume)).toBe(true);
+
+    // This is synchronous: it must not wait for React user=null, storage
+    // cleanup, native stop, or a later effect before old A loses authority.
+    transitions.begin();
+    expect(transitions.isCurrent(capturedForPermissionResume)).toBe(false);
+  });
+
   it("rolls back a failed B persistence instead of exposing B to the UI or bearer storage", async () => {
     const transitions = new AuthSessionTransition();
     const loginB = transitions.begin();

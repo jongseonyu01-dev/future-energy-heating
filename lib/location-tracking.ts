@@ -831,10 +831,12 @@ export type ResumeLocationTrackingResult = {
 export async function resumeLocationTrackingAfterPermissionCheck(
   userId: number,
   expectedState?: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
 ): Promise<ResumeLocationTrackingResult> {
   if (Platform.OS === "web") return { state: null, status: "unavailable" };
+  if (!isStillAuthorized()) return { state: null, status: "no_matching_session" };
   const candidate = await getPersistedTrackingState();
-  if (!candidate
+  if (!isStillAuthorized() || !candidate
     || candidate.technicianUserId !== userId
     || (expectedState && !sameTrackingLifecycleState(candidate, expectedState))) {
     return { state: null, status: "no_matching_session" };
@@ -845,11 +847,11 @@ export async function resumeLocationTrackingAfterPermissionCheck(
   // may all happen while Android answers the query. Re-read the shared pointer
   // before acting so old A never resumes, clears, or evaluates a newer B.
   const stillCandidate = await getPersistedTrackingState();
-  if (!sameTrackingLifecycleState(stillCandidate, candidate)) {
+  if (!isStillAuthorized() || !sameTrackingLifecycleState(stillCandidate, candidate)) {
     return { state: null, status: "no_matching_session" };
   }
   if (!eligibility.eligible) {
-    if (eligibility.status === "denied") await suspendExactTrackingForPermissionDenial(candidate);
+    if (eligibility.status === "denied" && isStillAuthorized()) await suspendExactTrackingForPermissionDenial(candidate);
     return {
       state: candidate,
       status: eligibility.status === "denied" ? "permission_required" : "unavailable",
@@ -859,6 +861,7 @@ export async function resumeLocationTrackingAfterPermissionCheck(
   const restored = await restoreLocationTrackingForUser(userId, {
     expectedState: candidate,
     allowPermissionPendingResume: true,
+    isStillAuthorized,
   });
   if (!restored) return { state: null, status: "unavailable" };
   return { state: restored, status: "resumed" };
@@ -871,10 +874,14 @@ export async function restoreLocationTrackingForUser(
     expectedState?: PersistedTrackingState;
     /** Only the foreground "권한 확인·공유 재개" action may restart a paused session. */
     allowPermissionPendingResume?: boolean;
+    /** Cancels foreground recovery as soon as logout or account replacement starts. */
+    isStillAuthorized?: () => boolean;
   } = {},
 ): Promise<PersistedTrackingState | null> {
   if (Platform.OS === "web") return null;
   try {
+    const isStillAuthorized = options.isStillAuthorized ?? (() => true);
+    if (!isStillAuthorized()) return null;
     // Permission eligibility adds another asynchronous boundary before the
     // lifecycle restore read. Capture ownership first so a logout/stop/B start
     // during that check cannot let a delayed A restore acquire a fresh
@@ -884,13 +891,14 @@ export async function restoreLocationTrackingForUser(
     // check as a new departure before this path can register/restart native
     // collection. This check never opens Settings from restore/headless code.
     const candidate = await getPersistedTrackingState();
-    if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
+    if (!isStillAuthorized() || !trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
     if (options.expectedState && !sameTrackingLifecycleState(candidate, options.expectedState)) return null;
     if (candidate?.technicianUserId === userId) {
       const eligibility = await readExistingTrackingPermissionEligibility();
-      if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
+      if (!isStillAuthorized() || !trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
       if (!eligibility.eligible) {
         if (eligibility.status === "denied") {
+          if (!isStillAuthorized()) return null;
           await suspendExactTrackingForPermissionDenial(candidate);
           // Keep this non-terminal share visible. Arrival/cancel remain usable,
           // and a later foreground approval resumes this exact pointer without a
@@ -908,15 +916,17 @@ export async function restoreLocationTrackingForUser(
       // recovery control verifies this exact session. This prevents AppState
       // return or a late restoration from silently reviving a suspended share.
       const pending = await isTrackingStatePermissionPending(candidate, () => trackingLifecycle.isGenerationCurrent(restoreGeneration));
-      if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
+      if (!isStillAuthorized() || !trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
       if (pending && !options.allowPermissionPendingResume) return candidate;
     }
-    const restored = await trackingLifecycle.restoreForUser(userId, options.expectedState);
+    const restored = await trackingLifecycle.restoreForUser(userId, options.expectedState, isStillAuthorized);
     if (!restored) return null;
+    if (!isStillAuthorized()) return null;
     // read() folds an independently persisted accepted outcome into the session
     // journal. This preserves verified server acceptance across a JS restart
     // even if the normal diagnostic write was still delayed at callback return.
     emitPersistedDiagnostics(await runtimeDiagnostics.read(restored) ?? await runtimeDiagnostics.ensure(restored));
+    if (!isStillAuthorized()) return null;
     const nativeCheckAt = Date.now();
     try {
       const result = await trackingLifecycle.reconcileNativeCollection(restored);

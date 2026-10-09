@@ -9,6 +9,16 @@ export class AuthSessionTransition {
   private generation = 0;
   private storageTail: Promise<void> = Promise.resolve();
 
+  /**
+   * Captures the currently authorized account transition without starting a
+   * storage operation. Consumers that await non-auth work can compare this
+   * value after every await, so logout or a replacement login revokes their
+   * authority synchronously at `begin()`.
+   */
+  capture(): number {
+    return this.generation;
+  }
+
   begin(): number {
     this.generation += 1;
     return this.generation;

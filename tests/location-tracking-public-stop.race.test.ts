@@ -191,6 +191,30 @@ async function main() {
     assert.equal(globals.__nativeStops, nativeStopsBeforeWarmDenied + 1, "denied current work must stop native collection during the permission check itself");
     assert.equal(await tracking.isLocationTrackingPermissionPending(deniedRestore), true, "denied current work must publish its reversible permission-pending marker");
 
+    // Logout/account replacement advances its auth transition before React has
+    // rendered user=null. A late Android permission result must therefore be
+    // rejected inside the actual tracking/lifecycle path before it can restart
+    // native collection for old A.
+    const authCancellationGate = deferred<{ status: string }>();
+    const authCancellationReadStarted = deferred<void>();
+    let authTransitionCurrent = true;
+    globals.__backgroundPermission = undefined;
+    globals.__backgroundPermissionReadStarted = authCancellationReadStarted;
+    globals.__backgroundPermissionGate = authCancellationGate.promise;
+    const nativeStartsBeforeAuthCancellation = Number(globals.__nativeStarts);
+    const cancelledByAuth = tracking.resumeLocationTrackingAfterPermissionCheck(
+      deniedRestore.technicianUserId,
+      deniedRestore,
+      () => authTransitionCurrent,
+    );
+    await authCancellationReadStarted.promise;
+    authTransitionCurrent = false;
+    authCancellationGate.resolve({ status: "granted" });
+    const cancelledByAuthResult = await cancelledByAuth;
+    assert.equal(cancelledByAuthResult.status, "no_matching_session", "logout-start auth cancellation must reject old A before native restart");
+    assert.equal(globals.__nativeStarts, nativeStartsBeforeAuthCancellation, "cancelled old A must issue zero native starts after logout begins");
+    assert.equal(tracking.__testLifecycleIntent(), null, "cancelled old A must not reacquire in-memory upload authority");
+
     // A delayed foreground approval for old A cannot revive it after the user
     // ended A or moved to another work B.
     const permissionGate = deferred<{ status: string }>();

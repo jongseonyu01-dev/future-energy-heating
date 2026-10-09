@@ -271,16 +271,29 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     });
   }
 
-  public async start(state: T, options: { restore?: boolean; expectedGeneration?: number } = {}): Promise<boolean> {
+  public async start(state: T, options: {
+    restore?: boolean;
+    expectedGeneration?: number;
+    /** Cancels a queued foreground recovery when auth/work ownership changed. */
+    isStillAuthorized?: () => boolean;
+  } = {}): Promise<boolean> {
     const expectedGeneration = options.expectedGeneration;
-    if (expectedGeneration !== undefined && expectedGeneration !== this.generation) return false;
+    const isStillAuthorized = options.isStillAuthorized ?? (() => true);
+    if (!isStillAuthorized() || (expectedGeneration !== undefined && expectedGeneration !== this.generation)) return false;
     const startGeneration = ++this.generation;
     this.intent = state;
 
     return this.enqueue(async () => {
       try {
+        if (!isStillAuthorized()) {
+          if (this.owns(state, startGeneration)) {
+            this.generation += 1;
+            this.intent = null;
+          }
+          return false;
+        }
         if (!options.restore) await this.adapter.save(state);
-        if (!this.owns(state, startGeneration)) {
+        if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
           await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
           return false;
         }
@@ -294,18 +307,22 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
         // the foreground. The local control notification is useful status UI,
         // but it must not widen the user-visible departure → FGS start window.
         // It also remains separate from proof of GPS callback/server storage.
+        if (!isStillAuthorized()) return false;
         await this.adapter.startNativeCollection();
-        if (!this.owns(state, startGeneration)) {
-          await this.adapter.stopNativeCollection();
-          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
+        if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
+          const stillFailedStart = () => isStillAuthorized() && this.owns(state, startGeneration);
+          await this.adapter.stopNativeCollection(stillFailedStart);
+          await this.adapter.clearIfSame(state, stillFailedStart);
           return false;
         }
 
+        if (!isStillAuthorized()) return false;
         await this.adapter.showControlNotification(state);
-        if (!this.owns(state, startGeneration)) {
-          await this.adapter.stopNativeCollection();
-          await this.adapter.clearControlNotification(state);
-          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
+        if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
+          const stillFailedStart = () => isStillAuthorized() && this.owns(state, startGeneration);
+          await this.adapter.stopNativeCollection(stillFailedStart);
+          await this.adapter.clearControlNotification(state, stillFailedStart);
+          await this.adapter.clearIfSame(state, stillFailedStart);
           return false;
         }
 
@@ -338,16 +355,22 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
    * A stop/logout/new start while `read()` is pending changes generation, so the
    * stale saved A is never passed to `startNativeCollection()`.
    */
-  public async restoreForUser(userId: number, expectedState?: T): Promise<T | null> {
+  public async restoreForUser(
+    userId: number,
+    expectedState?: T,
+    isStillAuthorized: () => boolean = () => true,
+  ): Promise<T | null> {
     const readGeneration = this.generation;
+    if (!isStillAuthorized()) return null;
     const state = await this.adapter.read();
-    if (!state) return null;
+    if (!isStillAuthorized() || !state) return null;
     // A foreground permission-confirmation result belongs only to the exact
     // saved work it started with. If logout, terminal stop, or a replacement
     // share changed the pointer while permission UI was open, do not inspect or
     // stop that newer state on behalf of old A.
     if (expectedState && !sameTrackingLifecycleState(state, expectedState)) return null;
-    if (await this.isInactive(state, () => readGeneration === this.generation)) return null;
+    if (await this.isInactive(state, () => isStillAuthorized() && readGeneration === this.generation)) return null;
+    if (!isStillAuthorized()) return null;
     if (state.technicianUserId !== userId) {
       if (readGeneration === this.generation && !this.intent) {
         this.intent = state;
@@ -355,9 +378,13 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       }
       return null;
     }
-    if (readGeneration !== this.generation) return null;
+    if (!isStillAuthorized() || readGeneration !== this.generation) return null;
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
-    const restored = await this.start(state, { restore: true, expectedGeneration: readGeneration });
+    const restored = await this.start(state, {
+      restore: true,
+      expectedGeneration: readGeneration,
+      isStillAuthorized,
+    });
     return restored ? state : null;
   }
 

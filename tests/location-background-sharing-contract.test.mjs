@@ -83,7 +83,11 @@ assert.match(context, /항상 허용 필요/, "missing background location permi
 assert.match(context, /isPermissionPending/, "a permission-paused existing session must remain visible in the provider");
 assert.match(context, /resumeTrackingAfterPermissionCheck/, "provider must expose explicit local resume without a new departure flow");
 assert.match(context, /permissionResumeGeneration/, "late permission results must be cancelled when the visible work changes");
+assert.match(context, /captureAuthTransition\(\)/, "permission resume must capture the synchronous auth boundary before awaiting Android");
+assert.match(context, /isAuthTransitionCurrent\(authTransition\)/, "logout or account replacement must cancel a pending permission resume before it restarts collection");
 assert.match(tracking, /expectedState\?: PersistedTrackingState/, "permission resume must bind to the exact saved work");
+assert.match(tracking, /isStillAuthorized: \(\) => boolean/, "tracking restore must accept an external auth/work cancellation guard");
+assert.match(lifecycle, /isStillAuthorized\?: \(\) => boolean/, "queued lifecycle native starts must recheck external recovery authority");
 assert.match(tracking, /suspendCurrentTrackingForPermissionRevocation\(state\)/, "current permission denial must invalidate upload authority before waiting for another callback");
 assert.match(schedule, /isTracking && trackingRequestId !== work\.id/, "departure must block different active customer");
 assert.match(schedule, /권한 확인·공유 재개/, "permission-pending work must expose a dedicated resume control");

@@ -66,12 +66,22 @@ async function main() {
     `);
     await writeFile(join(stubs, "notifications.ts"), 'export const getPermissionsAsync = async () => ({ granted: true });\n');
     await writeFile(join(stubs, "location.ts"), 'export const getForegroundPermissionsAsync = async () => ({ status: "granted" }); export const getBackgroundPermissionsAsync = async () => ({ status: "denied" });\n');
-    await writeFile(join(stubs, "auth-context.ts"), 'export const useAppAuth = () => ({ user: { userId: 17, appRole: "technician", token: "bearer" }, isLoading: false });\n');
+    await writeFile(join(stubs, "auth-context.ts"), `
+      let authTransition = 1;
+      export const beginAuthTransition = () => { authTransition += 1; };
+      export const useAppAuth = () => ({
+        user: { userId: 17, appRole: "technician", token: "bearer" },
+        isLoading: false,
+        captureAuthTransition: () => authTransition,
+        isAuthTransitionCurrent: (generation: number) => generation === authTransition,
+      });
+    `);
     await writeFile(join(stubs, "tracking.ts"), `
       let trackingListener: ((state: any) => void) | null = null;
       let debugListener: ((state: any) => void) | null = null;
       export let permissionPending = true;
       export let resumeCalls = 0;
+      export let nativeResumeStarts = 0;
       export let resumeGate: Promise<void> | null = null;
       export let resumeResult: any = { state: ${JSON.stringify(stateA)}, status: "resumed" };
       export let latestUnbound: any = null;
@@ -86,7 +96,14 @@ async function main() {
       export const getPersistedTrackingState = async () => (${JSON.stringify(stateA)});
       export const isLocationTrackingPermissionPending = async () => permissionPending;
       export const recordLocationTrackingAppState = (next: string) => { appStateEvents.push(next); };
-      export const resumeLocationTrackingAfterPermissionCheck = async () => { resumeCalls += 1; if (resumeGate) await resumeGate; permissionPending = false; return resumeResult; };
+      export const resumeLocationTrackingAfterPermissionCheck = async (_userId?: number, _state?: any, isStillAuthorized?: () => boolean) => {
+        resumeCalls += 1;
+        if (resumeGate) await resumeGate;
+        if (isStillAuthorized && !isStillAuthorized()) return { state: null, status: "no_matching_session" };
+        nativeResumeStarts += 1;
+        permissionPending = false;
+        return resumeResult;
+      };
       export const restoreLocationTrackingForUser = async () => null;
       export const startLocationTracking = async () => undefined;
       export const stopStoredTrackingAndNotify = async () => { trackingListener?.(null); };
@@ -128,6 +145,7 @@ async function main() {
 
     const react = await import(pathToFileURL(join(stubs, "react.ts")).href) as any;
     const native = await import(pathToFileURL(join(stubs, "react-native.ts")).href) as any;
+    const auth = await import(pathToFileURL(join(stubs, "auth-context.ts")).href) as any;
     const tracking = await import(pathToFileURL(join(stubs, "tracking.ts")).href) as any;
     const overlay = await import(pathToFileURL(join(stubs, "overlay.ts")).href) as any;
     const provider = await import(`${pathToFileURL(join(sandbox, "location-tracking-context-under-test.tsx")).href}?v=${Date.now()}`) as any;
@@ -172,6 +190,24 @@ async function main() {
     assert.equal(await lateEndedResume, "unavailable", "late permission result must be cancelled after arrival/cancel/logout clears the work");
     await react.__flush();
     assert.equal(react.__latest().trackingRequestId, null, "late ended-work result must not revive an old share");
+    tracking.setResumeGate(null);
+
+    // logout/login transition starts synchronously, before React has rendered
+    // the new auth state. It must cancel an already-clicked old-A resume at the
+    // actual recovery call, not only suppress its late UI result.
+    tracking.emitTrackingState(stateA);
+    await react.__flush();
+    const authCancellationGate = Promise.withResolvers<void>();
+    tracking.setPermissionPending(true);
+    tracking.setResumeResult({ state: stateA, status: "resumed" });
+    tracking.setResumeGate(authCancellationGate.promise);
+    const nativeResumeStartsBeforeAuthCancellation = tracking.nativeResumeStarts;
+    const lateLogoutResume = react.__latest().resumeTrackingAfterPermissionCheck();
+    await tick();
+    auth.beginAuthTransition();
+    authCancellationGate.resolve();
+    assert.equal(await lateLogoutResume, "unavailable", "logout-start auth transition must cancel an in-flight old-A resume");
+    assert.equal(tracking.nativeResumeStarts, nativeResumeStartsBeforeAuthCancellation, "cancelled old-A resume must not restart collection after logout begins");
     tracking.setResumeGate(null);
 
     native.emitState("background");
