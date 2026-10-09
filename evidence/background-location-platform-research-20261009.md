@@ -63,9 +63,19 @@
    - `lastResponseHeadersAt`, `lastResponseBodyAt`, `lastAcceptedAt`, `lastCallbackDeadlineAt`을 분리했다. deadline은 `lastResponseAt`을 만들지 않는다.
    - callback/attempt의 고정 비식별 stage(ADOPTED, QUEUE, HTTP_REQUEST, HTTP_HEADERS, RESPONSE_BODY, SERVER_ACCEPTED, CALLBACK_DEADLINE), stage 시각·경과와 AppState 전환 시각을 기록한다. token, 고객/기사 식별정보, 정확한 좌표, 인증값은 새 journal/event/test fixture에 넣지 않는다. AppState 기록은 upload를 시작하거나 복귀 한 번 전송하지 않는다.
 3. **실행 재현:**
-   - `node --import …/tsx/dist/loader.mjs tests/location-taskmanager-terminal.integration.test.ts` → `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`. accepted 뒤 journal write hold 중 callback이 반환하고 stored 화면/카운터를 유지, 요청 전 stage write hold가 fetch를 지연시키지 않음, headers-only/body timeout은 body 완료 시각을 만들지 않음, network reject·A/B isolation을 확인했다.
+   - `node --import tsx tests/location-taskmanager-terminal.integration.test.ts` → `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`. accepted 뒤 journal write hold 중 callback이 반환하고 stored 화면/카운터를 유지, 시작 시 diagnostics `setItem` hold 중에도 유효 callback fetch가 진행, headers-only/body timeout은 body 완료 시각을 만들지 않음, network reject·A/B isolation을 확인했다. 이 standalone runner는 CJS 환경에서도 keepalive로 exported completion promise가 settle할 때까지 종료하지 않는다.
    - `npx vitest run tests/location-runtime-diagnostics.test.ts tests/location-callback-isolation.test.ts --reporter=dot` → 20 tests PASS. accepted outcome이 same-callback deadline을 덮지 않고 B scope로 넘어가지 않음을 확인했다.
    - `node --import …/tsx/dist/loader.mjs tests/location-tracking-context-overlay.integration.test.ts` → `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`. background AppState marker와 active의 unbound 재조회가 upload API를 호출하지 않음을 확인했다.
+
+## 2026-10-09 19:32~20:05 Codex e29 후속 4건 보완
+
+> **확정 범위:** 이 항목도 source-level synthetic storage/clock/HTTP 실행 결과다. APK55에 포함되지 않았고, 홈 화면 overlay의 3~4분 정체와 같은 실기기 원인이라고 단정하지 않는다.
+
+1. **same-session 늦은 deadline:** callback A의 늦은 deadline은 현재 session만 같아도 callback B의 newer callback/attempt/accepted 시각이 있으면 화면·journal을 error로 바꾸지 않는다. TaskManager B accepted 뒤 test-only delayed A deadline delivery를 실행해 stored/null error와 persisted deadline error 부재를 확인했다.
+2. **복귀 accepted와 과거 오류:** immutable accepted outcome 병합은 같은 scope의 더 이전 `NETWORK_TIMEOUT`만 해소한다. 더 새 callback의 error/terminal은 과거 accepted가 지우지 않는다. same-callback deadline은 verified accepted 뒤의 local false deadline인 경우에만 별도로 해소한다.
+3. **정확한 accepted count retention:** summary에는 `acceptedOutcomeThrough` checkpoint를 기록한다. 아직 checkpoint되지 않은 immutable outcome은 24개 retention으로 제거하지 않는다. 새 reader에서 30개 outcome을 정확히 한 번 합산하고, summary write 후 checkpoint된 30개만 정리하는 회귀를 실행했다.
+4. **초기 diagnostics I/O:** callback entry/adoption 이전에는 session diagnostics `ensure/update`를 await하지 않는다. 시작의 첫 diagnostics `setItem`을 hold한 상태에서도 FGS start 뒤 valid TaskManager callback의 fetch가 시작되는 통합 회귀를 실행했다. owner/credential/measurement/terminal fence는 그대로 필수 경계다.
+5. **검증 결과:** `npx vitest run tests/location-runtime-diagnostics.test.ts tests/location-callback-isolation.test.ts --reporter=dot`은 2 files/22 tests PASS, TaskManager integration은 final marker PASS, lifecycle/headless/public-stop/context/overlay/auth 계약도 별도 PASS했다. edited-module ESLint는 errors 0(기존 `tech-schedule.tsx` unused warning 2개), `git diff --check` PASS, full TypeScript는 e29 기준과 각 83 errors/normalized diff 0이다.
 
 ## 아직 미확정인 것
 

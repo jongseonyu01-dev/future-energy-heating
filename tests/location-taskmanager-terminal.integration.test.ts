@@ -32,13 +32,17 @@ async function main() {
     await writeFile(join(stubs, "react-native.ts"), 'export const Platform = { OS: "android" };\n');
     await writeFile(join(stubs, "async-storage.ts"), `
       const values = new Map<string, string>();
+      const testGlobals = globalThis as Record<string, any>;
       export default {
         getItem: async (key: string) => values.get(key) ?? null,
       setItem: async (key: string, value: string) => {
         const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
         const unbound = key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:") ? JSON.parse(value) : null;
         const acceptedOutcome = key.startsWith("location_tracking_runtime_diagnostics_accepted_outcome_v1:") ? JSON.parse(value) : null;
-        const testGlobals = globalThis as Record<string, any>;
+        if (record?.requestId === testGlobals.__delayInitialDiagnosticRequestId) {
+          testGlobals.__initialDiagnosticWriteStarted?.resolve();
+          await testGlobals.__initialDiagnosticWriteGate;
+        }
         if (record?.requestId === testGlobals.__delayDiagnosticRequestId && record?.lastUploadStartedAt) {
           testGlobals.__diagnosticWriteStarted?.resolve();
           await testGlobals.__diagnosticWriteGate;
@@ -59,7 +63,16 @@ async function main() {
         values.set(key, value);
       },
         removeItem: async (key: string) => { values.delete(key); },
-        getAllKeys: async () => [...values.keys()],
+        getAllKeys: async () => {
+          const requestId = testGlobals.__delayCallbackDiagnosticReadRequestId;
+          const hasScope = Number.isSafeInteger(requestId)
+            && [...values.keys()].some((key) => key.includes(":" + requestId + ":"));
+          if (hasScope && !testGlobals.__callbackDiagnosticReadReleased) {
+            testGlobals.__callbackDiagnosticReadStarted?.resolve();
+            await testGlobals.__callbackDiagnosticReadGate;
+          }
+          return [...values.keys()];
+        },
         multiGet: async (keys: readonly string[]) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
       };
       export const diagnosticRecords = () => [...values.entries()]
@@ -138,12 +151,11 @@ async function main() {
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
       .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`)
       .replace('} from "@/lib/location-task-budget";', `} from ${JSON.stringify(join(root, "lib/location-task-budget.ts"))};`)
-      // Preserve a bounded callback deadline while leaving enough scheduling
-      // room for the genuine terminal path. A 4ms Node transform was flaky and
-      // could expire before the mocked immediate HTTP response was classified.
-      .replace("const TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000;", "const TASK_CALLBACK_NETWORK_BUDGET_MS = 40;")
-      .replace("const RESPONSE_BODY_TIMEOUT_MS = 2_000;", "const RESPONSE_BODY_TIMEOUT_MS = 5;")
-      .replace("const TASK_ENTRY_EVENT_BUDGET_MS = 750;", "const TASK_ENTRY_EVENT_BUDGET_MS = 8;");
+      // Keep production's 8s request + 2s body budget. This integration test
+      // exercises the actual callback boundary; shrinking it would turn Node
+      // loader scheduling into a false deadline result.
+      .replace("const TASK_ENTRY_EVENT_BUDGET_MS = 750;", "const TASK_ENTRY_EVENT_BUDGET_MS = 8;")
+      + "\nexport const __publishCallbackDeadlineForTest = publishCallbackDeadline;\n";
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     let requests = 0;
@@ -162,7 +174,7 @@ async function main() {
       assert.equal(tracking.registerLocationTrackingTask(), true, "custom entry must register the TaskManager handler before callback delivery");
       const taskManager = await import(pathToFileURL(join(stubs, "task-manager.ts")).href);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
-        diagnosticRecords: () => { requestId: number; attemptCount: number }[];
+        diagnosticRecords: () => { requestId: number; attemptCount: number; lastErrorCode?: string | null }[];
         acceptedOutcomes: () => { requestId: number }[];
         unboundTaskEvents: () => { observedAt: number; code: string }[];
       };
@@ -181,14 +193,20 @@ async function main() {
         data: {
           locations: [{
             timestamp: Date.now(),
-            coords: { latitude: 37.5, longitude: 127.0, speed: null, heading: null, accuracy: 5 },
+            coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 },
           }],
         },
       };
       await taskManager.invokeTask(payload);
       assert.equal(requests, 1, "first callback must issue one terminal response request");
-      await waitForDiagnostics();
-      assert.equal(maxAttempts(state.requestId), 1, "terminal response must retain exactly one started fetch attempt");
+      for (let attempt = 0; attempt < 50 && maxAttempts(state.requestId) !== 1; attempt += 1) {
+        await waitForDiagnostics();
+      }
+      assert.equal(
+        maxAttempts(state.requestId),
+        1,
+        `terminal response must retain exactly one started fetch attempt; records=${JSON.stringify(storage.diagnosticRecords().filter((record) => record.requestId === state.requestId))}`,
+      );
 
       await taskManager.invokeTask(payload);
       assert.equal(requests, 1, "terminal marker must block next TaskManager callback before HTTP");
@@ -203,7 +221,7 @@ async function main() {
       const stateC = { ...state, token: "c".repeat(43), requestId: 503, startedAt: 503_000 };
       await tracking.startLocationTracking(stateC);
       const delayedA = taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.6, longitude: 127.1, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
       await tracking.startLocationTracking(replacementState);
@@ -232,7 +250,7 @@ async function main() {
       });
       await tracking.startLocationTracking(failedFetchState);
       await taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.7, longitude: 127.2, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
       assert.equal(failureDebugUpdates.at(-1)?.attemptCount, 1, "one rejected fetch must increment attemptCount exactly once");
@@ -249,7 +267,7 @@ async function main() {
       });
       await tracking.startLocationTracking(timeoutState);
       await taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.8, longitude: 127.3, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await waitForDiagnostics();
       assert.equal(maxAttempts(timeoutState.requestId), 1, "timed-out fetch must retain one started attempt");
@@ -258,7 +276,7 @@ async function main() {
       Object.assign(globalThis as Record<string, unknown>, { __tokenGate: Promise.resolve(null) });
       await tracking.startLocationTracking(noCredentialState);
       await taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.9, longitude: 127.4, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await waitForDiagnostics();
       assert.equal(maxAttempts(noCredentialState.requestId), 0, "credential failure before fetch must retain zero attempts");
@@ -306,7 +324,7 @@ async function main() {
       const invalidCoordinateState = { ...state, token: "i".repeat(43), requestId: 5061, startedAt: 506_100 };
       await tracking.startLocationTracking(invalidCoordinateState);
       await taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: "not-a-number", longitude: 127.45, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: "not-a-number", longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await waitForDiagnostics();
       const invalidDiagnostics = storage.diagnosticRecords()
@@ -346,9 +364,10 @@ async function main() {
       assert.ok(acceptedVisible?.lastAcceptedAt, "accepted timestamp must reflect the verified response");
       assert.ok(acceptedVisible?.lastResponseAt, "response timestamp must reflect the actual completed response");
       assert.equal(acceptedVisible?.lastCallbackDeadlineAt ?? null, null, "deadline timestamp must remain absent after accepted response");
+      assert.equal(storage.acceptedOutcomes().filter((event: { requestId?: number }) => event.requestId === acceptedDelayState.requestId).length, 1, "accepted evidence must exist independently while the summary write is stalled");
       acceptedWriteGate.resolve();
       await waitForDiagnostics();
-      assert.equal(storage.acceptedOutcomes().filter((event: { requestId?: number }) => event.requestId === acceptedDelayState.requestId).length, 1, "accepted evidence uses an independent immutable outcome record");
+      assert.equal(storage.acceptedOutcomes().filter((event: { requestId?: number }) => event.requestId === acceptedDelayState.requestId).length, 0, "only the outcome checkpointed by the durable summary is eligible for cleanup");
       unsubscribeAccepted();
       Object.assign(globalThis as Record<string, unknown>, {
         __delayAcceptedDiagnosticRequestId: null,
@@ -356,33 +375,35 @@ async function main() {
         __acceptedDiagnosticWriteGate: null,
       });
 
-      // A stalled pre-request phase write is diagnostic-only: it cannot delay a
-      // valid fetch or consume the callback's network budget.
-      const preDiagnosticState = { ...state, token: "p".repeat(43), requestId: 5063, startedAt: 506_300 };
-      const stageWriteStarted = Promise.withResolvers<void>();
-      const stageWriteGate = Promise.withResolvers<void>();
-      let preDiagnosticFetches = 0;
+      // A first-session diagnostic setItem can stall after native collection
+      // has started. It must not prevent a later valid TaskManager callback
+      // from issuing HTTP while the UI start promise is still pending.
+      const initialWriteState = { ...state, token: "p".repeat(43), requestId: 5063, startedAt: 506_300 };
+      const initialWriteStarted = Promise.withResolvers<void>();
+      const initialWriteGate = Promise.withResolvers<void>();
+      let initialWriteFetches = 0;
       Object.assign(globalThis as Record<string, unknown>, {
-        __delayStageDiagnosticRequestId: preDiagnosticState.requestId,
-        __stageDiagnosticWriteStarted: stageWriteStarted,
-        __stageDiagnosticWriteGate: stageWriteGate.promise,
+        __delayInitialDiagnosticRequestId: initialWriteState.requestId,
+        __initialDiagnosticWriteStarted: initialWriteStarted,
+        __initialDiagnosticWriteGate: initialWriteGate.promise,
         fetch: async () => {
-          preDiagnosticFetches += 1;
-          return { ok: true, status: 200, json: async () => ({ success: true, accepted: false }) };
+          initialWriteFetches += 1;
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) };
         },
       });
-      await tracking.startLocationTracking(preDiagnosticState);
-      const preDiagnosticCallback = taskManager.invokeTask({
+      const initialStart = tracking.startLocationTracking(initialWriteState);
+      await initialWriteStarted.promise;
+      const initialWriteCallback = taskManager.invokeTask({
         data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
-      await stageWriteStarted.promise;
-      while (preDiagnosticFetches !== 1) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
-      stageWriteGate.resolve();
-      await preDiagnosticCallback;
+      while (initialWriteFetches !== 1) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      initialWriteGate.resolve();
+      await initialWriteCallback;
+      await initialStart;
       Object.assign(globalThis as Record<string, unknown>, {
-        __delayStageDiagnosticRequestId: null,
-        __stageDiagnosticWriteStarted: null,
-        __stageDiagnosticWriteGate: null,
+        __delayInitialDiagnosticRequestId: null,
+        __initialDiagnosticWriteStarted: null,
+        __initialDiagnosticWriteGate: null,
       });
 
       // Headers are evidence of a response, while a hanging body remains a
@@ -424,7 +445,7 @@ async function main() {
       });
       await tracking.startLocationTracking(displayState);
       const firstDisplayCallback = taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.0, longitude: 127.5, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       while (responseGates.length !== 1) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
       assert.equal(displayUpdates.at(-1)?.serverStatus, "uploading", "started fetch must publish uploading, not prior storage evidence");
@@ -436,7 +457,7 @@ async function main() {
 
       await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 2));
       const secondDisplayCallback = taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.1, longitude: 127.6, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       const hasSecondResponseGate = () => responseGates.length === 2;
       while (!hasSecondResponseGate()) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
@@ -468,7 +489,7 @@ async function main() {
       });
       await tracking.startLocationTracking(staleA);
       const delayedACallback = taskManager.invokeTask({
-        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.2, longitude: 127.7, speed: null, heading: null, accuracy: 5 } }] },
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
       await delayedAttemptStarted.promise;
       const startingB = tracking.startLocationTracking(freshB);
@@ -486,6 +507,31 @@ async function main() {
         __diagnosticWriteGate: null,
         __diagnosticWriteStarted: null,
       });
+
+      // B is an actual TaskManager callback accepted for the same session.
+      // A's delayed deadline is then delivered after B and must be ignored
+      // rather than relabelling B's visible/persisted success as an error.
+      const sameSessionState = { ...state, token: "s".repeat(43), requestId: 510, startedAt: 510_000 };
+      const sameSessionUpdates: { serverStatus?: string; serverError?: string | null; lastAcceptedAt?: number | null }[] = [];
+      const unsubscribeSameSession = tracking.subscribeDebug((next: typeof sameSessionUpdates[number]) => sameSessionUpdates.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) }),
+      });
+      await tracking.startLocationTracking(sameSessionState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      const acceptedBeforeLateA = sameSessionUpdates.at(-1);
+      assert.equal(acceptedBeforeLateA?.serverStatus, "stored");
+      assert.ok(acceptedBeforeLateA?.lastAcceptedAt);
+      tracking.__publishCallbackDeadlineForTest(sameSessionState, Date.now() - 5_000);
+      await waitForDiagnostics();
+      assert.equal(sameSessionUpdates.at(-1)?.serverStatus, "stored", "late A deadline must not overwrite B accepted status");
+      assert.equal(sameSessionUpdates.at(-1)?.serverError, null);
+      const sameSessionRecords = storage.diagnosticRecords().filter((record) => record.requestId === sameSessionState.requestId);
+      assert.equal(sameSessionRecords.some((record) => record.lastErrorCode === "CALLBACK_DEADLINE_EXCEEDED"), false, "late A deadline must not persist over B accepted evidence");
+      unsubscribeSameSession();
     } finally {
       Object.assign(globalThis as Record<string, unknown>, { fetch: originalFetch });
     }
@@ -496,8 +542,16 @@ async function main() {
   }
 }
 
-export const locationTaskmanagerTerminalIntegration = main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-  throw error;
-});
+export const locationTaskmanagerTerminalIntegration = main();
+// `tsx` compiles this standalone runner as CJS in some Node 24 environments,
+// where top-level await is unavailable. Keep one harmless handle alive until
+// the exported promise settles so an unresolved fixture cannot look like PASS.
+const completionKeepalive = setInterval(() => undefined, 1_000);
+void locationTaskmanagerTerminalIntegration.then(
+  () => clearInterval(completionKeepalive),
+  (error) => {
+    clearInterval(completionKeepalive);
+    console.error(error);
+    process.exitCode = 1;
+  },
+);

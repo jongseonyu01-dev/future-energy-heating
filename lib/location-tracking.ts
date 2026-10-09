@@ -299,6 +299,10 @@ function emitPersistedDiagnostics(
   // session. A later journal record that includes the same/newer accepted time
   // is still allowed through.
   if (debugState.lastAcceptedAt && (!diagnostics.lastAcceptedAt || diagnostics.lastAcceptedAt < debugState.lastAcceptedAt)) return;
+  // The same accepted timestamp may be historical evidence from callback A
+  // while callback B has already reached ignored/error. In that case A's late
+  // summary must not replace B's terminal display state.
+  if (debugState.lastCallbackAt && (!diagnostics.lastCallbackAt || diagnostics.lastCallbackAt < debugState.lastCallbackAt)) return;
   const restoredStatus = locationRuntimeStatusFromDiagnostics(
     diagnostics,
     Date.now(),
@@ -695,6 +699,14 @@ export async function getCurrentLocationFull(): Promise<{
 
 function publishCallbackDeadline(state: PersistedTrackingState, callbackAt?: number): void {
   if (!sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)) return;
+  // A and B may be callbacks for the same active session. If B entered after A
+  // and already owns a newer visible stage/result, A's local deadline is stale
+  // evidence and must not turn B's accepted/uploading state into an error.
+  if (callbackAt && (
+    (debugState.lastCallbackAt !== null && debugState.lastCallbackAt > callbackAt)
+    || (debugState.lastAttemptAt !== null && debugState.lastAttemptAt > callbackAt)
+    || (debugState.lastAcceptedAt !== null && debugState.lastAcceptedAt >= callbackAt)
+  )) return;
   clearDebugUploadForState(state);
   const now = Date.now();
   emitDebug({
@@ -785,6 +797,23 @@ function recordCallbackStage(
   }).catch(() => undefined);
 }
 
+/**
+ * Session diagnostics are evidence only. They must never delay native callback
+ * adoption, credential use, or the one bounded HTTP request. The operation is
+ * still fenced: an expired callback releases the diagnostics queue and a late
+ * A write cannot publish into B's visible session.
+ */
+function scheduleSessionDiagnostics(
+  state: PersistedTrackingState,
+  fence: TaskCallbackDeadlineFence | undefined,
+  operation: () => Promise<LocationRuntimeDiagnostics | null>,
+  canPublish: () => boolean,
+): void {
+  void withinDiagnosticsDeadline(fence, operation).then((result) => {
+    if (result.kind === "VALUE" && result.value) emitPersistedDiagnostics(result.value, canPublish);
+  }).catch(() => undefined);
+}
+
 // This is intentionally much smaller than the complete callback budget. It
 // permits a headless callback to leave a privacy-safe breadcrumb when adoption
 // cannot establish an exact session, without allowing a stalled diagnostic
@@ -826,13 +855,22 @@ export async function sendLocationToServer(
     return;
   }
   if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
+  if (canPublishCurrentCallback()) emitDebug({
+    lastCallbackStage: "OWNER_CHECK",
+    lastCallbackStageAt: Date.now(),
+    lastCallbackStageElapsedMs: Math.max(0, Date.now() - callbackAt),
+  });
   const initialOwner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, callbackGeneration, isActive));
   if (initialOwner.kind !== "VALUE") {
     if (!isActive()) publishCallbackDeadline(state, callbackAt);
     return;
   }
   if (!initialOwner.value) return;
-  recordCallbackStage(state, "QUEUE", callbackAt, null, canPublishCurrentCallback);
+  if (canPublishCurrentCallback()) emitDebug({
+    lastCallbackStage: "QUEUE",
+    lastCallbackStageAt: Date.now(),
+    lastCallbackStageElapsedMs: Math.max(0, Date.now() - callbackAt),
+  });
 
   const queuedUpload = uploadQueue.enqueue(key, location, async (queuedLocation) => {
     if (!isActive()) return;
@@ -864,12 +902,12 @@ export async function sendLocationToServer(
       // one actual fetch attempt. This write is scheduled only *after* fetch
       // has been invoked, never awaited by the callback, and is scoped to the
       // exact session so terminal invalidation cannot reopen upload authority.
-      void withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
+      void runtimeDiagnostics.update(state, (current) => ({
         ...current,
         lastUploadStartedAt: startedAt,
         attemptCount: current.attemptCount + 1,
-      }), authorize)).then((attempted) => {
-        if (attempted.kind === "VALUE") emitPersistedDiagnostics(attempted.value, canPublishCurrentCallback);
+      }), authorize).then((attempted) => {
+        if (attempted) emitPersistedDiagnostics(attempted, canPublishCurrentCallback);
       }).catch(() => undefined);
     };
     const guardedResult = await withinTaskDeadline(taskFence, async () => runGuardedLocationUpload({
@@ -880,6 +918,11 @@ export async function sendLocationToServer(
           capturedBearerToken ?? await getStoredLocationBearerToken()
         ));
         const technicianToken = tokenResult.kind === "VALUE" ? tokenResult.value : null;
+        if (canPublishCurrentCallback()) emitDebug({
+          lastCallbackStage: "CREDENTIAL",
+          lastCallbackStageAt: Date.now(),
+          lastCallbackStageElapsedMs: Math.max(0, Date.now() - callbackAt),
+        });
         return isActive() && buildLocationRequestHeaders(technicianToken) ? technicianToken : null;
       },
       request: async (technicianToken) => {
@@ -922,7 +965,6 @@ export async function sendLocationToServer(
           // may invalidate authority immediately afterwards, but this exact
           // session still records one attempt without affecting the successor.
           recordStartedAttempt(requestStartedAt, () => true);
-          recordCallbackStage(state, "HTTP_REQUEST", callbackAt, requestStartedAt, canPublishCurrentCallback);
           return await pendingFetch;
         } finally {
           timeout.dispose();
@@ -935,10 +977,9 @@ export async function sendLocationToServer(
 
     if (guarded.kind === "STALE") return;
     if (guarded.kind === "MISSING_CREDENTIAL") {
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+      scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
         lastErrorCode: "MISSING_CREDENTIAL", lastErrorAt: Date.now(),
-      }, isActive));
-      if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, canPublishCurrentCallback);
+      }, isActive), () => false);
       if (canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
       return;
     }
@@ -949,10 +990,9 @@ export async function sendLocationToServer(
         ? canPublishCurrentCallback()
         : finishDebugUpload(state, callbackGeneration, debugAttemptId);
       const errorCode = guarded.error instanceof Error && guarded.error.name === "AbortError" ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+      scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
         lastErrorCode: errorCode, lastErrorAt: Date.now(),
-      }, isActive));
-      if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
+      }, isActive), () => false);
       if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
       return;
     }
@@ -986,11 +1026,10 @@ export async function sendLocationToServer(
       const canPublishResult = debugAttemptId === null
         ? canPublishCurrentCallback()
         : finishDebugUpload(state, callbackGeneration, debugAttemptId);
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+      scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
         lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
         lastErrorCode: "RESPONSE_BODY_TIMEOUT", lastErrorAt: responseBodyAt,
-      }, isActive));
-      if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
+      }, isActive), () => false);
       if (canPublishResult && canPublishCurrentCallback()) emitDebug({
         serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.",
         lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
@@ -1036,7 +1075,10 @@ export async function sendLocationToServer(
         if (!outcome) return;
         void runtimeDiagnostics.update(state, (current) => ({
           ...current,
-          acceptedOutcomeIds: [...current.acceptedOutcomeIds, outcome.eventId].slice(-64),
+          acceptedOutcomeIds: current.acceptedOutcomeIds.includes(outcome.eventId)
+            ? current.acceptedOutcomeIds
+            : [...current.acceptedOutcomeIds, outcome.eventId].slice(-64),
+          acceptedOutcomeThrough: current.acceptedOutcomeThrough ?? outcome.eventId,
           lastResponseAt: responseBodyAt,
           lastResponseHeadersAt: responseHeadersAt,
           lastResponseBodyAt: responseBodyAt,
@@ -1044,7 +1086,9 @@ export async function sendLocationToServer(
           lastStoredAt: recordedAt,
           lastErrorCode: null,
           lastErrorAt: null,
-          storedCount: current.storedCount + 1,
+          storedCount: current.acceptedOutcomeIds.includes(outcome.eventId)
+            ? current.storedCount
+            : current.storedCount + 1,
           lastCallbackStage: "SERVER_ACCEPTED",
           lastCallbackStageAt: responseBodyAt,
           lastCallbackStageElapsedMs: Math.max(0, responseBodyAt - callbackAt),
@@ -1062,7 +1106,7 @@ export async function sendLocationToServer(
         ? canPublishCurrentCallback()
         : finishDebugUpload(state, callbackGeneration, debugAttemptId);
       lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
+      scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.update(state, (current) => ({
         ...current,
         lastResponseAt: responseBodyAt,
         lastResponseHeadersAt: responseHeadersAt,
@@ -1070,9 +1114,8 @@ export async function sendLocationToServer(
         lastErrorCode: "IGNORED_OLDER_OR_DUPLICATE",
         lastErrorAt: responseBodyAt,
         ignoredCount: current.ignoredCount + 1,
-      }), isActive));
-      if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
+      }), isActive), () => false);
+      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt, ignoredCount: debugState.ignoredCount + 1 });
       return;
     }
     if (disposition === "terminal") {
@@ -1090,14 +1133,13 @@ export async function sendLocationToServer(
     const canPublishResult = debugAttemptId === null
       ? canPublishCurrentCallback()
       : finishDebugUpload(state, callbackGeneration, debugAttemptId);
-    const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
+    scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
       lastResponseAt: responseBodyAt,
       lastResponseHeadersAt: responseHeadersAt,
       lastResponseBodyAt: responseBodyAt,
       lastErrorCode: parsed.kind === "INVALID" ? "INVALID_RESPONSE_BODY" : "SERVER_RETRYABLE",
       lastErrorAt: responseBodyAt,
-    }, isActive));
-    if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
+    }, isActive), () => false);
     if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
   });
 
@@ -1288,6 +1330,11 @@ export function registerLocationTrackingTask(): boolean {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {
         const taskFence = new TaskCallbackDeadlineFence(createTaskDeadline(TASK_CALLBACK_TOTAL_BUDGET_MS));
         const callbackEnteredAt = Date.now();
+        // This module-level immutable receipt is deliberately not assigned to a
+        // session. It distinguishes "Task callback entered" from no observed
+        // callback even when headless adoption later fails or local diagnostics
+        // stall. It is detached from the collection/upload critical path.
+        void recordUnboundTaskCallback("TASK_CALLBACK_ENTERED", callbackEnteredAt, taskFence);
         if (error) {
           await recordUnboundTaskCallback("TASK_NATIVE_ERROR", callbackEnteredAt, taskFence);
           return;
@@ -1342,41 +1389,35 @@ export function registerLocationTrackingTask(): boolean {
           return;
         }
         const callbackAt = callbackEnteredAt;
-        const ensured = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.ensure(
-          adopted.state,
-          callbackAt,
-          () => taskFence.isActive(),
-        ));
-        if (ensured.kind !== "VALUE" || !taskFence.isActive()) {
-          publishCallbackDeadline(adopted.state, callbackAt);
-          return;
-        }
-        const callbackDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(adopted.state, (current) => ({
-          ...current,
+        const callbackGeneration = trackingLifecycle.captureGeneration();
+        const canPublish = () => taskFence.isActive()
+          && trackingLifecycle.isGenerationCurrent(callbackGeneration)
+          && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state);
+        // Initial callback observation is in-memory only. Durable diagnostics
+        // begin after the actual fetch is invoked, so a slow AsyncStorage read
+        // or write can never consume this callback's HTTP/body budget.
+        emitDebug({
           lastCallbackAt: callbackAt,
           lastMeasuredAt: Number(latest.timestamp),
           nativeRegistration: "registered",
           lastNativeCheckAt: callbackAt,
-        }), () => taskFence.isActive()));
-        if (callbackDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
-          publishCallbackDeadline(adopted.state, callbackAt);
-          return;
-        }
-        emitPersistedDiagnostics(callbackDiagnostics.value);
-        recordCallbackStage(adopted.state, "ADOPTED", callbackAt, null, () => taskFence.isActive() && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state));
+          source: "foreground-service-task",
+          lastCallbackStage: "ADOPTED",
+          lastCallbackStageAt: callbackAt,
+          lastCallbackStageElapsedMs: 0,
+        });
         const lat = Number(latest.coords?.latitude);
         const lng = Number(latest.coords?.longitude);
         if (!latest.coords || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-          const coordinateDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(adopted.state, {
+          scheduleSessionDiagnostics(adopted.state, taskFence, () => runtimeDiagnostics.patch(adopted.state, {
+            lastCallbackAt: callbackAt,
+            lastMeasuredAt: Number(latest.timestamp),
+            nativeRegistration: "registered",
+            lastNativeCheckAt: callbackAt,
             lastErrorCode: "COORDINATE_INVALID",
             lastErrorAt: Date.now(),
-          }, () => taskFence.isActive()));
-          if (coordinateDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
-            publishCallbackDeadline(adopted.state, callbackAt);
-            return;
-          }
-          emitPersistedDiagnostics(coordinateDiagnostics.value);
-          if (sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state)) {
+          }, canPublish), canPublish);
+          if (canPublish()) {
             emitDebug({ serverStatus: "error", serverError: "위치 좌표 형식을 확인하지 못했습니다.", source: "foreground-service-task" });
           }
           return;

@@ -627,8 +627,8 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>전송 단계: {formatStage(debugState?.lastAttemptStage, debugState?.lastAttemptStageAt, debugState?.lastAttemptStageElapsedMs)}</Text>
           <Text style={s.debugRow}>앱 상태 전환: {debugState?.lastAppState || '기록 전'} · {formatTrackingTime(debugState?.lastAppStateAt)}</Text>
           <Text style={s.debugRow}>
-            세션 미확정 Task 기록: {unboundTaskEvent
-              ? `${unboundTaskEvent.code} · ${formatTrackingTime(unboundTaskEvent.observedAt)} (현재 세션과 연결하지 않음)`
+            최근 Task 수신·미귀속 기록: {unboundTaskEvent
+              ? `${unboundTaskEvent.code === 'TASK_CALLBACK_ENTERED' ? 'TASK_CALLBACK_ENTERED (진입 확인)' : unboundTaskEvent.code} · ${formatTrackingTime(unboundTaskEvent.observedAt)} (현재 세션과 연결하지 않음)`
               : '없음'}
           </Text>
           <TouchableOpacity

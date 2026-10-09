@@ -163,6 +163,84 @@ describe("세션별 위치 런타임 진단", () => {
     });
   });
 
+  it("새 accepted outcome 복원은 같은 세션의 과거 network 오류만 해소한다", async () => {
+    const values = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await diagnostics.begin(stateA, 100_000);
+    await diagnostics.patch(stateA, {
+      lastCallbackAt: 100_100,
+      lastErrorCode: "NETWORK_TIMEOUT",
+      lastErrorAt: 100_200,
+    });
+    await diagnostics.recordAcceptedOutcome(stateA, {
+      callbackAt: 100_100,
+      attemptStartedAt: 100_110,
+      responseHeadersAt: 100_320,
+      responseBodyAt: 100_330,
+      acceptedAt: 100_330,
+      storedAt: 100_330,
+    }, 100_330);
+    await expect(new LocationRuntimeDiagnosticsStore(storage).read(stateA)).resolves.toMatchObject({
+      lastStoredAt: 100_330,
+      storedCount: 1,
+      lastErrorCode: null,
+    });
+
+    await diagnostics.patch(stateA, {
+      lastCallbackAt: 100_400,
+      lastErrorCode: "NETWORK_TIMEOUT",
+      lastErrorAt: 100_450,
+    });
+    await expect(new LocationRuntimeDiagnosticsStore(storage).read(stateA)).resolves.toMatchObject({
+      lastStoredAt: 100_330,
+      storedCount: 1,
+      lastErrorCode: "NETWORK_TIMEOUT",
+      lastErrorAt: 100_450,
+    });
+  });
+
+  it("checkpoint 전 30개 accepted outcome은 중단·반복 복원 뒤에도 정확히 한 번 누적한다", async () => {
+    const values = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+      removeItem: async (key) => { values.delete(key); },
+    };
+    const writer = new LocationRuntimeDiagnosticsStore(storage);
+    await writer.begin(stateA, 200_000);
+    await Promise.all(Array.from({ length: 30 }, async (_, index) => {
+      const at = 200_100 + index;
+      await writer.recordAcceptedOutcome(stateA, {
+        callbackAt: at,
+        attemptStartedAt: at,
+        responseHeadersAt: at,
+        responseBodyAt: at,
+        acceptedAt: at,
+        storedAt: at,
+      }, at);
+    }));
+    const beforeCheckpoint = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(beforeCheckpoint).toMatchObject({ storedCount: 30, lastStoredAt: 200_129 });
+    const repeatedRead = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(repeatedRead).toMatchObject({ storedCount: 30, lastStoredAt: 200_129 });
+
+    // A normal summary update checkpoints all merged immutable events. Only
+    // after that durable exact count exists may their individual keys be pruned.
+    await writer.patch(stateA, { nativeRegistration: "registered", lastNativeCheckAt: 200_200 });
+    await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+    const restored = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(restored).toMatchObject({ storedCount: 30, lastStoredAt: 200_129 });
+    expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(0);
+  });
+
   it("복귀 뒤에도 최근 오류를 보이고 오래된 uploading은 유지하지 않는다", async () => {
     const storage = memoryStorage();
     const diagnostics = new LocationRuntimeDiagnosticsStore(storage);

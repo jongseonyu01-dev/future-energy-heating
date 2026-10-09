@@ -19,6 +19,8 @@ assert.match(native, /activeOwnerGeneration/, "native module must fence delayed 
 assert.match(native, /invalidateOwner/, "terminal/close must revoke native visual authority");
 assert.match(native, /System\.currentTimeMillis\(\)/, "native module must calculate accepted-storage age from its own clock");
 assert.match(native, /mainHandler\.postDelayed/, "visible overlay must refresh absolute storage age without callbacks");
+assert.match(native, /serverConfirmationDelayMs/, "overlay must distinguish a prolonged accepted-save confirmation gap from fresh evidence");
+assert.match(native, /서버 저장 확인 지연/, "long-running age label must not imply a current server save");
 assert.match(native, /updateIfVisible/, "headless diagnostics may update only an already-opened overlay");
 assert.match(native, /hideOverlay\(\)/, "close and module teardown must remove the optional window");
 assert.doesNotMatch(native, /latitude|longitude|customer|address|token|fetch\(/i, "overlay native implementation must not collect or display PII/network data");

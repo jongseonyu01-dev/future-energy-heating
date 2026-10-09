@@ -31,6 +31,9 @@ import kotlin.math.max
  * callback, request, response, or server save.
  */
 class FutureEnergyStatusOverlayModule : Module() {
+  // This is an operational-warning threshold, not a freshness policy and not
+  // evidence that collection, HTTP, or server storage has failed.
+  private val serverConfirmationDelayMs = 90_000L
   private var overlay: LinearLayout? = null
   private var label: TextView? = null
   private var activeOwnerId: String? = null
@@ -216,9 +219,15 @@ class FutureEnergyStatusOverlayModule : Module() {
 
   private fun renderedStatusText(): String {
     val storedAt = lastStoredAt ?: return statusText
-    val ageSeconds = max(0, (System.currentTimeMillis() - storedAt) / 1_000)
+    val ageMs = max(0, System.currentTimeMillis() - storedAt)
+    val ageSeconds = ageMs / 1_000
     val age = if (ageSeconds < 60) "${ageSeconds}초 전" else "${ageSeconds / 60}분 전"
-    return "$statusText · 마지막 서버 저장 $age"
+    val visibleStatus = if (ageMs >= serverConfirmationDelayMs) {
+      "위치 공유 중 · 서버 저장 확인 지연"
+    } else {
+      statusText
+    }
+    return "$visibleStatus · 마지막 서버 저장 $age"
   }
 
   private fun status(): Map<String, Any> = mapOf(

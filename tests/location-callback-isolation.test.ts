@@ -188,6 +188,7 @@ describe("불변 위치 진단", () => {
       lastAppState: null,
       lastAppStateAt: null,
       acceptedOutcomeIds: [],
+      acceptedOutcomeThrough: null,
       lastResponseAt: null,
       lastStoredAt: null,
       lastErrorCode: CALLBACK_DEADLINE_ERROR,
