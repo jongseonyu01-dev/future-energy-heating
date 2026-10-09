@@ -1195,7 +1195,10 @@ export async function sendLocationToServer(
       return;
     }
     if (disposition === "terminal") {
-      if (completeDebugCallback(state, callbackOwner ?? undefined, "terminal") && deactivateAfterTerminalResponse(state)) {
+      // A newer callback can own the view while this response terminates the
+      // same session. UI ownership must never gate authority invalidation.
+      void completeDebugCallback(state, callbackOwner ?? undefined, "terminal");
+      if (deactivateAfterTerminalResponse(state)) {
         emitDebug({
           serverStatus: "error",
           serverError: formatLocationRequestFailure(response.status, payload?.error),

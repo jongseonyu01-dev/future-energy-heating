@@ -106,9 +106,13 @@ async function main() {
     `);
     await writeFile(join(stubs, "location.ts"), `
       export const Accuracy = { High: 1 };
-      export const hasStartedLocationUpdatesAsync = async () => true;
-      export const startLocationUpdatesAsync = async () => undefined;
-      export const stopLocationUpdatesAsync = async () => undefined;
+      let running = false;
+      let stopCount = 0;
+      export const hasStartedLocationUpdatesAsync = async () => running;
+      export const startLocationUpdatesAsync = async () => { running = true; };
+      export const stopLocationUpdatesAsync = async () => { stopCount += 1; running = false; };
+      export const nativeStopCount = () => stopCount;
+      export const nativeRunning = () => running;
       export const requestForegroundPermissionsAsync = async () => ({ status: "granted" });
       export const getCurrentPositionAsync = async () => null;
     `);
@@ -180,6 +184,10 @@ async function main() {
       const tracking = await import(pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href);
       assert.equal(tracking.registerLocationTrackingTask(), true, "custom entry must register the TaskManager handler before callback delivery");
       const taskManager = await import(pathToFileURL(join(stubs, "task-manager.ts")).href);
+      const nativeLocation = await import(pathToFileURL(join(stubs, "location.ts")).href) as {
+        nativeStopCount: () => number;
+        nativeRunning: () => boolean;
+      };
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
         diagnosticRecords: () => {
           requestId: number; attemptCount: number; lastErrorCode?: string | null;
@@ -673,6 +681,54 @@ async function main() {
       assert.equal(ownerUpdates.at(-1)?.serverStatus, "stored", "late A deadline must not overwrite B callback's verified accepted state");
       assert.equal(ownerUpdates.at(-1)?.serverError, null);
       unsubscribeOwner();
+
+      // Body-classified terminal is authority invalidation, not a UI-only
+      // result. While A waits for its 400 terminal body, B can acquire the
+      // view lease and queue behind A. Releasing A must stop the exact session
+      // before B drains; a later C must not make any HTTP request either.
+      const bodyTerminalState = { ...state, token: "z".repeat(43), requestId: 512, startedAt: 512_000 };
+      const terminalBodyStarted = Promise.withResolvers<void>();
+      const releaseTerminalBody = Promise.withResolvers<void>();
+      let terminalBodyRequests = 0;
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => {
+          terminalBodyRequests += 1;
+          if (terminalBodyRequests === 1) {
+            return {
+              ok: false,
+              status: 400,
+              json: async () => {
+                terminalBodyStarted.resolve();
+                await releaseTerminalBody.promise;
+                return { success: false, code: "LOCATION_SESSION_TERMINATED", error: "synthetic terminal" };
+              },
+            };
+          }
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: true }) };
+        },
+      });
+      await tracking.startLocationTracking(bodyTerminalState);
+      const stopCountBeforeBodyTerminal = nativeLocation.nativeStopCount();
+      const terminalA = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await terminalBodyStarted.promise;
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 5));
+      const queuedB = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      releaseTerminalBody.resolve();
+      await terminalA;
+      await queuedB;
+      await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      for (let attempt = 0; attempt < 20 && nativeLocation.nativeRunning(); attempt += 1) await waitForDiagnostics();
+      assert.equal(terminalBodyRequests, 1, "terminal body A must block queued B and later C HTTP uploads");
+      assert.equal(nativeLocation.nativeStopCount(), stopCountBeforeBodyTerminal + 1, "terminal body A must stop native collection exactly once");
+      assert.equal(nativeLocation.nativeRunning(), false, "terminal body A must leave native collection stopped");
     } finally {
       Object.assign(globalThis as Record<string, unknown>, { fetch: originalFetch });
     }
