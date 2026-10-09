@@ -258,13 +258,20 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       } catch (error) {
         const stillOwnsRuntime = this.owns(state, startGeneration);
         if (stillOwnsRuntime) {
+          // Invalidate A before cleanup.  The cleanup guard captures this new
+          // generation so a synchronous B start can supersede it without A
+          // erasing B's pointer, notification, or native collection.
+          const failedStartGeneration = this.generation + 1;
           this.intent = null;
-          this.generation += 1;
-          await this.adapter.stopNativeCollection();
-          await this.adapter.clearControlNotification(state);
+          this.generation = failedStartGeneration;
+          const stillFailedStartOwner = () => (
+            failedStartGeneration === this.generation && this.intent === null
+          );
+          await this.adapter.stopNativeCollection(stillFailedStartOwner);
+          await this.adapter.clearControlNotification(state, stillFailedStartOwner);
+          await this.adapter.clearIfSame(state, stillFailedStartOwner);
+          if (stillFailedStartOwner()) this.adapter.onStateChanged(null);
         }
-        await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
-        if (stillOwnsRuntime) this.adapter.onStateChanged(null);
         throw error;
       }
     });

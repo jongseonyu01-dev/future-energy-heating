@@ -39,6 +39,9 @@ async function main() {
         getAllKeys: async () => [...values.keys()],
         multiGet: async (keys: readonly string[]) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
       };
+      export const diagnosticRecords = () => [...values.entries()]
+        .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_v2:"))
+        .map(([, value]) => JSON.parse(value));
     `);
     await writeFile(join(stubs, "notifications.ts"), `
       export const IosAuthorizationStatus = { PROVISIONAL: 3 };
@@ -91,8 +94,11 @@ async function main() {
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
       .replace('import { adoptHeadlessTrackingWithCredential } from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`)
       .replace('} from "@/lib/location-task-budget";', `} from ${JSON.stringify(join(root, "lib/location-task-budget.ts"))};`)
-      .replace("const TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000;", "const TASK_CALLBACK_NETWORK_BUDGET_MS = 4;")
-      .replace("const RESPONSE_BODY_TIMEOUT_MS = 2_000;", "const RESPONSE_BODY_TIMEOUT_MS = 1;");
+      // Preserve a bounded callback deadline while leaving enough scheduling
+      // room for the genuine terminal path. A 4ms Node transform was flaky and
+      // could expire before the mocked immediate HTTP response was classified.
+      .replace("const TASK_CALLBACK_NETWORK_BUDGET_MS = 8_000;", "const TASK_CALLBACK_NETWORK_BUDGET_MS = 40;")
+      .replace("const RESPONSE_BODY_TIMEOUT_MS = 2_000;", "const RESPONSE_BODY_TIMEOUT_MS = 5;");
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     let requests = 0;
@@ -106,6 +112,19 @@ async function main() {
     try {
       const tracking = await import(`${pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href}?v=${Date.now()}`);
       const taskManager = await import(`${pathToFileURL(join(stubs, "task-manager.ts")).href}?v=${Date.now()}`);
+      const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
+        diagnosticRecords: () => { requestId: number; attemptCount: number }[];
+      };
+      const waitForDiagnostics = async () => {
+        await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+        await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      };
+      const maxAttempts = (requestId: number) => Math.max(
+        0,
+        ...storage.diagnosticRecords()
+          .filter((record) => record.requestId === requestId)
+          .map((record) => record.attemptCount),
+      );
       assert.equal(await tracking.startLocationTracking(state), undefined);
       const payload = {
         data: {
@@ -117,6 +136,8 @@ async function main() {
       };
       await taskManager.invokeTask(payload);
       assert.equal(requests, 1, "first callback must issue one terminal response request");
+      await waitForDiagnostics();
+      assert.equal(maxAttempts(state.requestId), 1, "terminal response must retain exactly one started fetch attempt");
 
       await taskManager.invokeTask(payload);
       assert.equal(requests, 1, "terminal marker must block next TaskManager callback before HTTP");
@@ -135,7 +156,7 @@ async function main() {
       });
       await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
       await tracking.startLocationTracking(replacementState);
-      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 12));
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 60));
       assert.equal(
         debugUpdates.some((next) => next.serverError === "위치 전송 준비 시간 제한으로 저장 여부를 확인하지 못했습니다."),
         false,
@@ -144,6 +165,52 @@ async function main() {
       tokenGate.resolve("technician-bearer");
       await delayedA;
       unsubscribe();
+      Object.assign(globalThis as Record<string, unknown>, { __tokenGate: null });
+
+      // A rejected fetch has no Response object, but it did begin one real HTTP
+      // attempt.  The callback must record exactly one attempt while a
+      // credential failure before fetch would remain at zero.
+      const failedFetchState = { ...state, token: "e".repeat(43), requestId: 504, startedAt: 504_000 };
+      const failureDebugUpdates: { attemptCount?: number; serverError?: string | null }[] = [];
+      const unsubscribeFailure = tracking.subscribeDebug((next: { attemptCount?: number; serverError?: string | null }) => failureDebugUpdates.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => {
+          requests += 1;
+          throw new Error("SYNTHETIC_NETWORK_REJECT");
+        },
+      });
+      await tracking.startLocationTracking(failedFetchState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.7, longitude: 127.2, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      assert.equal(failureDebugUpdates.at(-1)?.attemptCount, 1, "one rejected fetch must increment attemptCount exactly once");
+      assert.equal(failureDebugUpdates.at(-1)?.serverError, "네트워크 연결을 기다리는 중");
+      await waitForDiagnostics();
+      assert.equal(maxAttempts(failedFetchState.requestId), 1, "network rejection must retain one started fetch attempt");
+      unsubscribeFailure();
+
+      // An abort/timeout is also a started fetch. Conversely, a missing
+      // credential is rejected before fetch and therefore remains at zero.
+      const timeoutState = { ...state, token: "q".repeat(43), requestId: 505, startedAt: 505_000 };
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => new Promise<never>(() => {}),
+      });
+      await tracking.startLocationTracking(timeoutState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.8, longitude: 127.3, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      assert.equal(maxAttempts(timeoutState.requestId), 1, "timed-out fetch must retain one started attempt");
+
+      const noCredentialState = { ...state, token: "n".repeat(43), requestId: 506, startedAt: 506_000 };
+      Object.assign(globalThis as Record<string, unknown>, { __tokenGate: Promise.resolve(null) });
+      await tracking.startLocationTracking(noCredentialState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 37.9, longitude: 127.4, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      assert.equal(maxAttempts(noCredentialState.requestId), 0, "credential failure before fetch must retain zero attempts");
       Object.assign(globalThis as Record<string, unknown>, { __tokenGate: null });
     } finally {
       Object.assign(globalThis as Record<string, unknown>, { fetch: originalFetch });

@@ -629,6 +629,22 @@ export async function sendLocationToServer(
     if (requestBudgetMs <= 0 || !isActive()) return;
 
     let requestStartedAt: number | null = null;
+    let attemptRecorded = false;
+    const recordStartedAttempt = (startedAt: number, authorize: () => boolean = isActive) => {
+      if (attemptRecorded) return;
+      attemptRecorded = true;
+      // A network rejection or timeout has no Response value, but it is still
+      // one actual fetch attempt. This write is scheduled only *after* fetch
+      // has been invoked, never awaited by the callback, and is scoped to the
+      // exact session so terminal invalidation cannot reopen upload authority.
+      void withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
+        ...current,
+        lastUploadStartedAt: startedAt,
+        attemptCount: current.attemptCount + 1,
+      }), authorize)).then((attempted) => {
+        if (attempted.kind === "VALUE" && isActive()) emitPersistedDiagnostics(attempted.value);
+      }).catch(() => undefined);
+    };
     const guardedResult = await withinTaskDeadline(taskFence, async () => runGuardedLocationUpload({
       isCurrent: () => trackingLifecycle.isCurrent(state, undefined, isActive),
       getCredential: async () => {
@@ -655,7 +671,7 @@ export async function sendLocationToServer(
         const timeout = createRequestTimeout(Math.min(requestBudgetMs, taskFence ? taskFence.remainingMs() : requestBudgetMs));
         try {
           if (!isActive()) throw new Error("CALLBACK_BUDGET_EXPIRED");
-          return await fetch(`${getApiBaseUrl()}/api/location/update`, {
+          const pendingFetch = fetch(`${getApiBaseUrl()}/api/location/update`, {
             method: "POST",
             headers,
             signal: timeout.signal,
@@ -669,6 +685,11 @@ export async function sendLocationToServer(
               measuredAt: queuedLocation.measuredAt,
             }),
           });
+          // Fetch is now irrevocably started. A replacement/terminal response
+          // may invalidate authority immediately afterwards, but this exact
+          // session still records one attempt without affecting the successor.
+          recordStartedAttempt(requestStartedAt, () => true);
+          return await pendingFetch;
         } finally {
           timeout.dispose();
         }
@@ -707,18 +728,6 @@ export async function sendLocationToServer(
     if ([401, 403, 404, 409].includes(response.status)) {
       deactivateAfterTerminalResponse(state);
       return;
-    }
-
-    // Count only after fetch actually started, but never allow a stalled
-    // diagnostic write to delay a server terminal decision or body parsing.
-    if (requestStartedAt !== null) {
-      void withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
-        ...current,
-        lastUploadStartedAt: requestStartedAt,
-        attemptCount: current.attemptCount + 1,
-      }), isActive)).then((attempted) => {
-        if (attempted.kind === "VALUE" && isActive()) emitPersistedDiagnostics(attempted.value);
-      }).catch(() => undefined);
     }
 
     const responseBodyBudgetMs = taskFence

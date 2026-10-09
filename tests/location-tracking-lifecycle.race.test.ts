@@ -223,6 +223,54 @@ async function main() {
     assert.equal(await coordinator.start(state("F", 5)), true, "foreground retry may start after the transient failure");
   }
 
+  // P1: a failed A native start must clean A, but a synchronous replacement B
+  // may claim the lifecycle while that cleanup is awaiting.  A's guard must
+  // then yield without clearing B or reporting B as inactive.
+  {
+    const cleanupStarted = deferred<void>();
+    const releaseCleanup = deferred<void>();
+    let starts = 0;
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        starts += 1;
+        if (starts === 1) throw new Error("A_START_DENIED");
+      },
+      stopNativeCollection: async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const first = state("A", 61);
+    const second = state("B", 62);
+    const failedA = coordinator.start(first);
+    await cleanupStarted.promise;
+    const pendingB = coordinator.start(second);
+    releaseCleanup.resolve();
+    await assert.rejects(() => failedA, /A_START_DENIED/);
+    assert.equal(await pendingB, true, "replacement B must begin after A cleanup yields");
+    assert.equal(fixture.readStored()?.requestId, second.requestId, "late A cleanup must not erase B pointer");
+    assert.equal(await coordinator.isCurrent(second), true, "B must remain the active lifecycle owner");
+  }
+
+  // A failed start with no replacement must remove its pointer so restore does
+  // not resurrect the rejected foreground service automatically.
+  {
+    let starts = 0;
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        starts += 1;
+        throw new Error("START_DENIED");
+      },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const first = state("Z", 63);
+    await assert.rejects(() => coordinator.start(first), /START_DENIED/);
+    assert.equal(fixture.readStored(), null, "failed A pointer must be removed before restore");
+    assert.equal(await coordinator.restoreForUser(first.technicianUserId), null);
+    assert.equal(starts, 1, "restore must not restart a failed A service");
+  }
+
   // A persisted intent may outlive Android's task consumer. Reconciliation must
   // restart only the exact current state; registration itself is not treated as
   // proof that GPS callbacks or HTTP persistence are healthy.
