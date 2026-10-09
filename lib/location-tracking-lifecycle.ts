@@ -65,6 +65,15 @@ export interface TrackingLifecycleAdapter<T extends TrackingLifecycleState> {
   markInactive?: (state: T, isStillAuthorized?: () => boolean) => Promise<void>;
   /** Rejects a terminal session before restore or headless adoption. */
   isInactive?: (state: T, isStillAuthorized?: () => boolean) => Promise<boolean>;
+  /**
+   * Records a reversible local pause after permission is denied. Unlike an
+   * inactive marker, a matching saved session may resume after approval.
+   */
+  markPermissionPending?: (state: T, isStillAuthorized?: () => boolean) => Promise<void>;
+  /** Clears only a matching reversible pause after native collection restarts. */
+  clearPermissionPending?: (state: T, isStillAuthorized?: () => boolean) => Promise<void>;
+  /** Blocks headless adoption until foreground approval explicitly restores it. */
+  isPermissionPending?: (state: T, isStillAuthorized?: () => boolean) => Promise<boolean>;
   showControlNotification: (state: T) => Promise<void>;
   clearControlNotification: (state: T | null, isStillAuthorized?: () => boolean) => Promise<void>;
   /** Registration state only; it is not proof of a future callback or server persistence. */
@@ -127,6 +136,19 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     await this.adapter.markInactive(state, guard).catch(() => undefined);
   }
 
+  private async isPermissionPending(state: T, guard: () => boolean = () => true): Promise<boolean> {
+    if (!guard()) return true;
+    if (!this.adapter.isPermissionPending) return false;
+    try {
+      return Boolean(await this.adapter.isPermissionPending(state, guard));
+    } catch {
+      // Permission pending is a local safety pause. A failed marker read must
+      // not make a cold headless runtime resume collection without foreground
+      // confirmation.
+      return true;
+    }
+  }
+
   public invalidate(state?: T | null): void {
     this.generation += 1;
     if (!state || sameTrackingLifecycleState(this.intent, state)) this.intent = null;
@@ -156,6 +178,28 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       await this.adapter.clearControlNotification(state, stillStoppingOwner);
       await this.adapter.stopNativeCollection(stillStoppingOwner);
       if (stillStoppingOwner()) this.adapter.onStateChanged(null);
+      return state;
+    });
+  }
+
+  /**
+   * Confirmed permission denial is not a terminal server response. Invalidate
+   * only the exact in-memory owner synchronously, stop native collection before
+   * waiting on persistence, and retain the saved pointer for later approval.
+   */
+  private beginPermissionSuspend(state: T): Promise<T> {
+    const suspendGeneration = this.generation + 1;
+    this.generation = suspendGeneration;
+    this.intent = null;
+    this.adapter.onStateChanged(null);
+    const stillSuspendingOwner = () => suspendGeneration === this.generation && this.intent === null;
+    // A stalled local marker must never delay the native stop or permit another
+    // callback to upload. Its guard prevents late A persistence from affecting B.
+    void this.adapter.markPermissionPending?.(state, stillSuspendingOwner).catch(() => undefined);
+    return this.enqueue(async () => {
+      await this.adapter.stopNativeCollection(stillSuspendingOwner);
+      await this.adapter.clearControlNotification(state, stillSuspendingOwner);
+      if (stillSuspendingOwner()) this.adapter.onStateChanged(null);
       return state;
     });
   }
@@ -258,6 +302,9 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
         }
 
         this.adapter.onStateChanged(state);
+        // Do not let cleanup delay the successful native collection start. A
+        // stale marker is informational only; it cannot re-block this owner.
+        void this.adapter.clearPermissionPending?.(state, () => this.owns(state, startGeneration)).catch(() => undefined);
         return true;
       } catch (error) {
         const stillOwnsRuntime = this.owns(state, startGeneration);
@@ -351,6 +398,7 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     const state = await this.adapter.read();
     if (!isActive() || !state || readGeneration !== this.generation) return null;
     if (await this.isInactive(state, () => isActive() && readGeneration === this.generation)) return null;
+    if (await this.isPermissionPending(state, () => isActive() && readGeneration === this.generation)) return null;
     if (this.intent) return sameTrackingLifecycleState(this.intent, state) ? state : null;
     if (!isActive()) return null;
     this.generation += 1;
@@ -374,6 +422,20 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     if (!(await this.isCurrent(state, responseGeneration))) return null;
     if (!this.owns(state, responseGeneration)) return null;
     return this.beginStop(state);
+  }
+
+  /**
+   * Does not clear or mark a session terminal. Used only after a native error
+   * whose exact state is already owned by this JS runtime.
+   */
+  public suspendKnownExact(state: T, expectedGeneration = this.generation): boolean {
+    if (expectedGeneration !== this.generation) return false;
+    // Native error payloads do not identify a saved session. This path is only
+    // safe for an exact owner already held by this JS runtime; a cold or late
+    // callback must remain unbound rather than claiming a guessed pointer.
+    if (!this.intent || !sameTrackingLifecycleState(this.intent, state)) return false;
+    void this.beginPermissionSuspend(state);
+    return true;
   }
 
   /** Applies an explicitly classified terminal server response to its exact owner only. */
@@ -422,5 +484,21 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     if (await this.isInactive(state, () => readGeneration === this.generation && !this.intent)) return null;
     this.intent = state;
     return this.beginStop(state);
+  }
+
+  /**
+   * Cold restore may discover a permission denial before it has claimed intent.
+   * Re-read the exact pointer under the captured generation, then suspend native
+   * collection without terminal-marking or deleting the same resumable session.
+   */
+  public async suspendStoredExact(state: T): Promise<T | null> {
+    const readGeneration = this.generation;
+    const persisted = await this.adapter.read();
+    if (!sameTrackingLifecycleState(persisted, state)
+      || readGeneration !== this.generation
+      || this.intent) return null;
+    if (await this.isInactive(state, () => readGeneration === this.generation && !this.intent)) return null;
+    this.intent = state;
+    return this.beginPermissionSuspend(state);
   }
 }

@@ -65,6 +65,7 @@ Notifications.setNotificationHandler({
 
 const TRACKING_STATE_KEY = "location_tracking_state_v2";
 const INACTIVE_TRACKING_PREFIX = "location_tracking_inactive_v1";
+const PERMISSION_PENDING_TRACKING_PREFIX = "location_tracking_permission_pending_v1";
 const BACKGROUND_TASK_NAME = "FUTURE_ENERGY_LOCATION_TASK";
 const NOTIFICATION_CATEGORY = "FUTURE_ENERGY_LOCATION_TRACKING";
 export const STOP_TRACKING_NOTIFICATION_ACTION = "FUTURE_ENERGY_LOCATION_STOP";
@@ -189,6 +190,11 @@ let nextDebugCallbackId = 0;
 // the window before a delayed AsyncStorage.setItem settles in the current
 // TaskManager runtime.
 const inactiveTrackingStateKeys = new Set<string>();
+// Permission denial pauses local collection but is intentionally not terminal:
+// the exact saved session remains resumable only after a later foreground
+// approval check. This in-memory fence is diagnostic/visibility only; lifecycle
+// generation invalidation remains the upload authority boundary.
+const permissionPendingTrackingStateKeys = new Set<string>();
 
 function stateKey(state: PersistedTrackingState): string {
   return `${state.token}:${state.requestId}:${state.technicianUserId}:${state.startedAt}`;
@@ -284,6 +290,10 @@ function hasCurrentDebugUpload(): boolean {
 
 function inactiveTrackingKey(state: PersistedTrackingState): string {
   return `${INACTIVE_TRACKING_PREFIX}:${state.requestId}:${state.technicianUserId}:${state.startedAt}:${state.token}`;
+}
+
+function permissionPendingTrackingKey(state: PersistedTrackingState): string {
+  return `${PERMISSION_PENDING_TRACKING_PREFIX}:${state.requestId}:${state.technicianUserId}:${state.startedAt}:${state.token}`;
 }
 
 function emitTrackingState(state: PersistedTrackingState | null): void {
@@ -435,6 +445,45 @@ async function markTrackingStateInactive(
   const key = inactiveTrackingKey(state);
   inactiveTrackingStateKeys.add(key);
   await AsyncStorage.setItem(key, "1");
+}
+
+async function markTrackingStatePermissionPending(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<void> {
+  if (!isStillAuthorized()) return;
+  const key = permissionPendingTrackingKey(state);
+  permissionPendingTrackingStateKeys.add(key);
+  // Unlike the terminal inactive marker this value never rejects restore or
+  // headless adoption by itself. It is evidence that permission must be
+  // rechecked before native collection can resume for this exact pointer.
+  await AsyncStorage.setItem(key, "1");
+}
+
+async function clearTrackingStatePermissionPending(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<void> {
+  const key = permissionPendingTrackingKey(state);
+  if (!isStillAuthorized()) return;
+  permissionPendingTrackingStateKeys.delete(key);
+  try {
+    if (isStillAuthorized()) await AsyncStorage.removeItem(key);
+  } catch {
+    // The marker is informational; a stale one must not prevent a newly
+    // permission-approved exact session from restoring.
+  }
+}
+
+async function isTrackingStatePermissionPending(
+  state: PersistedTrackingState,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<boolean> {
+  if (!isStillAuthorized()) return true;
+  const key = permissionPendingTrackingKey(state);
+  if (permissionPendingTrackingStateKeys.has(key)) return true;
+  const pending = await AsyncStorage.getItem(key);
+  return !isStillAuthorized() || Boolean(pending);
 }
 
 async function isTrackingStateInactive(
@@ -713,25 +762,24 @@ export async function stopLocationTracking(): Promise<void> {
   lastUploadMeasurement = { key: "", measuredAt: 0 };
 }
 
-async function stopExactTrackingForPermissionDenial(state: PersistedTrackingState): Promise<boolean> {
+async function suspendExactTrackingForPermissionDenial(state: PersistedTrackingState): Promise<boolean> {
   // Do not use a broad cold stop here. A permission read for old A can finish
   // after B begins, so the lifecycle re-reads and matches this exact state
-  // before invalidating local collection.
+  // before suspending only that local collection. The pointer is deliberately
+  // preserved: granted permission may later resume this exact session.
   invalidateLocationStatusOverlayOwner(state);
-  const stopped = await trackingLifecycle.stopStoredExact(state);
-  if (!stopped) return false;
-  clearDebugUploadForState(stopped);
+  const suspended = await trackingLifecycle.suspendStoredExact(state);
+  if (!suspended) return false;
+  clearDebugUploadForState(suspended);
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   emitDebug({
     serverStatus: "error",
-    serverError: "위치 권한이 변경되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
+    serverError: "위치 권한이 변경되어 위치 공유를 일시 중지했습니다. 권한을 허용하면 같은 업무의 공유를 다시 시작합니다.",
   });
-  const diagnostics = await runtimeDiagnostics.patch(stopped, {
+  void runtimeDiagnostics.patch(suspended, {
     lastErrorCode: "LOCATION_PERMISSION_DENIED",
     lastErrorAt: Date.now(),
-  });
-  emitPersistedDiagnostics(diagnostics);
-  emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
+  }).then(emitPersistedDiagnostics).catch(() => undefined);
   return true;
 }
 
@@ -753,7 +801,7 @@ export async function restoreLocationTrackingForUser(userId: number): Promise<Pe
       if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
       if (!eligibility.eligible) {
         if (eligibility.status === "denied") {
-          await stopExactTrackingForPermissionDenial(candidate);
+          await suspendExactTrackingForPermissionDenial(candidate);
           return null;
         }
         emitDebug({
@@ -980,7 +1028,7 @@ function isConfirmedNativeLocationPermissionError(error: unknown): boolean {
   return code === "E_LOCATION_UNAUTHORIZED";
 }
 
-function stopCurrentTrackingForPermissionRevocation(
+function suspendCurrentTrackingForPermissionRevocation(
   state: PersistedTrackingState | null,
 ): boolean {
   // A native error does not carry the persisted session identifier. Never
@@ -988,11 +1036,22 @@ function stopCurrentTrackingForPermissionRevocation(
   // replacement B. Only an exact owner already held by this JS runtime is safe
   // to invalidate here; a cold/unbound error remains separate evidence.
   if (!state) return false;
-  return deactivateAfterTerminalResponse(
-    state,
-    "LOCATION_PERMISSION_REVOKED",
-    "위치 권한이 철회되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
-  );
+  const generation = trackingLifecycle.captureGeneration();
+  if (!trackingLifecycle.suspendKnownExact(state, generation)) return false;
+  clearDebugUploadForState(state);
+  lastUploadMeasurement = { key: "", measuredAt: 0 };
+  invalidateLocationStatusOverlayOwner(state);
+  emitDebug({
+    serverStatus: "error",
+    serverError: "위치 권한이 변경되어 위치 공유를 일시 중지했습니다. 권한을 허용하면 같은 업무의 공유를 다시 시작합니다.",
+  });
+  // Native collection and upload authority are already invalidated above. A
+  // stalled journal must never delay that stop or permit another HTTP update.
+  void runtimeDiagnostics.patch(state, {
+    lastErrorCode: "LOCATION_PERMISSION_REVOKED",
+    lastErrorAt: Date.now(),
+  }).then(emitPersistedDiagnostics).catch(() => undefined);
+  return true;
 }
 
 export async function sendLocationToServer(
@@ -1410,6 +1469,9 @@ const trackingLifecycle = new TrackingLifecycleCoordinator<PersistedTrackingStat
   clearIfSame: clearTrackingStateIfSame,
   markInactive: markTrackingStateInactive,
   isInactive: isTrackingStateInactive,
+  markPermissionPending: markTrackingStatePermissionPending,
+  clearPermissionPending: clearTrackingStatePermissionPending,
+  isPermissionPending: isTrackingStatePermissionPending,
   showControlNotification: ensureControlNotification,
   clearControlNotification,
   isNativeCollectionRegistered: isNativeLocationTaskRegistered,
@@ -1512,14 +1574,15 @@ export function registerLocationTrackingTask(): boolean {
         if (error) {
           const permissionRevoked = isConfirmedNativeLocationPermissionError(error);
           const permissionErrorOwner = permissionRevoked ? trackingLifecycle.currentIntent() : null;
-          await recordUnboundTaskCallback(
-            permissionRevoked ? "TASK_NATIVE_PERMISSION_REVOKED" : "TASK_NATIVE_ERROR",
-            callbackEnteredAt,
-            taskFence,
-          );
           if (permissionRevoked && taskFence.isActive()) {
-            stopCurrentTrackingForPermissionRevocation(permissionErrorOwner);
+            // No journal await may precede this exact-owner fence. A stalled
+            // diagnostic write previously left native authority alive long
+            // enough for a following callback to issue one more HTTP update.
+            suspendCurrentTrackingForPermissionRevocation(permissionErrorOwner);
+            void recordUnboundTaskCallback("TASK_NATIVE_PERMISSION_REVOKED", callbackEnteredAt, taskFence);
+            return;
           }
+          await recordUnboundTaskCallback("TASK_NATIVE_ERROR", callbackEnteredAt, taskFence);
           return;
         }
         const taskLocations = (Array.isArray(data?.locations) ? data.locations : []) as {

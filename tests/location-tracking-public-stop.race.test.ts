@@ -39,11 +39,13 @@ async function main() {
     await writeFile(join(stubs, "react-native.ts"), 'export const Platform = { OS: "android" };\n');
     await writeFile(join(stubs, "async-storage.ts"), `
       let readCount = 0;
-      const markers = new Map<string, string>();
+      const inactiveMarkers = new Map<string, string>();
+      const permissionMarkers = new Map<string, string>();
       const values = new Map<string, string>();
       export default {
         getItem: async (key: string) => {
-          if (key.startsWith("location_tracking_inactive_v1:")) return markers.get(key) ?? null;
+          if (key.startsWith("location_tracking_inactive_v1:")) return inactiveMarkers.get(key) ?? null;
+          if (key.startsWith("location_tracking_permission_pending_v1:")) return permissionMarkers.get(key) ?? null;
           if (key.startsWith("location_tracking_runtime_diagnostics")) return values.get(key) ?? null;
           readCount += 1;
           if (readCount === 1) return globalThis.__read1;
@@ -51,19 +53,23 @@ async function main() {
           return globalThis.__stored;
         },
         setItem: async (key: string, value: string) => {
-          if (key.startsWith("location_tracking_inactive_v1:")) markers.set(key, value);
+          if (key.startsWith("location_tracking_inactive_v1:")) inactiveMarkers.set(key, value);
+          else if (key.startsWith("location_tracking_permission_pending_v1:")) permissionMarkers.set(key, value);
           else if (key.startsWith("location_tracking_runtime_diagnostics")) values.set(key, value);
           else globalThis.__stored = value;
         },
         removeItem: async (key: string) => {
-          if (key.startsWith("location_tracking_inactive_v1:")) markers.delete(key);
+          if (key.startsWith("location_tracking_inactive_v1:")) inactiveMarkers.delete(key);
+          else if (key.startsWith("location_tracking_permission_pending_v1:")) permissionMarkers.delete(key);
           else if (key.startsWith("location_tracking_runtime_diagnostics")) values.delete(key);
           else globalThis.__stored = null;
         },
-        getAllKeys: async () => [...markers.keys(), ...values.keys()],
+        getAllKeys: async () => [...inactiveMarkers.keys(), ...permissionMarkers.keys(), ...values.keys()],
         multiGet: async (keys: readonly string[]) => keys.map((key) => [
           key,
-          key.startsWith("location_tracking_inactive_v1:") ? markers.get(key) ?? null : values.get(key) ?? null,
+          key.startsWith("location_tracking_inactive_v1:") ? inactiveMarkers.get(key) ?? null
+            : key.startsWith("location_tracking_permission_pending_v1:") ? permissionMarkers.get(key) ?? null
+              : values.get(key) ?? null,
         ] as [string, string | null]),
       };
     `);
@@ -143,8 +149,9 @@ async function main() {
 
     // APK56 can already hold a persisted session when the permission contract
     // changes. A non-interactive denied background check must stop that exact
-    // local state before restore/reconcile can start native collection; no
-    // Settings request is possible in this restore code path.
+    // local state before restore/reconcile can start native collection, but must
+    // retain the pointer as a reversible permission-pending session; no Settings
+    // request is possible in this restore code path.
     const deniedRestore = { ...stateA, token: "d".repeat(43), requestId: 92, startedAt: 92_000 };
     globals.__stored = JSON.stringify(deniedRestore);
     globals.__foregroundPermission = { status: "granted" };
@@ -158,18 +165,16 @@ async function main() {
     );
     assert.equal(globals.__nativeStarts, nativeStartsBeforeDeniedRestore, "denied restored share must issue zero native starts");
     assert.equal(globals.__nativeStops, nativeStopsBeforeDeniedRestore + 1, "denied restored share must stop its exact existing native task");
-    assert.equal(globals.__stored, null, "denied restored share must clear only its matching local pointer");
+    assert.equal(globals.__stored, JSON.stringify(deniedRestore), "denied restored share must retain its exact pointer for later approval");
 
-    // An already approved state is read-only: it proceeds without a repeated
-    // Android Settings prompt and restores the exact persisted session.
-    const approvedRestore = { ...stateA, token: "g".repeat(43), requestId: 93, startedAt: 93_000 };
-    globals.__stored = JSON.stringify(approvedRestore);
+    // After Android approval, the same paused state resumes without a second
+    // pre-explanation or a newly issued server session.
     globals.__backgroundPermission = { status: "granted" };
-    assert.equal((await tracking.getPersistedTrackingState())?.requestId, approvedRestore.requestId, "approved fixture must remain eligible before restore");
+    assert.equal((await tracking.getPersistedTrackingState())?.requestId, deniedRestore.requestId, "approved pending fixture must retain its original session identity");
     assert.equal(tracking.__testLifecycleIntent(), null, "denied predecessor must leave no in-memory owner before an approved restore");
     const nativeStartsBeforeApprovedRestore = Number(globals.__nativeStarts);
-    const restoredApproved = await tracking.restoreLocationTrackingForUser(approvedRestore.technicianUserId);
-    assert.equal(restoredApproved?.requestId, approvedRestore.requestId, `already approved exact session must restore normally: ${JSON.stringify(restoredApproved)}`);
+    const restoredApproved = await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId);
+    assert.equal(restoredApproved?.requestId, deniedRestore.requestId, `approved exact pending session must restore normally: ${JSON.stringify(restoredApproved)}`);
     assert.equal(globals.__nativeStarts, nativeStartsBeforeApprovedRestore + 1, "approved restored share may start its exact native collector once");
 
     // A visible optional overlay is revoked immediately when an exact in-memory

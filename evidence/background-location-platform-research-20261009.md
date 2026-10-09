@@ -127,11 +127,26 @@
 1. **수정 전 결함:** 새 출발만 foreground → background → notification gate를 통과했다. 이미 APK56에서 저장된 active session의 `restoreLocationTrackingForUser()`와 headless TaskManager callback은 그 gate를 거치지 않아, 권한 철회 뒤에도 native 재등록 또는 upload path를 시도할 수 있었다. 권한 전용 error 뒤 정확한 local pointer stop도 없었다.
 2. **최소 보완:**
    - `readExistingLocationTrackingPermissionEligibility()`는 foreground/background의 **현재 상태만 읽고** prompt·Settings·server mutation을 실행하지 않는다. restore 전 및 headless exact adoption 뒤, HTTP `fetch` 전 이 read를 적용했다.
-   - confirmed denial은 `stopStoredExact()`/terminal authority로 **그 exact saved session**만 local inactive marker·native stop 대상으로 만든다. permission-query failure는 승인으로 취급하지 않고 복원을 막되, 다른 session을 추정해 stop하지 않는다.
+   - confirmed denial은 **그 exact saved session**만 native stop 대상으로 만든다. permission-query failure는 승인으로 취급하지 않고 복원을 막되, 다른 session을 추정해 stop하지 않는다.
    - native task의 exact `E_LOCATION_UNAUTHORIZED`만 permission-revoked unbound evidence로 기록한다. error payload에 session ID가 없으므로 in-memory exact owner가 없으면 arbitrary A/B를 stop하지 않는다. 늦은 A error는 새 B를 멈출 수 없다.
    - restore permission read 사이에 logout/stop/B start가 생기면 captured lifecycle generation이 달라져 restore를 포기한다. 승인 상태는 repeat prompt 없이 normal restore로 진행한다.
 3. **합성 실행 증거:**
    - `tests/location-permission-flow.test.ts` 8 cases: approved existing read는 get-only, confirmed denied/unavailable은 비승인으로 분리했다.
    - actual TaskManager integration: classified native permission revoke는 current session native stop 후 후속 HTTP 0; regular callback의 denied permission도 exact adopted session을 fetch 전에 stop; delayed old-A native revoke 중 B start 뒤 B HTTP 1을 확인했다. `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`.
-   - actual public restore race: delayed pre-read + concurrent stop이 native restore를 재시작하지 않고, denied persisted session은 native start 0/stop 1/local pointer clear, approved persisted session은 one normal native start로 진행함을 completion keepalive와 함께 확인했다. `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`.
+   - actual public restore race: delayed pre-read + concurrent stop이 native restore를 재시작하지 않고, denied persisted session은 native start 0/stop 1로 차단되며 승인된 persisted session은 normal native start로 진행함을 completion keepalive와 함께 확인했다. `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`.
 4. **유지된 경계:** callback deadline/terminal A-B lease/accepted exact count/auth-account protection과 overlay owner stop을 같은 focused suite에서 재실행했다. 새 AppState upload, retry loop, overlay 성공 표시 변경, APK build/운영 호출은 추가하지 않았다.
+
+## 2026-10-10 06:24 Codex 권한 대기·same-session resume 3건 보완
+
+> **확정 범위:** `dad4e7a` 위 source-level lifecycle/TaskManager 합성 재현의 권한 처리 결함이다. 이는 APK56의 앱 밖 accepted 공백의 실제 원인을 확정하지 않으며, Android FGS에 `ACCESS_BACKGROUND_LOCATION`이 항상 필수라는 주장도 아니다. 운영 HTTP·고객/기사 위치·출발/도착·DB는 호출하지 않았다.
+
+1. **수정 전 확인된 세 결함:** cold persisted session은 confirmed denial 때 terminal inactive 처리·pointer clear되어 나중 승인해도 같은 업무를 이어갈 수 없었다. warm current session은 `stopStoredExact()`의 cold-state read 조건 때문에 `intent`가 이미 있을 때 native collection을 즉시 fence하지 못했다. native `E_LOCATION_UNAUTHORIZED` callback은 unbound journal await가 앞서면 지연 중 다음 callback이 HTTP를 한 번 더 시도할 여지가 있었다.
+2. **최소 보완:**
+   - `TrackingLifecycleCoordinator`에 terminal과 별도의 **permission-pending suspend**를 추가했다. exact owner/generation을 즉시 무효화하고 native stop을 journal marker보다 먼저 queue하며, `location_tracking_state_v2` pointer를 지우거나 inactive marker를 쓰지 않는다.
+   - permission-pending marker는 token/좌표/고객정보 없이 exact state identity 범위에만 저장한다. `restoreLocationTrackingForUser()`는 foreground/background 승인 재조회 후 같은 pointer를 normal restore하며, 성공 native start 뒤 marker를 비차단 정리한다. UI/Settings/server mutation을 반복 실행하지 않는다.
+   - headless adoption은 permission-pending marker가 있으면 fail-closed로 HTTP 전에 반환한다. native permission error는 in-memory exact owner가 있을 때 authority를 먼저 suspend하고 unbound diagnostic은 detached로 기록한다. unknown cold error는 A/B에 귀속하거나 중지하지 않는다.
+3. **실행 증거:**
+   - `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`: cold denied persisted session은 native start 0/stop 1이면서 pointer를 유지하고, background 승인 후 **같은 requestId**가 UI 안내·새 server session 없이 native start 1로 재개됨을 확인했다.
+   - `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`: warm exact `E_LOCATION_UNAUTHORIZED`는 delayed unbound journal이 pending이어도 native stop 1, next callback fetch 0, resumable pointer 보존을 확인했다. delayed old A revoke 이후 replacement B HTTP 1도 유지했다.
+   - `LOCATION_TRACKING_LIFECYCLE_RACE_PASS`, `LOCATION_CUSTOM_PACKAGE_ENTRY_HEADLESS_INTEGRATION_PASS`, `LOCATION_TRACKING_RUNTIME_INTEGRATION_PASS`, `LOCATION_STATUS_OVERLAY_OWNER_AND_AGE_CONTRACT_PASS`, `MOBILE_AUTH_SESSION_CONTRACT_PASS`, `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`와 Vitest 3 files/34 tests를 재실행했다. edited-file ESLint 및 `git diff --check` PASS. full TypeScript는 `dad4e7a`와 각각 기존 83 errors, normalized new lines 0이다.
+4. **유지된 경계:** terminal server response는 여전히 inactive marker/pointer clear를 사용한다. permission pending은 terminal을 되살리지 않으며, grant 전 headless upload도 허용하지 않는다. 새 APK build·재서명·운영 호출·merge/deploy는 하지 않았다.

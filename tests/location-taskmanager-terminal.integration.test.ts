@@ -372,23 +372,43 @@ async function main() {
       // another callback can upload. A delayed old-A error, however, must not
       // stop a replacement B that begins while its unbound journal is pending.
       const permissionRevokedState = { ...state, token: "p".repeat(43), requestId: 5060, startedAt: 506_000 };
-      const permissionStopBefore = nativeLocation.nativeStopCount();
       const requestsBeforePermissionStop = requests;
+      const permissionJournalStarted = Promise.withResolvers<void>();
+      const releasePermissionJournal = Promise.withResolvers<void>();
+      const permissionJournalCompleted = Promise.withResolvers<void>();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayUnboundCode: "TASK_NATIVE_PERMISSION_REVOKED",
+        __unboundWriteStarted: permissionJournalStarted,
+        __unboundWriteGate: releasePermissionJournal.promise,
+        __unboundWriteCompleted: permissionJournalCompleted,
+      });
       await tracking.startLocationTracking(permissionRevokedState);
+      const permissionStopBefore = nativeLocation.nativeStopCount();
       await taskManager.invokeTask({ error: { code: "E_LOCATION_UNAUTHORIZED", message: "synthetic permission revoked" } });
-      for (let attempt = 0; attempt < 20 && nativeLocation.nativeStopCount() === permissionStopBefore; attempt += 1) {
-        await waitForDiagnostics();
-      }
+      await permissionJournalStarted.promise;
       assert.equal(nativeLocation.nativeStopCount(), permissionStopBefore + 1, "confirmed current permission revocation must stop native collection once");
       await taskManager.invokeTask({
         data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
       });
-      assert.equal(requests, requestsBeforePermissionStop, "revoked current session must block later HTTP before fetch");
+      assert.equal(requests, requestsBeforePermissionStop, "permission journal delay must not allow a later callback HTTP before fetch");
+      assert.equal(
+        (await tracking.getPersistedTrackingState())?.requestId,
+        permissionRevokedState.requestId,
+        "permission revocation must retain the exact resumable local session",
+      );
+      releasePermissionJournal.resolve();
+      await permissionJournalCompleted.promise;
       assert.equal(
         storage.unboundTaskEvents().some((event: { code?: string }) => event.code === "TASK_NATIVE_PERMISSION_REVOKED"),
         true,
         "permission revocation remains separately observable without a token or coordinate",
       );
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayUnboundCode: undefined,
+        __unboundWriteStarted: undefined,
+        __unboundWriteGate: undefined,
+        __unboundWriteCompleted: undefined,
+      });
 
       // A regular location callback also checks the existing permission state
       // after exact headless adoption and before sendLocationToServer. This
