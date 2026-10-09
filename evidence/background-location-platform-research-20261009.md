@@ -191,3 +191,18 @@
    - `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`: actual Provider hook harness에서 same A의 resume 요청 후 React rerender 전에 auth transition만 증가시켜도 결과는 `unavailable`, synthetic native resume start 증가 `0`이다.
    - `tests/auth-session-transition.test.ts`는 logout/account replacement `begin()`이 storage/native cleanup await 전 captured recovery guard를 동기 취소함을 확인했다. terminal/headless/owner/auth 보호 suite와 `LOCATION_BACKGROUND_SHARING_CONTRACT_PASS`도 재실행했다.
 4. **품질 경계:** focused Vitest 4 files/38 tests 및 standalone terminal/headless/lifecycle/public-stop/context markers PASS, edited-file ESLint errors 0, `git diff --check` PASS. full TypeScript는 parent `8cf531a`와 candidate 모두 기존 83 errors이고 수정 파일 신규 오류는 없다. 전역 TypeScript PASS나 Android 실기기 PASS로 표기하지 않는다.
+
+## 2026-10-10 08:02 시작 중 로그아웃·계정 전환 취소 정리 후보
+
+> **확정 범위:** 이 항목은 Draft PR20의 source-level lifecycle/auth 합성 재현 보완이다. 실제 Android 단말에서 앱 밖 위치 수집·TaskManager·HTTP·server accepted가 왜 멈췄는지의 원인을 확정하지 않는다. 운영 HTTP·고객/기사 위치·출발/도착·문자·DB에는 접근하지 않았다.
+
+1. **수정 전 결함:** 인증 전이가 시작되기 전에 대기하던 permission-resume은 막혔지만, 이미 `startNativeCollection()` 또는 control notification 생성 Promise 안에 들어간 A는 늦게 완료될 수 있었다. 기존 stale guard는 화면 성공 표시는 막아도, 시작 중이던 native collection의 physical stop·pointer clear가 auth guard false를 조건으로 건너뛸 수 있었다.
+2. **최소 보완:**
+   - lifecycle의 stale start는 exact A generation을 즉시 무효화해 callback/upload authority를 먼저 제거한 뒤, native stop·control notification clear·A pointer clear를 **auth guard가 아니라 invalidated A generation guard**로 수행한다. B가 claim하면 이 guard가 false가 되어 A cleanup은 B를 stop/clear하지 않는다.
+   - `stopCurrent()`의 terminal begin은 serialized start/notification queue 뒤를 기다리지 않고 exact A native stop, notification clear, inactive marker, stored pointer clear를 즉시 요청한다. start Promise가 그 뒤 늦게 완료되면 A/B ownership을 다시 확인하고, B가 없을 때만 한 번 더 physical cleanup을 요청한다.
+   - `AuthProvider`의 logout과 account-switch login은 `AuthSessionTransition.begin()` 직후 위치 stop을 시작하고, React Query cancellation/storage await 뒤에 그 cleanup을 기다린다. 새 B credential은 A cleanup이 끝나기 전 저장하지 않는다.
+3. **실행 증거:**
+   - `LOCATION_TRACKING_LIFECYCLE_RACE_PASS`: (a) native start 진행 중 auth cancellation → A upload authority false·native stop·pointer clear·post-cancel HTTP 0, (b) notification 생성 중 cancellation → native stop/dismiss, (c) delayed A cleanup 중 B claim → B pointer/current owner 보존, (d) `stopCurrent()`가 native start Promise 해제 전 native stop과 pointer clear를 시작하고 late A start가 active로 복귀하지 않음을 실행했다.
+   - `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`, `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`, `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`, `MOBILE_AUTH_SESSION_CONTRACT_PASS`를 재실행했다. Vitest auth transition·permission·runtime diagnostics·callback isolation 4 files/38 tests PASS.
+   - edited-file ESLint errors 0, `git diff --check` PASS. full TypeScript는 직전 baseline과 동일한 기존 83 errors이며 수정 파일 신규 오류 0이다. 전역 TypeScript나 Android 실기기 PASS가 아니다.
+4. **유지된 경계:** terminal/permission-pending A/B owner fence, auth bearer boundary, callback deadline, accepted count, overlay isolation은 변경하지 않았다. 새 APK build·재서명·main merge·Production deploy·실제 운영 호출은 하지 않았다.

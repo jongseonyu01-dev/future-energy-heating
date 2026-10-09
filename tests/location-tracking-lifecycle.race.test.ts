@@ -115,6 +115,145 @@ async function main() {
     assert.ok(fixture.calls.includes("native:start"), "FGS start must not wait for the optional control notification");
   }
 
+  // Cancellation has two distinct boundaries: it may happen before Android
+  // starts collection, or after native start while the auxiliary notification is
+  // still being created. In both cases authority is synchronously invalidated;
+  // a started A collector is stopped and its saved intent is removed. This is
+  // the logout/account-switch guard used by foreground permission recovery.
+  {
+    let authorized = true;
+    const nativeStartEntered = deferred<void>();
+    const nativeStartGate = deferred<void>();
+    const notificationGate = deferred<void>();
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        fixture.calls.push("native:start");
+        nativeStartEntered.resolve();
+        await nativeStartGate.promise;
+      },
+      stopNativeCollection: async () => { fixture.calls.push("native:stop"); },
+      showControlNotification: async (next) => {
+        fixture.calls.push(`show:${next.requestId}`);
+        await notificationGate.promise;
+      },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const active = state("Q", 100);
+    const starting = coordinator.start(active, { isStillAuthorized: () => authorized });
+    await nativeStartEntered.promise;
+    authorized = false;
+    nativeStartGate.resolve();
+    assert.equal(await within(starting), false, "cancellation during native start must reject the old recovery");
+    assert.ok(fixture.calls.includes("native:start"), "test must enter native start before cancellation");
+    assert.ok(fixture.calls.includes("native:stop"), `cancelled native start must be physically stopped: ${fixture.calls.join(",")}`);
+    assert.equal(fixture.calls.some((call) => call.startsWith("show:")), false, "cancelled native start must not create the control notification");
+    assert.equal(fixture.readStored(), null, "cancelled native start must remove only A's saved pointer");
+    assert.equal(await coordinator.isCurrent(active), false, "cancelled A must not retain upload authority");
+    let cancelledRequests = 0;
+    assert.deepEqual(await runGuardedLocationUpload({
+      isCurrent: () => coordinator.isCurrent(active),
+      getCredential: async () => "old-A-token",
+      request: async () => { cancelledRequests += 1; return { ok: true, status: 200 }; },
+    }), { kind: "STALE" }, "cancelled A must be fenced before any later HTTP request");
+    assert.equal(cancelledRequests, 0, "cancelled A must issue zero post-cleanup HTTP requests");
+
+    // A separately started session reaches notification creation, then logout
+    // begins. The notification can finish late, but cleanup still stops its
+    // collector and dismisses the now-stale notification.
+    authorized = true;
+    const notificationStarted = deferred<void>();
+    const lateNotification = deferred<void>();
+    const notificationFixture = buildAdapter({
+      showControlNotification: async (next) => {
+        notificationFixture.calls.push(`show:${next.requestId}`);
+        notificationStarted.resolve();
+        await lateNotification.promise;
+      },
+    });
+    const notificationCoordinator = new TrackingLifecycleCoordinator(notificationFixture.adapter);
+    const notificationState = state("N", 101);
+    const notificationStart = notificationCoordinator.start(notificationState, { isStillAuthorized: () => authorized });
+    await notificationStarted.promise;
+    authorized = false;
+    lateNotification.resolve();
+    assert.equal(await within(notificationStart), false, "cancellation during notification creation must reject the old recovery");
+    assert.ok(notificationFixture.calls.includes("native:stop"), "late notification cancellation must stop the old native collector");
+    assert.ok(notificationFixture.calls.includes("dismiss:101"), "late notification cancellation must dismiss only A's notification");
+    assert.equal(notificationFixture.readStored(), null, "late notification cancellation must remove A's saved pointer");
+    assert.equal(await notificationCoordinator.isCurrent(notificationState), false, "late notification cancellation must retain no A upload authority");
+  }
+
+  // A's cancellation cleanup may wait on native stop while a new B work is
+  // claimed. The delayed cleanup guard must yield rather than stopping or
+  // clearing B. Actual app adapters recheck this guard before every mutation.
+  {
+    let authorizedA = true;
+    const nativeStarted = deferred<void>();
+    const releaseOldStop = deferred<void>();
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        fixture.calls.push("native:start");
+        nativeStarted.resolve();
+      },
+      stopNativeCollection: async (guard) => {
+        fixture.calls.push("native:stop-requested");
+        if (!guard?.()) return;
+        await releaseOldStop.promise;
+        if (guard()) fixture.calls.push("native:stop");
+      },
+      clearIfSame: async (next, guard) => {
+        fixture.calls.push(`clear:${next.requestId}`);
+        if (guard?.() && fixture.readStored()?.requestId === next.requestId) {
+          // buildAdapter's closure is intentionally private; pointer safety is
+          // asserted through B ownership below rather than mutating it here.
+        }
+      },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const first = state("A", 102);
+    const second = state("B", 103);
+    const startingA = coordinator.start(first, { isStillAuthorized: () => authorizedA });
+    await nativeStarted.promise;
+    authorizedA = false;
+    await tick();
+    const startingB = coordinator.start(second);
+    releaseOldStop.resolve();
+    assert.equal(await within(startingA), false, "cancelled A must finish without regaining authority");
+    assert.equal(await within(startingB), true, "B start must proceed after cancelled A cleanup yields");
+    assert.equal(fixture.readStored()?.requestId, second.requestId, "late A cleanup must not clear B's saved pointer");
+    assert.equal(await coordinator.isCurrent(second), true, "late A cancellation must not stop B collection authority");
+  }
+
+  // Logout/arrival calls stopCurrent() synchronously while a recovery may still
+  // be inside Android start. It must request native stop before that start
+  // promise resolves, then issue a guarded post-start cleanup. No location
+  // callback can regain A authority during the delayed native operation.
+  {
+    const nativeStartEntered = deferred<void>();
+    const releaseNativeStart = deferred<void>();
+    const fixture = buildAdapter({
+      startNativeCollection: async () => {
+        fixture.calls.push("native:start");
+        nativeStartEntered.resolve();
+        await releaseNativeStart.promise;
+      },
+      stopNativeCollection: async () => { fixture.calls.push("native:stop"); },
+    });
+    const coordinator = new TrackingLifecycleCoordinator(fixture.adapter);
+    const active = state("L", 104);
+    const starting = coordinator.start(active);
+    await nativeStartEntered.promise;
+    const stopping = coordinator.stopCurrent();
+    assert.equal(await coordinator.isCurrent(active), false, "logout stop must synchronously revoke A upload authority before native start settles");
+    assert.ok(fixture.calls.includes("native:stop"), "logout stop must immediately request physical native cleanup during start");
+    assert.equal(fixture.readStored(), null, "logout stop must synchronously remove the adoptable A pointer while native start is pending");
+    releaseNativeStart.resolve();
+    assert.equal(await within(starting), false, "late native start completion must not report A as active");
+    assert.ok(await within(stopping), "logout stop must complete after the delayed start yields");
+    assert.equal(fixture.readStored(), null, "logout stop must remove the cancelled A pointer");
+    assert.equal(await coordinator.isCurrent(active), false, "late start must not restore A upload authority");
+  }
+
   // P1: a storage snapshot returned after A stop and B start cannot clear B.
   {
     const read = deferred<State | null>();

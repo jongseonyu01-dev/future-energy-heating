@@ -200,13 +200,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const previousUser = userRef.current;
     setVisibleUser(generation, null);
     setIsLoading(true);
+    // The auth generation is already invalid, but start native collection can
+    // be midway through its own promise. Begin exact local cleanup before any
+    // cache/storage await so that a just-started old share cannot outlive an
+    // account switch. The captured A snapshot is used only for the best-effort
+    // server stop; it cannot read B's later credential.
+    const stoppingPreviousTracking = previousUser
+      ? stopStoredTrackingAndNotify("업무취소", createLocationStopAuthSnapshot(previousUser))
+      : null;
     await clearAccountBoundQueries();
 
     // A visible A session is stopped with A's captured credential before B's
     // credential can be persisted. A late stop request can never read B.
-    if (previousUser) {
-      await stopStoredTrackingAndNotify("업무취소", createLocationStopAuthSnapshot(previousUser));
-    }
+    if (stoppingPreviousTracking) await stoppingPreviousTracking;
 
     const userWithLoginId = { ...authUser, loginId };
     try {
@@ -244,13 +250,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const generation = transitions.begin();
     const previousUser = userRef.current;
     const stopSnapshot = createLocationStopAuthSnapshot(previousUser);
+    // Start local invalidation before awaiting query cancellation. This closes
+    // the interval where a permission-resume start has entered native/notice
+    // creation but logout is still waiting for React Query cleanup.
+    const stoppingTracking = stopStoredTrackingAndNotify("업무취소", stopSnapshot);
     // Publishing user=null while this is false lets location owner cleanup
     // race a replacement login. Keep all auth-bound effects paused first.
     setIsLoading(true);
     setVisibleUser(generation, null);
     try {
       await clearAccountBoundQueries();
-      await stopStoredTrackingAndNotify("업무취소", stopSnapshot);
+      await stoppingTracking;
       await transitions.runStorage(generation, async () => {
         await clearAllAuthStorage();
         await AsyncStorage.setItem(SESSION_VERSION_KEY, CURRENT_SESSION_VERSION);

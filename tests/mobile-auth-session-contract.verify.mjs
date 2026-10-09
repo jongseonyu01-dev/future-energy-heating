@@ -34,6 +34,8 @@ assert.match(schedule, /enabled: canRefreshSchedule/, "schedule list must wait f
 assert.match(weeklyHome, /refreshAuthenticatedSchedule\(\{ ready: canRefreshSchedule, refetch \}\)/, "weekly imperative refresh must wait for auth restoration");
 assert.match(schedule, /refreshAuthenticatedSchedule\(\{ ready: canRefreshSchedule, refetch \}\)/, "schedule focus, retry, and pull refresh must wait for auth restoration");
 assert.match(authContext, /setIsLoading\(true\);\s*setVisibleUser\(generation, null\);[\s\S]*finally \{\s*finishLoadingIfCurrent\(generation\);/s, "logout must pause auth-bound effects before publishing no user and always release loading");
+assert.match(authContext, /const stoppingPreviousTracking = previousUser\s*\?\s*stopStoredTrackingAndNotify\([\s\S]*?await clearAccountBoundQueries\(\);[\s\S]*?if \(stoppingPreviousTracking\) await stoppingPreviousTracking;/s, "account switch must begin exact old location cleanup before cache/storage awaits");
+assert.match(authContext, /const stoppingTracking = stopStoredTrackingAndNotify\("업무취소", stopSnapshot\);[\s\S]*?await clearAccountBoundQueries\(\);\s*await stoppingTracking;/s, "logout must begin exact local location cleanup before query cancellation awaits");
 assert.match(locationProvider, /reconcileLocationTrackingOwner\(/, "provider orphan cleanup must use a generation-aware owner reconciliation");
 assert.match(locationProvider, /stopExactStoredTrackingAndNotify\(state, "업무취소"\)/, "provider orphan cleanup must stop only the exact persisted state");
 

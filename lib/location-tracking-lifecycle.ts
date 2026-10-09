@@ -172,11 +172,23 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     this.generation = stopGeneration;
     this.intent = null;
     const stillStoppingOwner = () => stopGeneration === this.generation && this.intent === null;
+    // Do not wait behind an in-progress start/notification queue entry before
+    // requesting the physical stop. If the start later completes, start() makes
+    // one more guarded stop request; if B claims the lifecycle first, this guard
+    // turns both old-A cleanup requests into no-ops.
+    const immediateNativeStop = this.adapter.stopNativeCollection(stillStoppingOwner).catch(() => undefined);
+    const immediateNotificationClear = this.adapter.clearControlNotification(state, stillStoppingOwner).catch(() => undefined);
+    // A hung start promise must not retain an adoptable A pointer until its
+    // serialized queue turn arrives. Start terminal fencing/clear outside that
+    // queue as well; every adapter mutation receives the exact-owner guard, so
+    // an intervening B prevents stale A from persisting or clearing anything.
+    const immediateInactiveMarker = this.markInactive(state, stillStoppingOwner);
+    const immediatePointerClear = this.adapter.clearIfSame(state, stillStoppingOwner).catch(() => undefined);
     return this.enqueue(async () => {
-      await this.markInactive(state, stillStoppingOwner);
-      await this.adapter.clearIfSame(state, stillStoppingOwner);
-      await this.adapter.clearControlNotification(state, stillStoppingOwner);
-      await this.adapter.stopNativeCollection(stillStoppingOwner);
+      await immediateInactiveMarker;
+      await immediatePointerClear;
+      await immediateNativeStop;
+      await immediateNotificationClear;
       if (stillStoppingOwner()) this.adapter.onStateChanged(null);
       return state;
     });
@@ -205,6 +217,47 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       if (stillSuspendingOwner()) this.adapter.onStateChanged(state);
       return state;
     });
+  }
+
+  /**
+   * Cancels an in-flight start only while this exact start generation still owns
+   * the lifecycle. Authentication/work cancellation is an authority boundary,
+   * not a reason to skip local cleanup: a foreground service may have started
+   * just before the cancellation became observable. The cleanup guard is based
+   * only on this invalidated generation, so a later B start makes old A's stop,
+   * notification dismissal, and pointer removal all yield without touching B.
+   */
+  private cancelStartingExact(state: T, startGeneration: number): Promise<void> {
+    if (!this.owns(state, startGeneration)) return Promise.resolve();
+    const cleanupGeneration = this.generation + 1;
+    this.generation = cleanupGeneration;
+    this.intent = null;
+    const stillCancelledOwner = () => cleanupGeneration === this.generation && this.intent === null;
+    // Block a callback synchronously before waiting for any native/notification
+    // operation. A subsequent upload observes no exact current owner.
+    this.adapter.onStateChanged(null);
+    // Called from start()'s already-serialized operation. Re-enqueueing here
+    // and awaiting it would wait on this very queue entry forever.
+    return (async () => {
+      await this.adapter.stopNativeCollection(stillCancelledOwner);
+      await this.adapter.clearControlNotification(state, stillCancelledOwner);
+      await this.adapter.clearIfSame(state, stillCancelledOwner);
+      if (stillCancelledOwner()) this.adapter.onStateChanged(null);
+    })();
+  }
+
+  /**
+   * A public stop may invalidate `startGeneration` while Android is still
+   * resolving startNativeCollection(). Once that promise settles, issue a
+   * second physical cleanup only if no B intent has taken ownership. This closes
+   * the stop-before-start-completes race without allowing old A to stop B.
+   */
+  private async cleanupSupersededStart(state: T): Promise<void> {
+    const cleanupGeneration = this.generation;
+    const stillSupersededWithoutReplacement = () => cleanupGeneration === this.generation && this.intent === null;
+    if (!stillSupersededWithoutReplacement()) return;
+    await this.adapter.stopNativeCollection(stillSupersededWithoutReplacement);
+    await this.adapter.clearControlNotification(state, stillSupersededWithoutReplacement);
   }
 
   /**
@@ -286,15 +339,12 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
     return this.enqueue(async () => {
       try {
         if (!isStillAuthorized()) {
-          if (this.owns(state, startGeneration)) {
-            this.generation += 1;
-            this.intent = null;
-          }
+          await this.cancelStartingExact(state, startGeneration);
           return false;
         }
         if (!options.restore) await this.adapter.save(state);
         if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
-          await this.adapter.clearIfSame(state, () => this.owns(state, startGeneration));
+          await this.cancelStartingExact(state, startGeneration);
           return false;
         }
 
@@ -307,22 +357,25 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
         // the foreground. The local control notification is useful status UI,
         // but it must not widen the user-visible departure → FGS start window.
         // It also remains separate from proof of GPS callback/server storage.
-        if (!isStillAuthorized()) return false;
+        if (!isStillAuthorized()) {
+          await this.cancelStartingExact(state, startGeneration);
+          return false;
+        }
         await this.adapter.startNativeCollection();
         if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
-          const stillFailedStart = () => isStillAuthorized() && this.owns(state, startGeneration);
-          await this.adapter.stopNativeCollection(stillFailedStart);
-          await this.adapter.clearIfSame(state, stillFailedStart);
+          await this.cleanupSupersededStart(state);
+          await this.cancelStartingExact(state, startGeneration);
           return false;
         }
 
-        if (!isStillAuthorized()) return false;
+        if (!isStillAuthorized()) {
+          await this.cancelStartingExact(state, startGeneration);
+          return false;
+        }
         await this.adapter.showControlNotification(state);
         if (!isStillAuthorized() || !this.owns(state, startGeneration)) {
-          const stillFailedStart = () => isStillAuthorized() && this.owns(state, startGeneration);
-          await this.adapter.stopNativeCollection(stillFailedStart);
-          await this.adapter.clearControlNotification(state, stillFailedStart);
-          await this.adapter.clearIfSame(state, stillFailedStart);
+          await this.cleanupSupersededStart(state);
+          await this.cancelStartingExact(state, startGeneration);
           return false;
         }
 
