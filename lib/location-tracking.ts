@@ -25,9 +25,11 @@ import {
 import {
   LocationRuntimeDiagnosticsStore,
   type LocationRuntimeDiagnostics,
+  type UnboundLocationTaskEvent,
 } from "@/lib/location-runtime-diagnostics";
 import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
 import { parseJsonWithin } from "@/lib/location-upload-response";
+import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";
 import {
   matchesTrackingStopAction,
   TrackingLifecycleCoordinator,
@@ -236,6 +238,22 @@ export function subscribeDebug(listener: (state: LocationDebugState) => void) {
 function emitDebug(patch: Partial<LocationDebugState>) {
   debugState = { ...debugState, ...patch };
   for (const listener of debugListeners) listener({ ...debugState });
+  // This only changes an overlay already opened by the technician. It cannot
+  // reopen a closed overlay or start/stop collection, and carries no PII.
+  void updateVisibleLocationStatusOverlay(statusOverlayText(debugState)).catch(() => undefined);
+}
+
+function statusOverlayText(state: LocationDebugState): string {
+  if (!trackingLifecycle.currentIntent()) return "위치 공유가 종료되었습니다.";
+  if (state.serverStatus === "error") return "위치 공유 중 · 서버 저장 확인 필요";
+  if (state.lastStoredAt) {
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - state.lastStoredAt) / 1000));
+    const age = ageSeconds < 60 ? `${ageSeconds}초 전` : `${Math.floor(ageSeconds / 60)}분 전`;
+    return `위치 공유 중 · 마지막 서버 저장 ${age}`;
+  }
+  return state.serverStatus === "uploading"
+    ? "위치 공유 중 · 서버 저장 확인 중"
+    : "위치 공유 중 · 서버 저장 대기";
 }
 
 function diagnosticBuildLabel(): string | null {
@@ -643,6 +661,7 @@ function deactivateAfterTerminalResponse(state: PersistedTrackingState): boolean
   if (!trackingLifecycle.invalidateForTerminalResponse(state)) return false;
   clearDebugUploadForState(state);
   lastUploadMeasurement = { key: "", measuredAt: 0 };
+  void hideLocationStatusOverlay().catch(() => undefined);
   emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
   void runtimeDiagnostics.patch(state, {
     lastErrorCode: "SERVER_TERMINAL",
@@ -989,6 +1008,7 @@ export async function stopStoredTrackingAndNotify(
   const stopped = await trackingLifecycle.stopCurrent();
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) {
+    void hideLocationStatusOverlay().catch(() => undefined);
     emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
     const matchingSnapshot = authSnapshot?.technicianUserId === stopped.technicianUserId ? authSnapshot : null;
     void notifySessionStop(stopped.token, reason, stopped.technicianUserId, matchingSnapshot);
@@ -1007,6 +1027,7 @@ export async function stopExactStoredTrackingAndNotify(
   const stopped = await trackingLifecycle.stopStoredExact(state);
   if (!stopped) return;
   lastUploadMeasurement = { key: "", measuredAt: 0 };
+  void hideLocationStatusOverlay().catch(() => undefined);
   emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
   void notifySessionStop(stopped.token, reason, stopped.technicianUserId);
 }
@@ -1035,6 +1056,7 @@ async function handleTrackingNotificationResponse(response: Notifications.Notifi
     : await trackingLifecycle.stopStoredIf((state) => matchesTrackingStopAction(state, data));
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) {
+    void hideLocationStatusOverlay().catch(() => undefined);
     emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
     void notifySessionStop(stopped.token, "업무취소", stopped.technicianUserId);
   }
@@ -1058,6 +1080,14 @@ export async function adoptLocationTrackingForHeadlessTask(): Promise<PersistedT
   return adopted?.state ?? null;
 }
 
+/**
+ * Returns only the newest privacy-safe callback record that could not be tied
+ * to a session. Callers must keep it separate from session A/B diagnostics.
+ */
+export async function getLatestUnboundLocationTaskEvent(): Promise<UnboundLocationTaskEvent | null> {
+  return runtimeDiagnostics.readUnboundTaskEvent();
+}
+
 if (Platform.OS !== "web") {
   Notifications.addNotificationResponseReceivedListener((response) => {
     void handleTrackingNotificationResponse(response);
@@ -1065,9 +1095,11 @@ if (Platform.OS !== "web") {
   void Notifications.getLastNotificationResponseAsync().then(handleTrackingNotificationResponse).catch(() => undefined);
 }
 
-if (Platform.OS !== "web") {
+export function registerLocationTrackingTask(): boolean {
+  if (Platform.OS === "web") return false;
   try {
-    if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
+    if (TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) return true;
+    {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async ({ data, error }: any) => {
         const taskFence = new TaskCallbackDeadlineFence(createTaskDeadline(TASK_CALLBACK_TOTAL_BUDGET_MS));
         const callbackEnteredAt = Date.now();
@@ -1177,7 +1209,9 @@ if (Platform.OS !== "web") {
         }, adopted.bearerToken, taskFence);
       });
     }
+    return true;
   } catch (error) {
     console.warn("[LocationTracking] task registration failed", error);
+    return false;
   }
 }

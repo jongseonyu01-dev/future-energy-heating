@@ -44,6 +44,8 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
  */
 export interface UnboundLocationTaskEvent {
   schemaVersion: 1;
+  /** Immutable event key; never reused for a later callback. */
+  eventId: string;
   observedAt: number;
   code: string;
 }
@@ -159,6 +161,9 @@ function isValidUnboundTaskEvent(value: unknown): value is UnboundLocationTaskEv
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<UnboundLocationTaskEvent>;
   return candidate.schemaVersion === 1
+    && typeof candidate.eventId === "string"
+    && candidate.eventId.length > 0
+    && candidate.eventId.length <= 80
     && isFiniteTimestamp(candidate.observedAt)
     && typeof candidate.code === "string"
     && candidate.code.length > 0
@@ -172,6 +177,14 @@ function active(guard?: DiagnosticsOperationGuard): boolean {
 function operationSequence(value: string): number {
   const match = /-(\d+)$/.exec(value);
   return match ? Number(match[1]) : -1;
+}
+
+function isNewerUnboundTaskEvent(left: UnboundLocationTaskEvent, right: UnboundLocationTaskEvent): boolean {
+  if (left.observedAt !== right.observedAt) return left.observedAt > right.observedAt;
+  const leftSequence = operationSequence(left.eventId);
+  const rightSequence = operationSequence(right.eventId);
+  if (leftSequence !== rightSequence) return leftSequence > rightSequence;
+  return left.eventId > right.eventId;
 }
 
 function isNewer(left: LocationRuntimeDiagnostics, right: LocationRuntimeDiagnostics): boolean {
@@ -214,7 +227,11 @@ export class LocationRuntimeDiagnosticsStore {
     return this.keyPrefix.replace(/_v2$/, "_v1");
   }
 
-  private unboundTaskEventKey(): string {
+  private unboundTaskEventPrefix(): string {
+    return this.keyPrefix.replace(/_v2$/, "_task_event_v2:");
+  }
+
+  private legacyUnboundTaskEventKey(): string {
     return this.keyPrefix.replace(/_v2$/, "_task_event_v1");
   }
 
@@ -339,21 +356,27 @@ export class LocationRuntimeDiagnosticsStore {
   }
 
   /**
-   * Stores only the latest callback event that could not be safely associated
+   * Appends an immutable callback event that could not be safely associated
    * with a session. It intentionally bypasses the session journal queue: a
    * hung A diagnostic read must not consume a later callback's bounded entry
-   * window. Callers still provide a fence so a timed-out callback cannot publish
-   * a late UI update after a replacement session starts.
+   * window. Operation-start time and sequence select the newest event at read
+   * time, so an already-issued late A write cannot replace B's evidence.
    */
   public async recordUnboundTaskEvent(
     code: string,
     observedAt = Date.now(),
     guard?: DiagnosticsOperationGuard,
   ): Promise<UnboundLocationTaskEvent | null> {
-    const event: UnboundLocationTaskEvent = { schemaVersion: 1, observedAt, code };
+    const event: UnboundLocationTaskEvent = {
+      schemaVersion: 1,
+      eventId: this.nextOperationId(observedAt),
+      observedAt,
+      code,
+    };
     if (!isValidUnboundTaskEvent(event) || !active(guard)) return null;
     try {
-      await this.storage.setItem(this.unboundTaskEventKey(), JSON.stringify(event));
+      await this.storage.setItem(`${this.unboundTaskEventPrefix()}${event.eventId}`, JSON.stringify(event));
+      void this.pruneUnboundTaskEvents();
       return active(guard) ? event : null;
     } catch {
       // This event is diagnostic-only and must never block a TaskManager callback.
@@ -361,16 +384,63 @@ export class LocationRuntimeDiagnosticsStore {
     }
   }
 
-  /** Reads the module-scoped event without assigning it to any active session. */
+  /** Reads the newest module-scoped event without assigning it to any active session. */
   public async readUnboundTaskEvent(guard?: DiagnosticsOperationGuard): Promise<UnboundLocationTaskEvent | null> {
     if (!active(guard)) return null;
     try {
-      const raw = await this.storage.getItem(this.unboundTaskEventKey());
-      if (!active(guard) || !raw) return null;
-      const parsed: unknown = JSON.parse(raw);
-      return isValidUnboundTaskEvent(parsed) ? parsed : null;
+      const prefix = this.unboundTaskEventPrefix();
+      const keys = this.storage.getAllKeys ? await this.storage.getAllKeys() : [];
+      if (!active(guard)) return null;
+      const eventKeys = keys.filter((key) => key.startsWith(prefix));
+      const pairs = this.storage.multiGet
+        ? await this.storage.multiGet(eventKeys)
+        : await Promise.all(eventKeys.map(async (key) => [key, await this.storage.getItem(key)] as [string, string | null]));
+      if (!active(guard)) return null;
+      let newest: UnboundLocationTaskEvent | null = null;
+      for (const [, raw] of pairs) {
+        if (!raw) continue;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (isValidUnboundTaskEvent(parsed) && (!newest || isNewerUnboundTaskEvent(parsed, newest))) newest = parsed;
+        } catch {
+          // Corrupt diagnostics must never block collection.
+        }
+      }
+      if (newest || !this.storage.getAllKeys) return newest;
+      // Read-only compatibility for one legacy fixed-key record. It cannot
+      // outrank a v2 immutable record because that branch returns above.
+      const legacyRaw = await this.storage.getItem(this.legacyUnboundTaskEventKey());
+      if (!active(guard) || !legacyRaw) return null;
+      const legacy: unknown = JSON.parse(legacyRaw);
+      if (!legacy || typeof legacy !== "object") return null;
+      const candidate = legacy as Partial<UnboundLocationTaskEvent>;
+      return isFiniteTimestamp(candidate.observedAt) && typeof candidate.code === "string"
+        ? { schemaVersion: 1, eventId: `legacy-${candidate.observedAt}`, observedAt: candidate.observedAt, code: candidate.code }
+        : null;
     } catch {
       return null;
+    }
+  }
+
+  /** Bounds unbound retention without making a callback wait for cleanup. */
+  private async pruneUnboundTaskEvents(): Promise<void> {
+    if (!this.storage.getAllKeys || !this.storage.multiGet || !this.storage.removeItem) return;
+    try {
+      const keys = (await this.storage.getAllKeys()).filter((key) => key.startsWith(this.unboundTaskEventPrefix()));
+      if (keys.length <= 24) return;
+      const pairs = await this.storage.multiGet(keys);
+      const events = pairs.flatMap(([key, raw]) => {
+        try {
+          const parsed: unknown = raw ? JSON.parse(raw) : null;
+          return isValidUnboundTaskEvent(parsed) ? [{ key, event: parsed }] : [];
+        } catch {
+          return [];
+        }
+      });
+      const stale = events.sort((left, right) => isNewerUnboundTaskEvent(left.event, right.event) ? -1 : 1).slice(24);
+      await Promise.all(stale.map(({ key }) => this.storage.removeItem!(key).catch(() => undefined)));
+    } catch {
+      // Retention cleanup is deliberately best effort.
     }
   }
 

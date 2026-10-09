@@ -79,6 +79,10 @@ export default function TechScheduleScreen() {
     trackingRequestId,
     trackingUrl,
     debugState,
+    unboundTaskEvent,
+    statusOverlay,
+    openStatusOverlay,
+    closeStatusOverlay,
     permStatus,
     startTracking,
     stopTracking,
@@ -302,6 +306,27 @@ export default function TechScheduleScreen() {
     registered: "등록 확인 (수집·저장 별도 확인)",
     not_registered: "등록되지 않음",
     restart_failed: "재등록 실패",
+  };
+  const handleStatusOverlay = async () => {
+    if (statusOverlay.visible) {
+      await closeStatusOverlay();
+      return;
+    }
+    if (statusOverlay.available && !statusOverlay.permission) {
+      Alert.alert(
+        "작은 상태창 권한",
+        "다른 앱 위에 ‘위치 공유 중’과 마지막 서버 저장 경과만 표시합니다. 고객 이름·주소·좌표는 표시하지 않으며, 이 창은 위치 수집·서버 저장 성공을 보장하지 않습니다. 시스템 설정에서 허용할 수 있습니다.",
+        [
+          { text: "취소", style: "cancel" },
+          { text: "설정 열기", onPress: () => { void openStatusOverlay(); } },
+        ],
+      );
+      return;
+    }
+    const result = await openStatusOverlay();
+    if (result === "unavailable") {
+      Alert.alert("상태창 준비 중", "이 기능은 다음 내부 검증 Android 설치본에서만 사용할 수 있습니다.");
+    }
   };
 
   // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
@@ -595,6 +620,27 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>전송 시도: {debugState?.attemptCount ?? 0}회 · 새 위치 저장: {debugState?.storedCount ?? 0}회 · 중복·이전: {debugState?.ignoredCount ?? 0}회</Text>
           <Text style={s.debugRow}>native 등록: {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]} · 확인: {formatTrackingTime(debugState?.lastNativeCheckAt)}</Text>
           <Text style={s.debugRow}>마지막 Task callback: {formatTrackingTime(debugState?.lastCallbackAt)} · 마지막 측정: {formatTrackingTime(debugState?.lastMeasuredAt)}</Text>
+          <Text style={s.debugRow}>
+            세션 미확정 Task 기록: {unboundTaskEvent
+              ? `${unboundTaskEvent.code} · ${formatTrackingTime(unboundTaskEvent.observedAt)} (현재 세션과 연결하지 않음)`
+              : '없음'}
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+            onPress={() => { void handleStatusOverlay(); }}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {statusOverlay.visible
+                ? '작은 상태창 닫기'
+                : statusOverlay.available && !statusOverlay.permission
+                  ? '작은 상태창 권한 열기'
+                  : '작은 상태창 표시'}
+            </Text>
+          </TouchableOpacity>
+          <Text style={s.debugRow}>
+            작은 상태창: {statusOverlay.visible ? '표시 중' : statusOverlay.available ? (statusOverlay.permission ? '닫힘' : '권한 미허용') : '현재 설치본 미지원'} · 잠금 화면에서는 표시를 보장하지 않음
+          </Text>
           <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
           <Text style={s.debugRow}>앱 빌드: {debugState?.buildLabel || '기록 전'}</Text>
           <Text style={[s.debugRow, { color: trackingStatusColor[trackingStatus] }]}>

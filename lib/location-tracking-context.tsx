@@ -9,6 +9,7 @@ import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import { useAppAuth } from "@/lib/auth-context";
 import {
+  getLatestUnboundLocationTaskEvent,
   createLocationStopAuthSnapshot,
   getPersistedTrackingState,
   restoreLocationTrackingForUser,
@@ -20,10 +21,18 @@ import {
   type LocationDebugState,
   type PersistedTrackingState,
 } from "@/lib/location-tracking";
+import type { UnboundLocationTaskEvent } from "@/lib/location-runtime-diagnostics";
 import {
   LocationTrackingOwnerReconciliationGuard,
   reconcileLocationTrackingOwner,
 } from "@/lib/location-tracking-owner-reconciliation";
+import {
+  getLocationStatusOverlayState,
+  hideLocationStatusOverlay,
+  requestLocationStatusOverlayPermission,
+  showLocationStatusOverlay,
+  type LocationStatusOverlayState,
+} from "@/lib/location-status-overlay";
 
 export interface LocationTrackingContextValue {
   isTracking: boolean;
@@ -31,6 +40,11 @@ export interface LocationTrackingContextValue {
   trackingRequestId: number | null;
   trackingUrl: string | null;
   debugState: LocationDebugState | null;
+  /** Not associated with a customer/session; shown separately in technician diagnostics only. */
+  unboundTaskEvent: UnboundLocationTaskEvent | null;
+  statusOverlay: LocationStatusOverlayState;
+  openStatusOverlay: () => Promise<"shown" | "permission_required" | "unavailable">;
+  closeStatusOverlay: () => Promise<void>;
   permStatus: { foregroundLocation: string; backgroundLocation: string; notification: string };
   startTracking: (params: StartTrackingParams) => Promise<StartTrackingResult>;
   stopTracking: (reason: "도착완료" | "업무취소") => Promise<void>;
@@ -56,6 +70,10 @@ const LocationTrackingContext = createContext<LocationTrackingContextValue>({
   trackingRequestId: null,
   trackingUrl: null,
   debugState: null,
+  unboundTaskEvent: null,
+  statusOverlay: { available: false, permission: false, visible: false },
+  openStatusOverlay: async () => "unavailable",
+  closeStatusOverlay: async () => {},
   permStatus: { foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." },
   startTracking: async () => ({ ok: false }),
   stopTracking: async () => {},
@@ -78,6 +96,8 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const [trackingRequestId, setTrackingRequestId] = useState<number | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<LocationDebugState | null>(null);
+  const [unboundTaskEvent, setUnboundTaskEvent] = useState<UnboundLocationTaskEvent | null>(null);
+  const [statusOverlay, setStatusOverlay] = useState<LocationStatusOverlayState>({ available: false, permission: false, visible: false });
   const [permStatus, setPermStatus] = useState({ foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." });
   const ownerReconciliation = useRef(new LocationTrackingOwnerReconciliationGuard()).current;
 
@@ -116,6 +136,37 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       // Notification lookup is independently best effort.
     }
     setPermStatus({ foregroundLocation, backgroundLocation, notification });
+    const overlay = await getLocationStatusOverlayState().catch(() => null);
+    if (overlay) setStatusOverlay(overlay);
+  }, []);
+
+  const statusOverlayText = useCallback(() => {
+    if (!isTracking) return "위치 공유가 종료되었습니다.";
+    if (debugState?.serverStatus === "error") return "위치 공유 중 · 서버 저장 확인 필요";
+    if (debugState?.lastStoredAt) {
+      const ageSeconds = Math.max(0, Math.floor((Date.now() - debugState.lastStoredAt) / 1000));
+      return `위치 공유 중 · 마지막 서버 저장 ${ageSeconds < 60 ? `${ageSeconds}초 전` : `${Math.floor(ageSeconds / 60)}분 전`}`;
+    }
+    return "위치 공유 중 · 서버 저장 대기";
+  }, [debugState?.lastStoredAt, debugState?.serverStatus, isTracking]);
+
+  const openStatusOverlay = useCallback(async (): Promise<"shown" | "permission_required" | "unavailable"> => {
+    if (!isTracking) return "unavailable";
+    const current = await getLocationStatusOverlayState().catch(() => null);
+    if (!current?.available) return "unavailable";
+    if (!current.permission) {
+      const requested = await requestLocationStatusOverlayPermission().catch(() => current);
+      setStatusOverlay(requested);
+      return "permission_required";
+    }
+    const next = await showLocationStatusOverlay(statusOverlayText()).catch(() => current);
+    setStatusOverlay(next);
+    return next.visible ? "shown" : "unavailable";
+  }, [isTracking, statusOverlayText]);
+
+  const closeStatusOverlay = useCallback(async () => {
+    const next = await hideLocationStatusOverlay().catch(() => null);
+    if (next) setStatusOverlay(next);
   }, []);
 
   const stopTracking = useCallback(async (reason: "도착완료" | "업무취소") => {
@@ -128,6 +179,21 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   useEffect(() => subscribeDebug((next) => setDebugState({ ...next })), []);
 
   useEffect(() => subscribeTrackingState((state) => applyState(state)), [applyState]);
+
+  // A cold TaskManager callback can occur before an exact A/B session is safely
+  // adopted. Keep that module-level evidence visible to an authenticated
+  // technician, but never attribute it to the current customer or session.
+  useEffect(() => {
+    let cancelled = false;
+    if (isLoading || user?.appRole !== "technician" || !user.userId) {
+      setUnboundTaskEvent(null);
+      return () => { cancelled = true; };
+    }
+    void getLatestUnboundLocationTaskEvent()
+      .then((event) => { if (!cancelled) setUnboundTaskEvent(event); })
+      .catch(() => { if (!cancelled) setUnboundTaskEvent(null); });
+    return () => { cancelled = true; };
+  }, [isLoading, user?.appRole, user?.userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,6 +272,10 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       trackingRequestId,
       trackingUrl,
       debugState,
+      unboundTaskEvent,
+      statusOverlay,
+      openStatusOverlay,
+      closeStatusOverlay,
       permStatus,
       startTracking,
       stopTracking,

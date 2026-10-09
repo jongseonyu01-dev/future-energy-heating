@@ -36,10 +36,15 @@ async function main() {
         getItem: async (key: string) => values.get(key) ?? null,
       setItem: async (key: string, value: string) => {
         const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
+        const unbound = key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:") ? JSON.parse(value) : null;
         const testGlobals = globalThis as Record<string, any>;
         if (record?.requestId === testGlobals.__delayDiagnosticRequestId && record?.lastUploadStartedAt) {
           testGlobals.__diagnosticWriteStarted?.resolve();
           await testGlobals.__diagnosticWriteGate;
+        }
+        if (unbound?.code === testGlobals.__delayUnboundCode) {
+          testGlobals.__unboundWriteStarted?.resolve();
+          await testGlobals.__unboundWriteGate;
         }
         values.set(key, value);
       },
@@ -51,7 +56,7 @@ async function main() {
         .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_v2:"))
         .map(([, value]) => JSON.parse(value));
       export const unboundTaskEvents = () => [...values.entries()]
-        .filter(([key]) => key === "location_tracking_runtime_diagnostics_task_event_v1")
+        .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:"))
         .map(([, value]) => JSON.parse(value));
     `);
     await writeFile(join(stubs, "notifications.ts"), `
@@ -87,6 +92,10 @@ async function main() {
       export const buildLocationRequestHeaders = (token: string | null) => token ? { Authorization: "Bearer " + token } : null;
       export const formatLocationRequestFailure = () => "";
     `);
+    await writeFile(join(stubs, "status-overlay.ts"), `
+      export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });
+      export const hideLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });
+    `);
 
     const source = await readFile(join(root, "lib/location-tracking.ts"), "utf8");
     const transformed = source
@@ -99,6 +108,7 @@ async function main() {
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
+      .replace('import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";', 'import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "./stubs/status-overlay.ts";')
       .replace('} from "@/lib/location-upload-scheduler";', `} from ${JSON.stringify(join(root, "lib/location-upload-scheduler.ts"))};`)
       .replace('} from "@/lib/location-runtime-diagnostics";', `} from ${JSON.stringify(join(root, "lib/location-runtime-diagnostics.ts"))};`)
       .replace('import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";', `import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from ${JSON.stringify(join(root, "lib/location-runtime-status.ts"))};`)
@@ -125,6 +135,7 @@ async function main() {
     });
     try {
       const tracking = await import(`${pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href}?v=${Date.now()}`);
+      assert.equal(tracking.registerLocationTrackingTask(), true, "custom entry must register the TaskManager handler before callback delivery");
       const taskManager = await import(`${pathToFileURL(join(stubs, "task-manager.ts")).href}?v=${Date.now()}`);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
         diagnosticRecords: () => { requestId: number; attemptCount: number }[];
@@ -236,6 +247,29 @@ async function main() {
       assert.equal(storage.unboundTaskEvents().at(-1)?.code, "TASK_NATIVE_ERROR");
       await taskManager.invokeTask({ data: { locations: [] } });
       assert.equal(storage.unboundTaskEvents().at(-1)?.code, "NO_FRESH_MEASUREMENT");
+
+      // The callback's bounded 8ms diagnostic window must not let an
+      // already-issued A write overwrite B after A returns. This uses the real
+      // TaskManager callback, not the store helper in isolation.
+      const lateAStarted = Promise.withResolvers<void>();
+      const lateAGate = Promise.withResolvers<void>();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayUnboundCode: "TASK_NATIVE_ERROR",
+        __unboundWriteStarted: lateAStarted.resolve,
+        __unboundWriteGate: lateAGate.promise,
+      });
+      await taskManager.invokeTask({ error: new Error("SYNTHETIC_DELAYED_A") });
+      await lateAStarted.promise;
+      await taskManager.invokeTask({ data: { locations: [] } });
+      lateAGate.resolve();
+      await waitForDiagnostics();
+      const latestUnbound = await tracking.getLatestUnboundLocationTaskEvent();
+      assert.equal(latestUnbound?.code, "NO_FRESH_MEASUREMENT", "late A must not replace newer B unbound evidence");
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayUnboundCode: undefined,
+        __unboundWriteStarted: undefined,
+        __unboundWriteGate: undefined,
+      });
 
       const invalidCoordinateState = { ...state, token: "i".repeat(43), requestId: 5061, startedAt: 506_100 };
       await tracking.startLocationTracking(invalidCoordinateState);

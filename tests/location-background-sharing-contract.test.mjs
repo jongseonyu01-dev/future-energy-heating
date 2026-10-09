@@ -4,8 +4,10 @@ import { readFile } from "node:fs/promises";
 const root = new URL("..", import.meta.url);
 const read = (relative) => readFile(new URL(relative, root), "utf8");
 
-const [tracking, lifecycle, uploadGuard, scheduler, diagnostics, responseParser, taskBudget, runtimeStatus, context, schedule, workReport, auth, config] = await Promise.all([
+const [tracking, taskEntry, packageJson, lifecycle, uploadGuard, scheduler, diagnostics, responseParser, taskBudget, runtimeStatus, context, schedule, workReport, auth, config, overlay] = await Promise.all([
   read("lib/location-tracking.ts"),
+  read("lib/location-task-entry.ts"),
+  read("package.json"),
   read("lib/location-tracking-lifecycle.ts"),
   read("lib/location-upload-guard.ts"),
   read("lib/location-upload-scheduler.ts"),
@@ -18,9 +20,12 @@ const [tracking, lifecycle, uploadGuard, scheduler, diagnostics, responseParser,
   read("app/work-report.tsx"),
   read("lib/auth-context.tsx"),
   read("app.config.ts"),
+  read("lib/location-status-overlay.ts"),
 ]);
 
-assert.match(tracking, /TaskManager\.defineTask\(BACKGROUND_TASK_NAME/, "native background task must be globally registered");
+assert.match(packageJson, /"main": "\.\/index\.ts"/, "custom package main must run before Expo Router entry");
+assert.match(taskEntry, /registerLocationTrackingTask\(\)/, "custom package entry must globally register the native background task");
+assert.match(tracking, /TaskManager\.defineTask\(BACKGROUND_TASK_NAME/, "native background task definition remains outside React UI");
 assert.match(tracking, /Location\.startLocationUpdatesAsync\(BACKGROUND_TASK_NAME/, "only native location task starts collection");
 assert.doesNotMatch(tracking, /setInterval\(/, "JS interval must not be used as a background location collector");
 assert.match(tracking, /foregroundService:\s*\{[\s\S]*killServiceOnDestroy:\s*false/, "foreground service must remain after activity destruction");
@@ -48,8 +53,10 @@ assert.match(taskBudget, /Promise\.race\(\[work, timeout\]\)/, "task deadline mu
 assert.match(diagnostics, /sameDiagnosticScope/, "runtime diagnostics must reject a replacement session");
 assert.match(diagnostics, /releaseExpiredWork/, "expired best-effort diagnostics must not block a later native callback");
 assert.match(runtimeStatus, /오래된 위치 전송 시도는 완료로 표시하지 않습니다/, "UI must not restore stale uploading as an active transfer");
-assert.match(tracking, /serverStatus: "error", serverError: "Android 위치 작업 오류가 발생했습니다/, "TaskManager errors must become observable technician state");
-assert.match(tracking, /현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다/, "missing headless credential/session must become observable technician state");
+assert.match(tracking, /recordUnboundTaskCallback/, "TaskManager preparation failures must be classified before callback return");
+assert.match(diagnostics, /recordUnboundTaskEvent/, "session-unknown TaskManager failures must be kept outside A/B session diagnostics");
+assert.match(context, /getLatestUnboundLocationTaskEvent/, "unbound TaskManager evidence must be observable after the app returns");
+assert.match(schedule, /현재 세션과 연결하지 않음/, "technician UI must distinguish unbound callback evidence from the current session");
 assert.match(scheduler, /payload\.accepted === true/, "HTTP 2xx must not alone count as a new location save");
 assert.match(scheduler, /accepted === false/, "duplicate or older measurements must be classified separately");
 assert.match(tracking, /createLocationStopAuthSnapshot/, "logout must capture the prior credential before auth removal");
@@ -83,5 +90,8 @@ assert.doesNotMatch(tracking, /requestBackgroundPermissionsAsync\(\)/, "departur
 assert.match(tracking, /앱 화면이 열린 상태에서 시작해야 합니다/, "foreground-service start rejection must guide a foreground retry");
 assert.match(config, /FOREGROUND_SERVICE_LOCATION/, "Android foreground-service location permission is declared");
 assert.match(config, /expo-notifications/, "actionable persistent notification module is included");
+assert.match(config, /SYSTEM_ALERT_WINDOW/, "optional status window special-access declaration is explicit");
+assert.match(overlay, /requireOptionalNativeModule/, "optional status window must degrade safely on unsupported installs");
+assert.match(overlay, /updateIfVisible/, "headless diagnostics may update only an already-opened status window");
 
 console.log("LOCATION_BACKGROUND_SHARING_CONTRACT_PASS");

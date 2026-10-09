@@ -83,6 +83,7 @@ async function main() {
     await writeFile(join(stubs, "oauth.ts"), 'export const getApiBaseUrl = () => "https://invalid.example";\n');
     await writeFile(join(stubs, "auth.ts"), 'export const getSessionToken = async () => null; export const getUserInfo = async () => null;\n');
     await writeFile(join(stubs, "request-auth.ts"), 'export const buildLocationRequestHeaders = () => null; export const formatLocationRequestFailure = () => "";\n');
+    await writeFile(join(stubs, "status-overlay.ts"), 'export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false }); export const hideLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });\n');
 
     const source = await readFile(join(root, "lib/location-tracking.ts"), "utf8");
     const transformed = source
@@ -95,6 +96,7 @@ async function main() {
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
+      .replace('import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";', 'import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "./stubs/status-overlay.ts";')
       .replace('} from "@/lib/location-tracking-lifecycle";', `} from ${JSON.stringify(join(root, "lib/location-tracking-lifecycle.ts"))};`)
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
       .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`);

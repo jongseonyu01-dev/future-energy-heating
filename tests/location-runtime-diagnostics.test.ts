@@ -74,7 +74,7 @@ describe("세션별 위치 런타임 진단", () => {
     };
     const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
     await diagnostics.begin(stateA, 1_000);
-    await expect(diagnostics.recordUnboundTaskEvent("NO_CREDENTIAL", 1_100)).resolves.toEqual({
+    await expect(diagnostics.recordUnboundTaskEvent("NO_CREDENTIAL", 1_100)).resolves.toMatchObject({
       schemaVersion: 1,
       observedAt: 1_100,
       code: "NO_CREDENTIAL",
@@ -88,6 +88,37 @@ describe("세션별 위치 런타임 진단", () => {
       observedAt: 1_100,
       code: "NO_CREDENTIAL",
     });
+  });
+
+  it("late A immutable write는 더 늦게 발생한 B unbound 증거를 덮지 않는다", async () => {
+    const values = new Map<string, string>();
+    const aWriteStarted = Promise.withResolvers<void>();
+    const aGate = Promise.withResolvers<void>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        const parsed = JSON.parse(value) as { code?: string };
+        if (parsed.code === "TASK_NATIVE_ERROR") {
+          aWriteStarted.resolve();
+          await aGate.promise;
+        }
+        values.set(key, value);
+      },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    const writeA = diagnostics.recordUnboundTaskEvent("TASK_NATIVE_ERROR", 10_000);
+    await aWriteStarted.promise;
+    await diagnostics.recordUnboundTaskEvent("NO_FRESH_MEASUREMENT", 10_751);
+    aGate.resolve();
+    await writeA;
+
+    await expect(diagnostics.readUnboundTaskEvent()).resolves.toMatchObject({
+      observedAt: 10_751,
+      code: "NO_FRESH_MEASUREMENT",
+    });
+    expect([...values.keys()].filter((key) => key.includes("_task_event_v2:"))).toHaveLength(2);
   });
 
   it("복귀 뒤에도 최근 오류를 보이고 오래된 uploading은 유지하지 않는다", async () => {
