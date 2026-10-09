@@ -143,9 +143,12 @@ async function main() {
       },
     });
     try {
-      const tracking = await import(`${pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href}?v=${Date.now()}`);
+      // The sandbox path is unique per run. Do not add a query string here or
+      // below: Node/tsx treats a query-suffixed relative task-manager import as
+      // a separate module instance, so the test would invoke an empty stub.
+      const tracking = await import(pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href);
       assert.equal(tracking.registerLocationTrackingTask(), true, "custom entry must register the TaskManager handler before callback delivery");
-      const taskManager = await import(`${pathToFileURL(join(stubs, "task-manager.ts")).href}?v=${Date.now()}`);
+      const taskManager = await import(pathToFileURL(join(stubs, "task-manager.ts")).href);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
         diagnosticRecords: () => { requestId: number; attemptCount: number }[];
         unboundTaskEvents: () => { observedAt: number; code: string }[];
