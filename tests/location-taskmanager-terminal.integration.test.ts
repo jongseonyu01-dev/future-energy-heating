@@ -37,10 +37,19 @@ async function main() {
       setItem: async (key: string, value: string) => {
         const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
         const unbound = key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:") ? JSON.parse(value) : null;
+        const acceptedOutcome = key.startsWith("location_tracking_runtime_diagnostics_accepted_outcome_v1:") ? JSON.parse(value) : null;
         const testGlobals = globalThis as Record<string, any>;
         if (record?.requestId === testGlobals.__delayDiagnosticRequestId && record?.lastUploadStartedAt) {
           testGlobals.__diagnosticWriteStarted?.resolve();
           await testGlobals.__diagnosticWriteGate;
+        }
+        if (record?.requestId === testGlobals.__delayAcceptedDiagnosticRequestId && record?.lastStoredAt) {
+          testGlobals.__acceptedDiagnosticWriteStarted?.resolve();
+          await testGlobals.__acceptedDiagnosticWriteGate;
+        }
+        if (record?.requestId === testGlobals.__delayStageDiagnosticRequestId && record?.lastCallbackStage === "QUEUE") {
+          testGlobals.__stageDiagnosticWriteStarted?.resolve();
+          await testGlobals.__stageDiagnosticWriteGate;
         }
         if (unbound?.code === testGlobals.__delayUnboundCode) {
           testGlobals.__unboundWriteStarted?.resolve();
@@ -55,6 +64,9 @@ async function main() {
       };
       export const diagnosticRecords = () => [...values.entries()]
         .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_v2:"))
+        .map(([, value]) => JSON.parse(value));
+      export const acceptedOutcomes = () => [...values.entries()]
+        .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_accepted_outcome_v1:"))
         .map(([, value]) => JSON.parse(value));
       export const unboundTaskEvents = () => [...values.entries()]
         .filter(([key]) => key.startsWith("location_tracking_runtime_diagnostics_task_event_v2:"))
@@ -151,6 +163,7 @@ async function main() {
       const taskManager = await import(pathToFileURL(join(stubs, "task-manager.ts")).href);
       const storage = await import(pathToFileURL(join(stubs, "async-storage.ts")).href) as {
         diagnosticRecords: () => { requestId: number; attemptCount: number }[];
+        acceptedOutcomes: () => { requestId: number }[];
         unboundTaskEvents: () => { observedAt: number; code: string }[];
       };
       const waitForDiagnostics = async () => {
@@ -302,6 +315,94 @@ async function main() {
       assert.ok(invalidDiagnostics?.lastCallbackAt, "adopted callback must persist its entry timestamp before coordinate validation");
       assert.equal(invalidDiagnostics?.lastErrorCode, "COORDINATE_INVALID");
       assert.equal(invalidDiagnostics?.attemptCount, 0, "coordinate rejection before fetch must retain zero attempts");
+
+      // A confirmed accepted response must be visible immediately even when the
+      // later best-effort session journal write stalls. It must not become a
+      // callback-deadline error or invent a deadline timestamp as response time.
+      const acceptedDelayState = { ...state, token: "r".repeat(43), requestId: 5062, startedAt: 506_200 };
+      const acceptedWriteStarted = Promise.withResolvers<void>();
+      const acceptedWriteGate = Promise.withResolvers<void>();
+      const acceptedDebug: { serverStatus?: string; serverError?: string | null; storedCount?: number; lastResponseAt?: number | null; lastAcceptedAt?: number | null; lastCallbackDeadlineAt?: number | null }[] = [];
+      const unsubscribeAccepted = tracking.subscribeDebug((next: typeof acceptedDebug[number]) => acceptedDebug.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayAcceptedDiagnosticRequestId: acceptedDelayState.requestId,
+        __acceptedDiagnosticWriteStarted: acceptedWriteStarted,
+        __acceptedDiagnosticWriteGate: acceptedWriteGate.promise,
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) }),
+      });
+      await tracking.startLocationTracking(acceptedDelayState);
+      const acceptedCallback = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await acceptedWriteStarted.promise;
+      await Promise.race([
+        acceptedCallback,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("accepted callback waited for stalled diagnostic write")), 100)),
+      ]);
+      const acceptedVisible = acceptedDebug.at(-1);
+      assert.equal(acceptedVisible?.serverStatus, "stored", "verified accepted response must not be relabelled as a local deadline error");
+      assert.equal(acceptedVisible?.serverError, null);
+      assert.equal(acceptedVisible?.storedCount, 1, "verified accepted response must increment the visible new-save count before diagnostic I/O settles");
+      assert.ok(acceptedVisible?.lastAcceptedAt, "accepted timestamp must reflect the verified response");
+      assert.ok(acceptedVisible?.lastResponseAt, "response timestamp must reflect the actual completed response");
+      assert.equal(acceptedVisible?.lastCallbackDeadlineAt ?? null, null, "deadline timestamp must remain absent after accepted response");
+      acceptedWriteGate.resolve();
+      await waitForDiagnostics();
+      assert.equal(storage.acceptedOutcomes().filter((event: { requestId?: number }) => event.requestId === acceptedDelayState.requestId).length, 1, "accepted evidence uses an independent immutable outcome record");
+      unsubscribeAccepted();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayAcceptedDiagnosticRequestId: null,
+        __acceptedDiagnosticWriteStarted: null,
+        __acceptedDiagnosticWriteGate: null,
+      });
+
+      // A stalled pre-request phase write is diagnostic-only: it cannot delay a
+      // valid fetch or consume the callback's network budget.
+      const preDiagnosticState = { ...state, token: "p".repeat(43), requestId: 5063, startedAt: 506_300 };
+      const stageWriteStarted = Promise.withResolvers<void>();
+      const stageWriteGate = Promise.withResolvers<void>();
+      let preDiagnosticFetches = 0;
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayStageDiagnosticRequestId: preDiagnosticState.requestId,
+        __stageDiagnosticWriteStarted: stageWriteStarted,
+        __stageDiagnosticWriteGate: stageWriteGate.promise,
+        fetch: async () => {
+          preDiagnosticFetches += 1;
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: false }) };
+        },
+      });
+      await tracking.startLocationTracking(preDiagnosticState);
+      const preDiagnosticCallback = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await stageWriteStarted.promise;
+      while (preDiagnosticFetches !== 1) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      stageWriteGate.resolve();
+      await preDiagnosticCallback;
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayStageDiagnosticRequestId: null,
+        __stageDiagnosticWriteStarted: null,
+        __stageDiagnosticWriteGate: null,
+      });
+
+      // Headers are evidence of a response, while a hanging body remains a
+      // separate bounded failure. Neither is reported as a completed body.
+      const bodyTimeoutState = { ...state, token: "j".repeat(43), requestId: 5064, startedAt: 506_400 };
+      const bodyTimeoutDebug: { serverError?: string | null; lastResponseAt?: number | null; lastResponseHeadersAt?: number | null; lastResponseBodyAt?: number | null }[] = [];
+      const unsubscribeBodyTimeout = tracking.subscribeDebug((next: typeof bodyTimeoutDebug[number]) => bodyTimeoutDebug.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => ({ ok: true, status: 200, json: () => new Promise<unknown>(() => {}) }),
+      });
+      await tracking.startLocationTracking(bodyTimeoutState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      const bodyTimeoutVisible = bodyTimeoutDebug.at(-1);
+      assert.equal(bodyTimeoutVisible?.serverError, "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.");
+      assert.ok(bodyTimeoutVisible?.lastResponseHeadersAt, "HTTP headers timestamp must remain observable");
+      assert.equal(bodyTimeoutVisible?.lastResponseBodyAt ?? null, null, "body timeout must not fabricate a completed-body timestamp");
+      assert.equal(bodyTimeoutVisible?.lastResponseAt, bodyTimeoutVisible?.lastResponseHeadersAt, "last response remains the actual header receipt when the body did not complete");
+      unsubscribeBodyTimeout();
 
       // A stored result is historical evidence only. A following actual fetch
       // must remain "uploading" until its own response is classified.

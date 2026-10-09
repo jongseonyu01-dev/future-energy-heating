@@ -121,6 +121,48 @@ describe("세션별 위치 런타임 진단", () => {
     expect([...values.keys()].filter((key) => key.includes("_task_event_v2:"))).toHaveLength(2);
   });
 
+  it("서버 accepted outcome은 지연된 session journal deadline보다 우선하고 B에 귀속되지 않는다", async () => {
+    const values = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => { values.set(key, value); },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+    };
+    const diagnostics = new LocationRuntimeDiagnosticsStore(storage);
+    await diagnostics.begin(stateA, 10_000);
+    await diagnostics.recordAcceptedOutcome(stateA, {
+      callbackAt: 10_100,
+      attemptStartedAt: 10_120,
+      responseHeadersAt: 10_130,
+      responseBodyAt: 10_140,
+      acceptedAt: 10_140,
+      storedAt: 10_140,
+    }, 10_140);
+    await diagnostics.patch(stateA, {
+      lastCallbackAt: 10_100,
+      lastErrorCode: "CALLBACK_DEADLINE_EXCEEDED",
+      lastErrorAt: 20_000,
+      lastCallbackDeadlineAt: 20_000,
+    });
+
+    await expect(diagnostics.read(stateA)).resolves.toMatchObject({
+      lastAcceptedAt: 10_140,
+      lastResponseHeadersAt: 10_130,
+      lastResponseBodyAt: 10_140,
+      lastStoredAt: 10_140,
+      lastErrorCode: null,
+      storedCount: 1,
+    });
+
+    await diagnostics.begin(stateB, 30_000);
+    await expect(diagnostics.read(stateB)).resolves.toMatchObject({
+      lastAcceptedAt: null,
+      lastStoredAt: null,
+      storedCount: 0,
+    });
+  });
+
   it("복귀 뒤에도 최근 오류를 보이고 오래된 uploading은 유지하지 않는다", async () => {
     const storage = memoryStorage();
     const diagnostics = new LocationRuntimeDiagnosticsStore(storage);

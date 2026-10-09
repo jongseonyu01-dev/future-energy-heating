@@ -301,6 +301,9 @@ export default function TechScheduleScreen() {
   const formatTrackingTime = (time: number | null | undefined) => time
     ? `${Math.max(0, Math.round((Date.now() - time) / 1000))}초 전 (${new Date(time).toLocaleTimeString("ko-KR")})`
     : "아직 없음";
+  const formatStage = (stage: string | null | undefined, at: number | null | undefined, elapsedMs: number | null | undefined) => stage
+    ? `${stage} · ${formatTrackingTime(at)}${elapsedMs != null ? ` · ${elapsedMs}ms` : ""}`
+    : "아직 없음";
   const nativeRegistrationLabel: Record<NonNullable<typeof debugState>["nativeRegistration"], string> = {
     unknown: "미확인",
     registered: "등록 확인 (수집·저장 별도 확인)",
@@ -620,6 +623,9 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>전송 시도: {debugState?.attemptCount ?? 0}회 · 새 위치 저장: {debugState?.storedCount ?? 0}회 · 중복·이전: {debugState?.ignoredCount ?? 0}회</Text>
           <Text style={s.debugRow}>native 등록: {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]} · 확인: {formatTrackingTime(debugState?.lastNativeCheckAt)}</Text>
           <Text style={s.debugRow}>마지막 Task callback: {formatTrackingTime(debugState?.lastCallbackAt)} · 마지막 측정: {formatTrackingTime(debugState?.lastMeasuredAt)}</Text>
+          <Text style={s.debugRow}>callback 단계: {formatStage(debugState?.lastCallbackStage, debugState?.lastCallbackStageAt, debugState?.lastCallbackStageElapsedMs)}</Text>
+          <Text style={s.debugRow}>전송 단계: {formatStage(debugState?.lastAttemptStage, debugState?.lastAttemptStageAt, debugState?.lastAttemptStageElapsedMs)}</Text>
+          <Text style={s.debugRow}>앱 상태 전환: {debugState?.lastAppState || '기록 전'} · {formatTrackingTime(debugState?.lastAppStateAt)}</Text>
           <Text style={s.debugRow}>
             세션 미확정 Task 기록: {unboundTaskEvent
               ? `${unboundTaskEvent.code} · ${formatTrackingTime(unboundTaskEvent.observedAt)} (현재 세션과 연결하지 않음)`
@@ -647,7 +653,10 @@ export default function TechScheduleScreen() {
             서버 상태: {trackingStatusLabel[trackingStatus]}{debugState?.serverError ? ` — ${debugState.serverError}` : ''}
           </Text>
           <Text style={s.debugRow}>
-            마지막 응답: {debugState?.lastResponseAt ? new Date(debugState.lastResponseAt).toLocaleTimeString('ko-KR') : '-'} · 마지막 새 위치 저장: {debugState?.lastStoredAt ? new Date(debugState.lastStoredAt).toLocaleTimeString('ko-KR') : '-'}
+            응답 headers: {formatTrackingTime(debugState?.lastResponseHeadersAt)} · 본문 완료: {formatTrackingTime(debugState?.lastResponseBodyAt)}
+          </Text>
+          <Text style={s.debugRow}>
+            서버 accepted: {formatTrackingTime(debugState?.lastAcceptedAt)} · 서버 저장 시각: {formatTrackingTime(debugState?.lastStoredAt)} · callback deadline: {formatTrackingTime(debugState?.lastCallbackDeadlineAt)}
           </Text>
           <Text style={s.debugRow}>앱 사용 중 위치 권한: {permStatus.foregroundLocation}</Text>
           <Text style={s.debugRow}>항상 위치 권한: {permStatus.backgroundLocation}</Text>

@@ -47,11 +47,16 @@ assert.match(tracking, /TaskCallbackDeadlineFence/, "callback must own a deadlin
 assert.match(tracking, /taskFence\.remainingMs\(\)/, "fetch and response parsing must consume the remaining callback budget");
 assert.match(tracking, /withinDiagnosticsDeadline/, "deadline expiry must release best-effort diagnostics from the callback path");
 assert.match(tracking, /parseJsonWithin\(response, responseBodyBudgetMs\)/, "response.json must not hold the latest-only queue indefinitely");
+assert.match(tracking, /recordAcceptedOutcome\(state/, "verified accepted responses must bypass delayed session diagnostics");
+assert.match(tracking, /lastCallbackDeadlineAt: now/, "callback deadline must have its own timestamp field");
+assert.doesNotMatch(tracking, /lastResponseAt: now/, "callback deadline must not fabricate an HTTP response timestamp");
 assert.doesNotMatch(tracking, /UPDATE_RETRY_DELAY_MS/, "headless callback must not combine delayed retry loops with the job deadline");
 assert.match(responseParser, /Promise\.race\(\[parsed, timeout\]\)/, "response parser must release on body timeout");
 assert.match(taskBudget, /Promise\.race\(\[work, timeout\]\)/, "task deadline must release a blocked storage/auth await");
 assert.match(diagnostics, /sameDiagnosticScope/, "runtime diagnostics must reject a replacement session");
 assert.match(diagnostics, /releaseExpiredWork/, "expired best-effort diagnostics must not block a later native callback");
+assert.match(diagnostics, /LocationCallbackStage/, "diagnostics must classify fixed non-sensitive callback stages");
+assert.match(diagnostics, /LocationAppStateMarker/, "diagnostics must keep AppState evidence separately from uploads");
 assert.match(runtimeStatus, /오래된 위치 전송 시도는 완료로 표시하지 않습니다/, "UI must not restore stale uploading as an active transfer");
 assert.match(tracking, /recordUnboundTaskCallback/, "TaskManager preparation failures must be classified before callback return");
 assert.match(diagnostics, /recordUnboundTaskEvent/, "session-unknown TaskManager failures must be kept outside A/B session diagnostics");
@@ -70,6 +75,7 @@ assert.match(uploadGuard, /request\(credential\)/, "guard checks the upload resp
 assert.match(context, /stopStoredTrackingAndNotify\(reason, createLocationStopAuthSnapshot\(user\)\)/, "context must capture stop credentials before local shutdown");
 assert.match(context, /subscribeTrackingState/, "terminal server cleanup must clear context UI state");
 assert.match(context, /AppState\.addEventListener/, "foreground return must re-run exact-session registration reconciliation");
+assert.match(context, /recordLocationTrackingAppState\(nextState\)/, "AppState transition must be recorded without starting an upload");
 assert.match(context, /getBackgroundPermissionsAsync/, "background location permission must be observed separately from notification permission");
 assert.match(context, /foregroundLocation/, "foreground location permission must have its own UI field");
 assert.match(context, /notification/, "notification permission must have its own UI field");

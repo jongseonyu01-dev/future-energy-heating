@@ -61,6 +61,7 @@ async function main() {
       let listener: ((state: string) => void) | null = null;
       export const Platform = { OS: "android" };
       export const AppState = { addEventListener: (_name: string, next: (state: string) => void) => { listener = next; return { remove: () => { listener = null; } }; } };
+      export const emitState = (state: string) => listener?.(state);
       export const emitActive = () => listener?.("active");
     `);
     await writeFile(join(stubs, "notifications.ts"), 'export const getPermissionsAsync = async () => ({ granted: true });\n');
@@ -70,10 +71,12 @@ async function main() {
       let trackingListener: ((state: any) => void) | null = null;
       let debugListener: ((state: any) => void) | null = null;
       export let latestUnbound: any = null;
+      export const appStateEvents: string[] = [];
       export const setLatestUnbound = (value: any) => { latestUnbound = value; };
       export const getLatestUnboundLocationTaskEvent = async () => latestUnbound;
       export const createLocationStopAuthSnapshot = () => ({ technicianUserId: 17, bearerToken: "bearer" });
       export const getPersistedTrackingState = async () => (${JSON.stringify(stateA)});
+      export const recordLocationTrackingAppState = (next: string) => { appStateEvents.push(next); };
       export const restoreLocationTrackingForUser = async () => null;
       export const startLocationTracking = async () => undefined;
       export const stopStoredTrackingAndNotify = async () => { trackingListener?.(null); };
@@ -123,6 +126,10 @@ async function main() {
     await tick();
     await react.__flush();
     assert.equal(react.__latest().isTracking, true, "provider must receive the active exact tracking session");
+
+    native.emitState("background");
+    await tick();
+    assert.deepEqual(tracking.appStateEvents, ["background"], "AppState transition must record only a diagnostic marker before any foreground reconciliation");
 
     // getStatus is delayed. Stop completes before it resolves; the late open
     // must not call native show or restore visible state.

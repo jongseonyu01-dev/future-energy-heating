@@ -25,6 +25,8 @@ import {
 import {
   LocationRuntimeDiagnosticsStore,
   type LocationRuntimeDiagnostics,
+  type LocationAppStateMarker,
+  type LocationCallbackStage,
   type UnboundLocationTaskEvent,
 } from "@/lib/location-runtime-diagnostics";
 import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
@@ -114,6 +116,18 @@ export interface LocationDebugState {
   lastNativeCheckAt: number | null;
   lastCallbackAt: number | null;
   lastMeasuredAt: number | null;
+  lastResponseHeadersAt: number | null;
+  lastResponseBodyAt: number | null;
+  lastAcceptedAt: number | null;
+  lastCallbackDeadlineAt: number | null;
+  lastCallbackStage: LocationCallbackStage | null;
+  lastCallbackStageAt: number | null;
+  lastCallbackStageElapsedMs: number | null;
+  lastAttemptStage: LocationCallbackStage | null;
+  lastAttemptStageAt: number | null;
+  lastAttemptStageElapsedMs: number | null;
+  lastAppState: LocationAppStateMarker | null;
+  lastAppStateAt: number | null;
   buildLabel: string | null;
 }
 
@@ -135,7 +149,11 @@ let debugState: LocationDebugState = {
   lat: null, lng: null, accuracy: null, speed: null, heading: null,
   lastAttemptAt: null, lastResponseAt: null, lastStoredAt: null,
   serverStatus: "idle", serverError: null, attemptCount: 0, storedCount: 0, ignoredCount: 0, source: "",
-  nativeRegistration: "unknown", lastNativeCheckAt: null, lastCallbackAt: null, lastMeasuredAt: null, buildLabel: null,
+  nativeRegistration: "unknown", lastNativeCheckAt: null, lastCallbackAt: null, lastMeasuredAt: null,
+  lastResponseHeadersAt: null, lastResponseBodyAt: null, lastAcceptedAt: null, lastCallbackDeadlineAt: null,
+  lastCallbackStage: null, lastCallbackStageAt: null, lastCallbackStageElapsedMs: null,
+  lastAttemptStage: null, lastAttemptStageAt: null, lastAttemptStageElapsedMs: null,
+  lastAppState: null, lastAppStateAt: null, buildLabel: null,
 };
 const debugListeners: ((state: LocationDebugState) => void)[] = [];
 const trackingStateListeners: ((state: PersistedTrackingState | null) => void)[] = [];
@@ -275,6 +293,12 @@ function emitPersistedDiagnostics(
   canPublish: () => boolean = () => true,
 ) {
   if (!diagnostics || !canPublish()) return;
+  // A delayed pre-response diagnostic operation can finish after a verified
+  // accepted response was already rendered. It contains no accepted evidence,
+  // so restoring it would regress "stored" to idle/error in the same exact
+  // session. A later journal record that includes the same/newer accepted time
+  // is still allowed through.
+  if (debugState.lastAcceptedAt && (!diagnostics.lastAcceptedAt || diagnostics.lastAcceptedAt < debugState.lastAcceptedAt)) return;
   const restoredStatus = locationRuntimeStatusFromDiagnostics(
     diagnostics,
     Date.now(),
@@ -285,6 +309,18 @@ function emitPersistedDiagnostics(
     lastNativeCheckAt: diagnostics.lastNativeCheckAt,
     lastCallbackAt: diagnostics.lastCallbackAt,
     lastMeasuredAt: diagnostics.lastMeasuredAt,
+    lastResponseHeadersAt: diagnostics.lastResponseHeadersAt,
+    lastResponseBodyAt: diagnostics.lastResponseBodyAt,
+    lastAcceptedAt: diagnostics.lastAcceptedAt,
+    lastCallbackDeadlineAt: diagnostics.lastCallbackDeadlineAt,
+    lastCallbackStage: diagnostics.lastCallbackStage,
+    lastCallbackStageAt: diagnostics.lastCallbackStageAt,
+    lastCallbackStageElapsedMs: diagnostics.lastCallbackStageElapsedMs,
+    lastAttemptStage: diagnostics.lastAttemptStage,
+    lastAttemptStageAt: diagnostics.lastAttemptStageAt,
+    lastAttemptStageElapsedMs: diagnostics.lastAttemptStageElapsedMs,
+    lastAppState: diagnostics.lastAppState,
+    lastAppStateAt: diagnostics.lastAppStateAt,
     lastAttemptAt: diagnostics.lastUploadStartedAt,
     lastResponseAt: diagnostics.lastResponseAt,
     lastStoredAt: diagnostics.lastStoredAt,
@@ -580,6 +616,10 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
   emitPersistedDiagnostics(diagnostics);
   emitDebug({
     lastAttemptAt: null, lastResponseAt: null, lastStoredAt: null,
+    lastResponseHeadersAt: null, lastResponseBodyAt: null, lastAcceptedAt: null, lastCallbackDeadlineAt: null,
+    lastCallbackStage: null, lastCallbackStageAt: null, lastCallbackStageElapsedMs: null,
+    lastAttemptStage: null, lastAttemptStageAt: null, lastAttemptStageElapsedMs: null,
+    lastAppState: null, lastAppStateAt: null,
     serverStatus: "idle", serverError: null, attemptCount: 0, storedCount: 0, ignoredCount: 0, source: "",
   });
 }
@@ -602,7 +642,10 @@ export async function restoreLocationTrackingForUser(userId: number): Promise<Pe
   try {
     const restored = await trackingLifecycle.restoreForUser(userId);
     if (!restored) return null;
-    emitPersistedDiagnostics(await runtimeDiagnostics.ensure(restored));
+    // read() folds an independently persisted accepted outcome into the session
+    // journal. This preserves verified server acceptance across a JS restart
+    // even if the normal diagnostic write was still delayed at callback return.
+    emitPersistedDiagnostics(await runtimeDiagnostics.read(restored) ?? await runtimeDiagnostics.ensure(restored));
     const nativeCheckAt = Date.now();
     try {
       const result = await trackingLifecycle.reconcileNativeCollection(restored);
@@ -650,19 +693,25 @@ export async function getCurrentLocationFull(): Promise<{
   }
 }
 
-function publishCallbackDeadline(state: PersistedTrackingState): void {
+function publishCallbackDeadline(state: PersistedTrackingState, callbackAt?: number): void {
   if (!sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)) return;
   clearDebugUploadForState(state);
   const now = Date.now();
   emitDebug({
     serverStatus: "error",
     serverError: "위치 전송 시간 제한으로 저장 여부를 확인하지 못했습니다.",
-    lastResponseAt: now,
+    lastCallbackDeadlineAt: now,
+    lastCallbackStage: "CALLBACK_DEADLINE",
+    lastCallbackStageAt: now,
+    lastCallbackStageElapsedMs: callbackAt ? Math.max(0, now - callbackAt) : null,
   });
   void runtimeDiagnostics.patch(state, {
     lastErrorCode: CALLBACK_DEADLINE_ERROR,
     lastErrorAt: now,
-    lastResponseAt: now,
+    lastCallbackDeadlineAt: now,
+    lastCallbackStage: "CALLBACK_DEADLINE",
+    lastCallbackStageAt: now,
+    lastCallbackStageElapsedMs: callbackAt ? Math.max(0, now - callbackAt) : null,
   }, () => sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state))
     .then(emitPersistedDiagnostics)
     .catch(() => undefined);
@@ -706,6 +755,36 @@ function taskStillActive(fence: TaskCallbackDeadlineFence | undefined): boolean 
   return !fence || fence.isActive();
 }
 
+/**
+ * Phase writes never sit on the callback's critical path. They are bounded by
+ * existing immutable diagnostics and exact owner/fence checks, so they describe
+ * a stop point without stealing network/body budget or publishing late A data.
+ */
+function recordCallbackStage(
+  state: PersistedTrackingState,
+  stage: LocationCallbackStage,
+  callbackAt: number,
+  attemptStartedAt: number | null,
+  canPublish: () => boolean,
+): void {
+  const stageAt = Date.now();
+  void runtimeDiagnostics.update(state, (current) => ({
+    ...current,
+    lastCallbackStage: stage,
+    lastCallbackStageAt: stageAt,
+    lastCallbackStageElapsedMs: Math.max(0, stageAt - callbackAt),
+    ...(attemptStartedAt
+      ? {
+          lastAttemptStage: stage,
+          lastAttemptStageAt: stageAt,
+          lastAttemptStageElapsedMs: Math.max(0, stageAt - attemptStartedAt),
+        }
+      : {}),
+  }), canPublish).then((diagnostics) => {
+    if (diagnostics) emitPersistedDiagnostics(diagnostics, canPublish);
+  }).catch(() => undefined);
+}
+
 // This is intentionally much smaller than the complete callback budget. It
 // permits a headless callback to leave a privacy-safe breadcrumb when adoption
 // cannot establish an exact session, without allowing a stalled diagnostic
@@ -734,6 +813,7 @@ export async function sendLocationToServer(
   location: LocationSample,
   capturedBearerToken?: string,
   taskFence?: TaskCallbackDeadlineFence,
+  callbackAt = Date.now(),
 ): Promise<void> {
   const isActive = () => taskStillActive(taskFence);
   const callbackGeneration = trackingLifecycle.captureGeneration();
@@ -748,10 +828,11 @@ export async function sendLocationToServer(
   if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
   const initialOwner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, callbackGeneration, isActive));
   if (initialOwner.kind !== "VALUE") {
-    if (!isActive()) publishCallbackDeadline(state);
+    if (!isActive()) publishCallbackDeadline(state, callbackAt);
     return;
   }
   if (!initialOwner.value) return;
+  recordCallbackStage(state, "QUEUE", callbackAt, null, canPublishCurrentCallback);
 
   const queuedUpload = uploadQueue.enqueue(key, location, async (queuedLocation) => {
     if (!isActive()) return;
@@ -814,7 +895,11 @@ export async function sendLocationToServer(
         if (debugAttemptId === null) throw new Error("LOCATION_OWNER_STALE");
         emitDebug({
           lat: queuedLocation.lat, lng: queuedLocation.lng, speed: queuedLocation.speed, heading: queuedLocation.heading, accuracy: queuedLocation.accuracy,
-          lastAttemptAt: requestStartedAt, serverStatus: "uploading", serverError: null, source: "foreground-service-task",
+          lastAttemptAt: requestStartedAt, attemptCount: debugState.attemptCount + 1,
+          lastCallbackStage: "HTTP_REQUEST", lastCallbackStageAt: requestStartedAt,
+          lastCallbackStageElapsedMs: Math.max(0, requestStartedAt - callbackAt),
+          lastAttemptStage: "HTTP_REQUEST", lastAttemptStageAt: requestStartedAt, lastAttemptStageElapsedMs: 0,
+          serverStatus: "uploading", serverError: null, source: "foreground-service-task",
         });
         const timeout = createRequestTimeout(Math.min(requestBudgetMs, taskFence ? taskFence.remainingMs() : requestBudgetMs));
         try {
@@ -837,6 +922,7 @@ export async function sendLocationToServer(
           // may invalidate authority immediately afterwards, but this exact
           // session still records one attempt without affecting the successor.
           recordStartedAttempt(requestStartedAt, () => true);
+          recordCallbackStage(state, "HTTP_REQUEST", callbackAt, requestStartedAt, canPublishCurrentCallback);
           return await pendingFetch;
         } finally {
           timeout.dispose();
@@ -872,11 +958,16 @@ export async function sendLocationToServer(
     }
 
     const response = guarded.response;
+    const responseHeadersAt = Date.now();
+    recordCallbackStage(state, "HTTP_HEADERS", callbackAt, requestStartedAt, canPublishCurrentCallback);
     // The HTTP status alone is sufficient for these terminal outcomes. This
     // authority decision must not wait for the best-effort attempt counter;
     // otherwise a stalled setItem would let a later TaskManager callback upload
     // the same terminal session again.
     if ([401, 403, 404, 409].includes(response.status)) {
+      if (canPublishCurrentCallback()) {
+        emitDebug({ lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt });
+      }
       deactivateAfterTerminalResponse(state);
       return;
     }
@@ -889,19 +980,24 @@ export async function sendLocationToServer(
     if (parsedResult.kind !== "VALUE" || !isActive()) return;
     const ownerAfterBody = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, callbackGeneration, isActive));
     if (ownerAfterBody.kind !== "VALUE" || !ownerAfterBody.value || !isActive()) return;
-    const respondedAt = Date.now();
+    const responseBodyAt = Date.now();
     const parsed = parsedResult.value;
     if (parsed.kind === "TIMEOUT") {
       const canPublishResult = debugAttemptId === null
         ? canPublishCurrentCallback()
         : finishDebugUpload(state, callbackGeneration, debugAttemptId);
       const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
-        lastResponseAt: respondedAt, lastErrorCode: "RESPONSE_BODY_TIMEOUT", lastErrorAt: respondedAt,
+        lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
+        lastErrorCode: "RESPONSE_BODY_TIMEOUT", lastErrorAt: responseBodyAt,
       }, isActive));
       if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.", lastResponseAt: respondedAt });
+      if (canPublishResult && canPublishCurrentCallback()) emitDebug({
+        serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.",
+        lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
+      });
       return;
     }
+    recordCallbackStage(state, "RESPONSE_BODY", callbackAt, requestStartedAt, canPublishCurrentCallback);
     const payload = (parsed.kind === "JSON" ? parsed.value : null) as LocationUpdateResponseBody | null;
     const disposition = classifyLocationUpdateResponse(response.status, payload);
     if (disposition === "accepted") {
@@ -910,16 +1006,55 @@ export async function sendLocationToServer(
         : finishDebugUpload(state, callbackGeneration, debugAttemptId);
       lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
       const recordedAt = serverRecordedAt(payload?.updatedAt);
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
-        ...current,
-        lastResponseAt: respondedAt,
-        lastStoredAt: recordedAt,
-        lastErrorCode: null,
-        lastErrorAt: null,
-        storedCount: current.storedCount + 1,
-      }), isActive));
-      if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "stored", serverError: null, lastResponseAt: respondedAt, lastStoredAt: recordedAt });
+      // A Response can only arrive after request() captured the start timestamp.
+      // The fallback is defensive for a nonstandard mock and is never a token or
+      // coordinate-derived value.
+      const acceptedAttemptStartedAt = requestStartedAt ?? responseHeadersAt;
+      if (canPublishResult && canPublishCurrentCallback()) {
+        emitDebug({
+          serverStatus: "stored", serverError: null,
+          lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt,
+          lastAcceptedAt: responseBodyAt, lastStoredAt: recordedAt, storedCount: debugState.storedCount + 1,
+          lastCallbackStage: "SERVER_ACCEPTED", lastCallbackStageAt: responseBodyAt,
+          lastCallbackStageElapsedMs: Math.max(0, responseBodyAt - callbackAt),
+          lastAttemptStage: "SERVER_ACCEPTED", lastAttemptStageAt: responseBodyAt,
+          lastAttemptStageElapsedMs: Math.max(0, responseBodyAt - acceptedAttemptStartedAt),
+        });
+      }
+      // Confirmed server acceptance must not wait for or be relabelled by the
+      // best-effort session diagnostics queue. The direct immutable event is
+      // later folded into that journal only while this exact callback still owns
+      // the visible session; a late A event remains isolated in A's scope.
+      void runtimeDiagnostics.recordAcceptedOutcome(state, {
+        callbackAt,
+        attemptStartedAt: acceptedAttemptStartedAt,
+        responseHeadersAt,
+        responseBodyAt,
+        acceptedAt: responseBodyAt,
+        storedAt: recordedAt,
+      }, responseBodyAt).then((outcome) => {
+        if (!outcome) return;
+        void runtimeDiagnostics.update(state, (current) => ({
+          ...current,
+          acceptedOutcomeIds: [...current.acceptedOutcomeIds, outcome.eventId].slice(-64),
+          lastResponseAt: responseBodyAt,
+          lastResponseHeadersAt: responseHeadersAt,
+          lastResponseBodyAt: responseBodyAt,
+          lastAcceptedAt: responseBodyAt,
+          lastStoredAt: recordedAt,
+          lastErrorCode: null,
+          lastErrorAt: null,
+          storedCount: current.storedCount + 1,
+          lastCallbackStage: "SERVER_ACCEPTED",
+          lastCallbackStageAt: responseBodyAt,
+          lastCallbackStageElapsedMs: Math.max(0, responseBodyAt - callbackAt),
+          lastAttemptStage: "SERVER_ACCEPTED",
+          lastAttemptStageAt: responseBodyAt,
+          lastAttemptStageElapsedMs: Math.max(0, responseBodyAt - acceptedAttemptStartedAt),
+        }), canPublishCurrentCallback).then((diagnostics) => {
+          if (diagnostics) emitPersistedDiagnostics(diagnostics, canPublishCurrentCallback);
+        }).catch(() => undefined);
+      }).catch(() => undefined);
       return;
     }
     if (disposition === "ignored") {
@@ -929,13 +1064,15 @@ export async function sendLocationToServer(
       lastUploadMeasurement = { key, measuredAt: queuedLocation.measuredAt };
       const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(state, (current) => ({
         ...current,
-        lastResponseAt: respondedAt,
+        lastResponseAt: responseBodyAt,
+        lastResponseHeadersAt: responseHeadersAt,
+        lastResponseBodyAt: responseBodyAt,
         lastErrorCode: "IGNORED_OLDER_OR_DUPLICATE",
-        lastErrorAt: respondedAt,
+        lastErrorAt: responseBodyAt,
         ignoredCount: current.ignoredCount + 1,
       }), isActive));
       if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: respondedAt });
+      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
       return;
     }
     if (disposition === "terminal") {
@@ -943,7 +1080,9 @@ export async function sendLocationToServer(
         emitDebug({
           serverStatus: "error",
           serverError: formatLocationRequestFailure(response.status, payload?.error),
-          lastResponseAt: respondedAt,
+          lastResponseAt: responseBodyAt,
+          lastResponseHeadersAt: responseHeadersAt,
+          lastResponseBodyAt: responseBodyAt,
         });
       }
       return;
@@ -952,16 +1091,18 @@ export async function sendLocationToServer(
       ? canPublishCurrentCallback()
       : finishDebugUpload(state, callbackGeneration, debugAttemptId);
     const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
-      lastResponseAt: respondedAt,
+      lastResponseAt: responseBodyAt,
+      lastResponseHeadersAt: responseHeadersAt,
+      lastResponseBodyAt: responseBodyAt,
       lastErrorCode: parsed.kind === "INVALID" ? "INVALID_RESPONSE_BODY" : "SERVER_RETRYABLE",
-      lastErrorAt: respondedAt,
+      lastErrorAt: responseBodyAt,
     }, isActive));
     if (diagnostics.kind === "VALUE") emitPersistedDiagnostics(diagnostics.value, () => canPublishResult && canPublishCurrentCallback());
-    if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
+    if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
   });
 
   const queuedResult = await withinTaskDeadline(taskFence, () => queuedUpload);
-  if (queuedResult.kind !== "VALUE" || !isActive()) publishCallbackDeadline(state);
+  if (queuedResult.kind !== "VALUE" || !isActive()) publishCallbackDeadline(state, callbackAt);
 }
 
 export async function notifySessionStop(
@@ -1104,6 +1245,34 @@ export async function getLatestUnboundLocationTaskEvent(): Promise<UnboundLocati
   return runtimeDiagnostics.readUnboundTaskEvent();
 }
 
+/**
+ * UI lifecycle observation only. It never reads a location, starts HTTP, or
+ * revives a stored session. The exact owner/generation guard keeps a late A
+ * AppState listener from writing into B's diagnostic scope.
+ */
+export function recordLocationTrackingAppState(nextState: string): void {
+  const state = trackingLifecycle.currentIntent();
+  if (!state) return;
+  const generation = trackingLifecycle.captureGeneration();
+  const marker: LocationAppStateMarker = nextState === "active"
+    ? "active"
+    : nextState === "background"
+      ? "background"
+      : nextState === "inactive"
+        ? "inactive"
+        : "unknown";
+  const observedAt = Date.now();
+  const canPublish = () => isCurrentDebugOwner(state, generation);
+  if (!canPublish()) return;
+  emitDebug({ lastAppState: marker, lastAppStateAt: observedAt });
+  void runtimeDiagnostics.patch(state, {
+    lastAppState: marker,
+    lastAppStateAt: observedAt,
+  }, canPublish).then((diagnostics) => {
+    if (diagnostics) emitPersistedDiagnostics(diagnostics, canPublish);
+  }).catch(() => undefined);
+}
+
 if (Platform.OS !== "web") {
   Notifications.addNotificationResponseReceivedListener((response) => {
     void handleTrackingNotificationResponse(response);
@@ -1179,7 +1348,7 @@ export function registerLocationTrackingTask(): boolean {
           () => taskFence.isActive(),
         ));
         if (ensured.kind !== "VALUE" || !taskFence.isActive()) {
-          publishCallbackDeadline(adopted.state);
+          publishCallbackDeadline(adopted.state, callbackAt);
           return;
         }
         const callbackDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(adopted.state, (current) => ({
@@ -1190,10 +1359,11 @@ export function registerLocationTrackingTask(): boolean {
           lastNativeCheckAt: callbackAt,
         }), () => taskFence.isActive()));
         if (callbackDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
-          publishCallbackDeadline(adopted.state);
+          publishCallbackDeadline(adopted.state, callbackAt);
           return;
         }
         emitPersistedDiagnostics(callbackDiagnostics.value);
+        recordCallbackStage(adopted.state, "ADOPTED", callbackAt, null, () => taskFence.isActive() && sameTrackingLifecycleState(trackingLifecycle.currentIntent(), adopted.state));
         const lat = Number(latest.coords?.latitude);
         const lng = Number(latest.coords?.longitude);
         if (!latest.coords || !Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -1202,7 +1372,7 @@ export function registerLocationTrackingTask(): boolean {
             lastErrorAt: Date.now(),
           }, () => taskFence.isActive()));
           if (coordinateDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
-            publishCallbackDeadline(adopted.state);
+            publishCallbackDeadline(adopted.state, callbackAt);
             return;
           }
           emitPersistedDiagnostics(coordinateDiagnostics.value);
@@ -1218,7 +1388,7 @@ export function registerLocationTrackingTask(): boolean {
           heading: latest.coords.heading ?? null,
           accuracy: latest.coords.accuracy ?? null,
           measuredAt: Number(latest.timestamp),
-        }, adopted.bearerToken, taskFence);
+        }, adopted.bearerToken, taskFence, callbackAt);
       });
     }
     return true;

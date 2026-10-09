@@ -12,6 +12,7 @@ import {
   getLatestUnboundLocationTaskEvent,
   createLocationStopAuthSnapshot,
   getPersistedTrackingState,
+  recordLocationTrackingAppState,
   restoreLocationTrackingForUser,
   startLocationTracking,
   stopExactStoredTrackingAndNotify,
@@ -263,6 +264,9 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   useEffect(() => {
     if (Platform.OS === "web") return;
     const subscription = AppState.addEventListener("change", (nextState) => {
+      // This is a timestamp-only diagnostic event. It does not upload a
+      // coordinate on return or claim that Android delivered a background task.
+      recordLocationTrackingAppState(nextState);
       if (nextState !== "active" || isLoading || user?.appRole !== "technician" || !user.userId) return;
       refreshUnboundTaskEvent();
       let cancelled = false;

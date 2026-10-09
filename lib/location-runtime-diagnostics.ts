@@ -7,6 +7,15 @@ import type { TrackingLifecycleState } from "@/lib/location-tracking-lifecycle";
  * runtime is recreated.
  */
 export type NativeRegistrationState = "unknown" | "registered" | "not_registered" | "restart_failed";
+export type LocationCallbackStage =
+  | "ADOPTED"
+  | "QUEUE"
+  | "HTTP_REQUEST"
+  | "HTTP_HEADERS"
+  | "RESPONSE_BODY"
+  | "SERVER_ACCEPTED"
+  | "CALLBACK_DEADLINE";
+export type LocationAppStateMarker = "active" | "background" | "inactive" | "unknown";
 
 export interface LocationRuntimeDiagnosticScope {
   requestId: number;
@@ -26,6 +35,23 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
   lastCallbackAt: number | null;
   lastMeasuredAt: number | null;
   lastUploadStartedAt: number | null;
+  /** Header receipt, completed body, accepted contract, and deadline are distinct evidence. */
+  lastResponseHeadersAt: number | null;
+  lastResponseBodyAt: number | null;
+  lastAcceptedAt: number | null;
+  lastCallbackDeadlineAt: number | null;
+  /** Latest safe phase marker; names are fixed, non-sensitive implementation stages. */
+  lastCallbackStage: LocationCallbackStage | null;
+  lastCallbackStageAt: number | null;
+  lastCallbackStageElapsedMs: number | null;
+  lastAttemptStage: LocationCallbackStage | null;
+  lastAttemptStageAt: number | null;
+  lastAttemptStageElapsedMs: number | null;
+  /** UI lifecycle evidence only; it never triggers an upload. */
+  lastAppState: LocationAppStateMarker | null;
+  lastAppStateAt: number | null;
+  /** Bounded ids of accepted outcome events already folded into storedCount. */
+  acceptedOutcomeIds: string[];
   lastResponseAt: number | null;
   lastStoredAt: number | null;
   lastErrorCode: string | null;
@@ -48,6 +74,23 @@ export interface UnboundLocationTaskEvent {
   eventId: string;
   observedAt: number;
   code: string;
+}
+
+/**
+ * A server-accepted outcome bypasses the best-effort diagnostic read/write
+ * chain. The response has already been verified; a stuck local setItem must not
+ * turn it into a deadline failure or erase it after a fresh JS runtime starts.
+ */
+export interface AcceptedLocationOutcomeEvent extends LocationRuntimeDiagnosticScope {
+  schemaVersion: 1;
+  eventId: string;
+  observedAt: number;
+  callbackAt: number;
+  attemptStartedAt: number;
+  responseHeadersAt: number;
+  responseBodyAt: number;
+  acceptedAt: number;
+  storedAt: number;
 }
 
 export interface KeyValueStorage {
@@ -106,6 +149,19 @@ export function createLocationRuntimeDiagnostics(
     lastCallbackAt: null,
     lastMeasuredAt: null,
     lastUploadStartedAt: null,
+    lastResponseHeadersAt: null,
+    lastResponseBodyAt: null,
+    lastAcceptedAt: null,
+    lastCallbackDeadlineAt: null,
+    lastCallbackStage: null,
+    lastCallbackStageAt: null,
+    lastCallbackStageElapsedMs: null,
+    lastAttemptStage: null,
+    lastAttemptStageAt: null,
+    lastAttemptStageElapsedMs: null,
+    lastAppState: null,
+    lastAppStateAt: null,
+    acceptedOutcomeIds: [],
     lastResponseAt: null,
     lastStoredAt: null,
     lastErrorCode: null,
@@ -141,6 +197,28 @@ function normalizeTimestamp(value: unknown): number | null {
   return value === null || value === undefined ? null : isFiniteTimestamp(value) ? value : null;
 }
 
+function normalizeDuration(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 60_000 ? Math.round(value) : null;
+}
+
+function normalizeCallbackStage(value: unknown): LocationCallbackStage | null {
+  return ["ADOPTED", "QUEUE", "HTTP_REQUEST", "HTTP_HEADERS", "RESPONSE_BODY", "SERVER_ACCEPTED", "CALLBACK_DEADLINE"].includes(String(value))
+    ? value as LocationCallbackStage
+    : null;
+}
+
+function normalizeAppStateMarker(value: unknown): LocationAppStateMarker | null {
+  return ["active", "background", "inactive", "unknown"].includes(String(value))
+    ? value as LocationAppStateMarker
+    : null;
+}
+
+function normalizeOutcomeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value.filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= 80);
+  return [...new Set(ids)].slice(-64);
+}
+
 function normalizeDiagnostics(value: LocationRuntimeDiagnostics): LocationRuntimeDiagnostics {
   return {
     ...value,
@@ -149,6 +227,19 @@ function normalizeDiagnostics(value: LocationRuntimeDiagnostics): LocationRuntim
     lastCallbackAt: normalizeTimestamp(value.lastCallbackAt),
     lastMeasuredAt: normalizeTimestamp(value.lastMeasuredAt),
     lastUploadStartedAt: normalizeTimestamp(value.lastUploadStartedAt),
+    lastResponseHeadersAt: normalizeTimestamp(value.lastResponseHeadersAt),
+    lastResponseBodyAt: normalizeTimestamp(value.lastResponseBodyAt),
+    lastAcceptedAt: normalizeTimestamp(value.lastAcceptedAt),
+    lastCallbackDeadlineAt: normalizeTimestamp(value.lastCallbackDeadlineAt),
+    lastCallbackStage: normalizeCallbackStage(value.lastCallbackStage),
+    lastCallbackStageAt: normalizeTimestamp(value.lastCallbackStageAt),
+    lastCallbackStageElapsedMs: normalizeDuration(value.lastCallbackStageElapsedMs),
+    lastAttemptStage: normalizeCallbackStage(value.lastAttemptStage),
+    lastAttemptStageAt: normalizeTimestamp(value.lastAttemptStageAt),
+    lastAttemptStageElapsedMs: normalizeDuration(value.lastAttemptStageElapsedMs),
+    lastAppState: normalizeAppStateMarker(value.lastAppState),
+    lastAppStateAt: normalizeTimestamp(value.lastAppStateAt),
+    acceptedOutcomeIds: normalizeOutcomeIds(value.acceptedOutcomeIds),
     lastResponseAt: normalizeTimestamp(value.lastResponseAt),
     lastStoredAt: normalizeTimestamp(value.lastStoredAt),
     lastErrorAt: normalizeTimestamp(value.lastErrorAt),
@@ -170,6 +261,23 @@ function isValidUnboundTaskEvent(value: unknown): value is UnboundLocationTaskEv
     && candidate.code.length <= 96;
 }
 
+function isValidAcceptedOutcomeEvent(value: unknown): value is AcceptedLocationOutcomeEvent {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<AcceptedLocationOutcomeEvent>;
+  return candidate.schemaVersion === 1
+    && typeof candidate.eventId === "string" && candidate.eventId.length > 0 && candidate.eventId.length <= 80
+    && Number.isSafeInteger(candidate.requestId) && (candidate.requestId as number) > 0
+    && Number.isSafeInteger(candidate.technicianUserId) && (candidate.technicianUserId as number) > 0
+    && isFiniteTimestamp(candidate.startedAt)
+    && isFiniteTimestamp(candidate.observedAt)
+    && isFiniteTimestamp(candidate.callbackAt)
+    && isFiniteTimestamp(candidate.attemptStartedAt)
+    && isFiniteTimestamp(candidate.responseHeadersAt)
+    && isFiniteTimestamp(candidate.responseBodyAt)
+    && isFiniteTimestamp(candidate.acceptedAt)
+    && isFiniteTimestamp(candidate.storedAt);
+}
+
 function active(guard?: DiagnosticsOperationGuard): boolean {
   return !guard || guard();
 }
@@ -180,6 +288,14 @@ function operationSequence(value: string): number {
 }
 
 function isNewerUnboundTaskEvent(left: UnboundLocationTaskEvent, right: UnboundLocationTaskEvent): boolean {
+  if (left.observedAt !== right.observedAt) return left.observedAt > right.observedAt;
+  const leftSequence = operationSequence(left.eventId);
+  const rightSequence = operationSequence(right.eventId);
+  if (leftSequence !== rightSequence) return leftSequence > rightSequence;
+  return left.eventId > right.eventId;
+}
+
+function isNewerAcceptedOutcome(left: AcceptedLocationOutcomeEvent, right: AcceptedLocationOutcomeEvent): boolean {
   if (left.observedAt !== right.observedAt) return left.observedAt > right.observedAt;
   const leftSequence = operationSequence(left.eventId);
   const rightSequence = operationSequence(right.eventId);
@@ -233,6 +349,11 @@ export class LocationRuntimeDiagnosticsStore {
 
   private legacyUnboundTaskEventKey(): string {
     return this.keyPrefix.replace(/_v2$/, "_task_event_v1");
+  }
+
+  private acceptedOutcomePrefix(state: TrackingLifecycleState): string {
+    const scope = diagnosticScopeOf(state);
+    return `${this.keyPrefix.replace(/_v2$/, "_accepted_outcome_v1")}:${scope.requestId}:${scope.technicianUserId}:${scope.startedAt}:`;
   }
 
   private nextOperationId(now: number): string {
@@ -316,6 +437,74 @@ export class LocationRuntimeDiagnosticsStore {
     return newest ? { kind: "VALUE", value: newest } : this.legacyRecord(state, guard);
   }
 
+  private async acceptedOutcomesForScope(
+    state: TrackingLifecycleState,
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<AcceptedLocationOutcomeEvent[]> {
+    if (!active(guard) || !this.storage.getAllKeys) return [];
+    try {
+      const prefix = this.acceptedOutcomePrefix(state);
+      const keys = (await this.storage.getAllKeys()).filter((key) => key.startsWith(prefix));
+      if (!active(guard)) return [];
+      const pairs = this.storage.multiGet
+        ? await this.storage.multiGet(keys)
+        : await Promise.all(keys.map(async (key) => [key, await this.storage.getItem(key)] as [string, string | null]));
+      if (!active(guard)) return [];
+      const outcomes: AcceptedLocationOutcomeEvent[] = [];
+      for (const [, raw] of pairs) {
+        if (!raw) continue;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (isValidAcceptedOutcomeEvent(parsed) && sameDiagnosticScope(parsed, diagnosticScopeOf(state))) outcomes.push(parsed);
+        } catch {
+          // Outcome evidence is best effort and must not block diagnostics restoration.
+        }
+      }
+      return outcomes;
+    } catch {
+      return [];
+    }
+  }
+
+  private mergeAcceptedOutcomes(
+    current: LocationRuntimeDiagnostics,
+    outcomes: readonly AcceptedLocationOutcomeEvent[],
+  ): LocationRuntimeDiagnostics {
+    let merged = normalizeDiagnostics(current);
+    for (const outcome of [...outcomes].sort((left, right) => isNewerAcceptedOutcome(left, right) ? 1 : -1)) {
+      if (merged.acceptedOutcomeIds.includes(outcome.eventId)) continue;
+      const belongsToCurrentCallback = merged.lastCallbackAt === outcome.callbackAt;
+      const shouldAdvanceVisibleStage = !merged.lastCallbackAt || merged.lastCallbackAt <= outcome.callbackAt;
+      const acceptedOutcomeIds = [...merged.acceptedOutcomeIds, outcome.eventId].slice(-64);
+      merged = normalizeDiagnostics({
+        ...merged,
+        acceptedOutcomeIds,
+        lastResponseHeadersAt: Math.max(merged.lastResponseHeadersAt ?? 0, outcome.responseHeadersAt) || null,
+        lastResponseBodyAt: Math.max(merged.lastResponseBodyAt ?? 0, outcome.responseBodyAt) || null,
+        lastAcceptedAt: Math.max(merged.lastAcceptedAt ?? 0, outcome.acceptedAt) || null,
+        // lastResponseAt remains the completed-body timestamp. A callback deadline
+        // never manufactures this field when no HTTP response was received.
+        lastResponseAt: Math.max(merged.lastResponseAt ?? 0, outcome.responseBodyAt) || null,
+        lastStoredAt: Math.max(merged.lastStoredAt ?? 0, outcome.storedAt) || null,
+        storedCount: merged.storedCount + 1,
+        ...(belongsToCurrentCallback && merged.lastErrorCode === "CALLBACK_DEADLINE_EXCEEDED"
+          ? { lastErrorCode: null, lastErrorAt: null, lastCallbackDeadlineAt: merged.lastCallbackDeadlineAt }
+          : {}),
+        ...(shouldAdvanceVisibleStage
+          ? {
+              lastCallbackStage: "SERVER_ACCEPTED" as const,
+              lastCallbackStageAt: outcome.acceptedAt,
+              lastCallbackStageElapsedMs: Math.max(0, outcome.acceptedAt - outcome.callbackAt),
+              lastAttemptStage: "SERVER_ACCEPTED" as const,
+              lastAttemptStageAt: outcome.acceptedAt,
+              lastAttemptStageElapsedMs: Math.max(0, outcome.acceptedAt - outcome.attemptStartedAt),
+            }
+          : {}),
+      });
+    }
+    return merged;
+  }
+
   private async writeUnsafe(
     state: TrackingLifecycleState,
     value: LocationRuntimeDiagnostics,
@@ -352,7 +541,37 @@ export class LocationRuntimeDiagnosticsStore {
     const result = await this.readUnsafe(state, guard);
     if (result.kind === "FAILED") return null;
     const { value: current } = result;
-    return active(guard) && sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
+    if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
+    const outcomes = await this.acceptedOutcomesForScope(state, guard);
+    return active(guard) ? this.mergeAcceptedOutcomes(current, outcomes) : null;
+  }
+
+  /**
+   * Writes confirmed server acceptance directly to its own immutable key. It is
+   * intentionally not serialized behind diagnostic reads/writes, so an accepted
+   * response cannot be relabelled as CALLBACK_DEADLINE_EXCEEDED by local I/O.
+   */
+  public async recordAcceptedOutcome(
+    state: TrackingLifecycleState,
+    values: Omit<AcceptedLocationOutcomeEvent, "schemaVersion" | "eventId" | "requestId" | "technicianUserId" | "startedAt" | "observedAt">,
+    observedAt = Date.now(),
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<AcceptedLocationOutcomeEvent | null> {
+    const event: AcceptedLocationOutcomeEvent = {
+      schemaVersion: 1,
+      ...diagnosticScopeOf(state),
+      eventId: this.nextOperationId(observedAt),
+      observedAt,
+      ...values,
+    };
+    if (!isValidAcceptedOutcomeEvent(event) || !active(guard)) return null;
+    try {
+      await this.storage.setItem(`${this.acceptedOutcomePrefix(state)}${event.eventId}`, JSON.stringify(event));
+      void this.pruneAcceptedOutcomes(state);
+      return active(guard) ? event : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -441,6 +660,29 @@ export class LocationRuntimeDiagnosticsStore {
       await Promise.all(stale.map(({ key }) => this.storage.removeItem!(key).catch(() => undefined)));
     } catch {
       // Retention cleanup is deliberately best effort.
+    }
+  }
+
+  /** Bounds accepted outcome retention without making a callback wait for cleanup. */
+  private async pruneAcceptedOutcomes(state: TrackingLifecycleState): Promise<void> {
+    if (!this.storage.getAllKeys || !this.storage.multiGet || !this.storage.removeItem) return;
+    try {
+      const prefix = this.acceptedOutcomePrefix(state);
+      const keys = (await this.storage.getAllKeys()).filter((key) => key.startsWith(prefix));
+      if (keys.length <= 24) return;
+      const pairs = await this.storage.multiGet(keys);
+      const events = pairs.flatMap(([key, raw]) => {
+        try {
+          const parsed: unknown = raw ? JSON.parse(raw) : null;
+          return isValidAcceptedOutcomeEvent(parsed) ? [{ key, event: parsed }] : [];
+        } catch {
+          return [];
+        }
+      });
+      const stale = events.sort((left, right) => isNewerAcceptedOutcome(left.event, right.event) ? -1 : 1).slice(24);
+      await Promise.all(stale.map(({ key }) => this.storage.removeItem!(key).catch(() => undefined)));
+    } catch {
+      // Outcome retention is deliberately best effort.
     }
   }
 

@@ -52,8 +52,23 @@
 
 공식 근거: [Android Foreground services](https://developer.android.com/develop/background-work/services/fgs), [Android special permissions](https://developer.android.com/training/permissions/requesting-special), [Android PiP](https://developer.android.com/develop/ui/views/picture-in-picture), [Expo Location](https://docs.expo.dev/versions/latest/sdk/location/), [Expo TaskManager](https://docs.expo.dev/versions/latest/sdk/task-manager/), [Expo native modules](https://docs.expo.dev/modules/config-plugin-and-native-module-tutorial/).
 
+## 2026-10-09 18:52 제보 후 확인된 진단 결함과 후보 보완
+
+> **확정 범위:** 아래는 `9bd86d4`(APK55 source) 위 source-level TaskManager 통합 재현이다. 운영 HTTP·고객/기사 위치·출발/도착·DB에는 접근하지 않았다. 사진만으로 설치 build 또는 실제 중단 원인을 확정하지 않는다.
+
+1. **수정 전 확인된 결함:** HTTP `200` + body `success:true` + `accepted:true`가 이미 도착한 뒤 session diagnostics `setItem`만 지연시키면, callback의 10초 fence가 반환하면서 화면을 `CALLBACK_DEADLINE_EXCEEDED`/`storedCount:0`/`lastStoredAt:null`로 남겼다. 기존 `publishCallbackDeadline()`은 실제 응답이 없는 경우에도 `lastResponseAt=now`를 기록해 deadline 시각을 응답 시각처럼 보이게 했다.
+2. **후보 최소 수정:**
+   - verified `accepted`는 일반 journal read/write chain과 분리된 scope-bound immutable `accepted outcome` event에 비차단 기록하고, 화면에는 `lastAcceptedAt`/실제 body 완료 시각/서버 `updatedAt`/신규 저장 count를 **즉시** 반영한다. outcome storage가 멎어도 callback이 기다리지 않는다.
+   - 기존 journal의 늦은 pre-response record는 같은 owner의 더 최근 accepted 화면을 idle/error로 되돌리지 못한다. 복귀 `read()`는 immutable accepted outcome을 session journal에 병합한다. A outcome은 A scope에만 남아 B에 반영되지 않는다.
+   - `lastResponseHeadersAt`, `lastResponseBodyAt`, `lastAcceptedAt`, `lastCallbackDeadlineAt`을 분리했다. deadline은 `lastResponseAt`을 만들지 않는다.
+   - callback/attempt의 고정 비식별 stage(ADOPTED, QUEUE, HTTP_REQUEST, HTTP_HEADERS, RESPONSE_BODY, SERVER_ACCEPTED, CALLBACK_DEADLINE), stage 시각·경과와 AppState 전환 시각을 기록한다. token, 고객/기사 식별정보, 정확한 좌표, 인증값은 새 journal/event/test fixture에 넣지 않는다. AppState 기록은 upload를 시작하거나 복귀 한 번 전송하지 않는다.
+3. **실행 재현:**
+   - `node --import …/tsx/dist/loader.mjs tests/location-taskmanager-terminal.integration.test.ts` → `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`. accepted 뒤 journal write hold 중 callback이 반환하고 stored 화면/카운터를 유지, 요청 전 stage write hold가 fetch를 지연시키지 않음, headers-only/body timeout은 body 완료 시각을 만들지 않음, network reject·A/B isolation을 확인했다.
+   - `npx vitest run tests/location-runtime-diagnostics.test.ts tests/location-callback-isolation.test.ts --reporter=dot` → 20 tests PASS. accepted outcome이 same-callback deadline을 덮지 않고 B scope로 넘어가지 않음을 확인했다.
+   - `node --import …/tsx/dist/loader.mjs tests/location-tracking-context-overlay.integration.test.ts` → `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`. background AppState marker와 active의 unbound 재조회가 upload API를 호출하지 않음을 확인했다.
+
 ## 아직 미확정인 것
 
 - Android 실기기에서 다른 앱 전환·일반 화면 잠금 **중**, 앱을 다시 열기 전 callback·HTTP response·서버 accepted 저장 시각이 계속 증가하는지.
 - 일반 앱 전환/일반 잠금과 Android force-stop, OEM battery restriction, 권한 철회는 서로 다른 조건이다. source harness와 Kotlin compile로 하나를 다른 하나로 대체할 수 없다.
-- APK54는 변경·재빌드·교체하지 않았다. source review 전 새 APK·main merge·Production 배포·운영 위치 호출을 하지 않는다.
+- APK54와 APK55 내부 검증 APK 원본은 보존한다. 이 새 source 후보는 코드 재검수 전 APK 재빌드·재서명·교체를 하지 않으며, main merge·Production 배포·운영 위치 호출도 하지 않는다.
