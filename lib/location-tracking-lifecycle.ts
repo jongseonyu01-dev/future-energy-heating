@@ -16,6 +16,22 @@ export interface TrackingLifecycleState {
 
 export type TrackingStopReason = "도착완료" | "업무취소";
 
+const TERMINAL_CLEANUP_STEP_BUDGET_MS = 1_500;
+
+async function settleWithin<T>(operation: () => Promise<T>, budgetMs = TERMINAL_CLEANUP_STEP_BUDGET_MS): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), budgetMs); }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
 export function sameTrackingLifecycleState(
   left: TrackingLifecycleState | null | undefined,
   right: TrackingLifecycleState | null | undefined,
@@ -45,11 +61,12 @@ export interface TrackingLifecycleAdapter<T extends TrackingLifecycleState> {
   save: (state: T) => Promise<void>;
   clearIfSame: (state: T) => Promise<void>;
   showControlNotification: (state: T) => Promise<void>;
-  clearControlNotification: (state: T | null) => Promise<void>;
+  clearControlNotification: (state: T | null, isStillAuthorized?: () => boolean) => Promise<void>;
   /** Registration state only; it is not proof of a future callback or server persistence. */
   isNativeCollectionRegistered?: () => Promise<boolean>;
   startNativeCollection: () => Promise<void>;
-  stopNativeCollection: () => Promise<void>;
+  /** A terminal cleanup may pass a guard so a late A native read cannot stop B. */
+  stopNativeCollection: (isStillAuthorized?: () => boolean) => Promise<void>;
   onStateChanged: (state: T | null) => void;
 }
 
@@ -105,6 +122,38 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
       await this.adapter.stopNativeCollection();
       this.adapter.onStateChanged(null);
       return state;
+    });
+  }
+
+  /**
+   * Terminal server authority is invalidated before any diagnostic, storage, or
+   * native cleanup await. From this point `isCurrent(state)` is false, so a
+   * later native callback cannot issue another HTTP update for this session.
+   */
+  public invalidateForTerminalResponse(state: T): boolean {
+    if (!sameTrackingLifecycleState(this.intent, state)) return false;
+    this.generation += 1;
+    this.intent = null;
+    this.adapter.onStateChanged(null);
+    return true;
+  }
+
+  /**
+   * Best-effort physical cleanup for an already-invalidated terminal session.
+   * It is intentionally separate from terminal authority: a hung diagnostic,
+   * storage read, or native stop must not keep a TaskManager callback pending or
+   * revive the ability to upload. The native guard prevents late A cleanup from
+   * stopping a replacement B collection after the bounded wait expires.
+   */
+  public completeInvalidatedTerminalCleanup(state: T): Promise<void> {
+    const terminalGeneration = this.generation;
+    const stillTerminalOwner = () => terminalGeneration === this.generation && this.intent === null;
+    return this.enqueue(async () => {
+      await settleWithin(() => this.adapter.stopNativeCollection(stillTerminalOwner));
+      await Promise.all([
+        settleWithin(() => this.adapter.clearIfSame(state)),
+        settleWithin(() => this.adapter.clearControlNotification(state, stillTerminalOwner)),
+      ]);
     });
   }
 
@@ -269,7 +318,9 @@ export class TrackingLifecycleCoordinator<T extends TrackingLifecycleState> {
 
   /** Applies an explicitly classified terminal server response to its exact owner only. */
   public async stopForTerminalResponse(state: T): Promise<T | null> {
-    return this.stopIfCurrent(state);
+    if (!this.invalidateForTerminalResponse(state)) return null;
+    void this.completeInvalidatedTerminalCleanup(state);
+    return state;
   }
 
   /**

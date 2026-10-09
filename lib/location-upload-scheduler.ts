@@ -64,24 +64,58 @@ export function classifyLocationUpdateResponse(
   return "rejected";
 }
 
+type Completion = {
+  resolve: () => void;
+  reject: (reason: unknown) => void;
+};
+
+type PendingOperation<T> = {
+  scope: string;
+  value: T;
+  execute: (value: T) => Promise<void>;
+  completion: Completion;
+};
+
+function createCompletion(): { promise: Promise<void>; completion: Completion } {
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, completion: { resolve, reject } };
+}
+
 /**
- * A single-consumer queue retaining only the newest pending update. The active
- * operation is never cancelled; caller-level generation fencing prevents a
- * completed old operation from affecting a replacement location session.
+ * A single-consumer queue retaining only the newest pending update.
+ *
+ * `enqueue()` resolves when *that callback's own sample* is either processed or
+ * superseded. It intentionally does not return the shared drain Promise: a
+ * later B callback must never extend an earlier A TaskManager callback beyond
+ * A's own deadline. The active operation is never cancelled; caller-level
+ * generation fencing prevents an old completion from affecting a replacement
+ * location session.
  */
 export class LatestOnlyUploadQueue<T extends { measuredAt: number }> {
-  private pending: { scope: string; value: T; execute: (value: T) => Promise<void> } | null = null;
+  private pending: PendingOperation<T> | null = null;
   private draining: Promise<void> | null = null;
 
   public enqueue(scope: string, value: T, execute: (value: T) => Promise<void>): Promise<void> {
-    // A different location-session/user scope replaces a stale pending callback
-    // regardless of device timestamp. Within the same scope, delayed TaskManager
-    // batches must never overwrite a newer sample already waiting to send.
-    if (!this.pending || this.pending.scope !== scope || value.measuredAt > this.pending.value.measuredAt) {
-      this.pending = { scope, value, execute };
+    const { promise, completion } = createCompletion();
+    const previous = this.pending;
+
+    // A different location-session/user scope replaces stale pending work. For
+    // the same scope, delayed batches may only replace pending work with a newer
+    // measurement. A discarded callback is complete from its own perspective.
+    if (!previous || previous.scope !== scope || value.measuredAt > previous.value.measuredAt) {
+      if (previous) previous.completion.resolve();
+      this.pending = { scope, value, execute, completion };
+    } else {
+      completion.resolve();
     }
+
     if (!this.draining) this.draining = this.drain();
-    return this.draining;
+    return promise;
   }
 
   /** Allows retry code to yield to a fresher queued sample. */
@@ -94,7 +128,14 @@ export class LatestOnlyUploadQueue<T extends { measuredAt: number }> {
       while (this.pending) {
         const current = this.pending;
         this.pending = null;
-        await current.execute(current.value);
+        try {
+          await current.execute(current.value);
+          // Resolve the caller before draining a later pending callback. This is
+          // the callback-local completion boundary used by TaskManager.
+          current.completion.resolve();
+        } catch (error) {
+          current.completion.reject(error);
+        }
       }
     } finally {
       this.draining = null;

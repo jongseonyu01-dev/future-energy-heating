@@ -16,6 +16,9 @@ export interface LocationRuntimeDiagnosticScope {
 
 export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticScope {
   schemaVersion: 1;
+  /** Captured when this immutable diagnostic operation begins, not when I/O finally commits. */
+  updatedAt: number;
+  operationId: string;
   nativeRegistration: NativeRegistrationState;
   lastNativeCheckAt: number | null;
   lastCallbackAt: number | null;
@@ -35,6 +38,9 @@ export interface LocationRuntimeDiagnostics extends LocationRuntimeDiagnosticSco
 export interface KeyValueStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
+  getAllKeys?: () => Promise<readonly string[]>;
+  multiGet?: (keys: readonly string[]) => Promise<readonly [string, string | null][]>;
+  removeItem?: (key: string) => Promise<void>;
 }
 
 export type DiagnosticsOperationGuard = () => boolean;
@@ -57,13 +63,20 @@ export function sameDiagnosticScope(
     && left.startedAt === right.startedAt);
 }
 
+function operationId(now: number, sequence: number): string {
+  return `${now}-${sequence}`;
+}
+
 export function createLocationRuntimeDiagnostics(
   state: TrackingLifecycleState,
   now = Date.now(),
+  id = operationId(now, 0),
 ): LocationRuntimeDiagnostics {
   return {
     schemaVersion: 1,
     ...diagnosticScopeOf(state),
+    updatedAt: now,
+    operationId: id,
     nativeRegistration: "unknown",
     lastNativeCheckAt: null,
     lastCallbackAt: null,
@@ -91,6 +104,8 @@ function isValidDiagnostics(value: unknown): value is LocationRuntimeDiagnostics
     && Number.isSafeInteger(candidate.requestId) && (candidate.requestId as number) > 0
     && Number.isSafeInteger(candidate.technicianUserId) && (candidate.technicianUserId as number) > 0
     && isFiniteTimestamp(candidate.startedAt)
+    && isFiniteTimestamp(candidate.updatedAt)
+    && typeof candidate.operationId === "string" && candidate.operationId.length > 0 && candidate.operationId.length <= 80
     && ["unknown", "registered", "not_registered", "restart_failed"].includes(String(candidate.nativeRegistration))
     && Number.isSafeInteger(candidate.attemptCount) && (candidate.attemptCount as number) >= 0
     && Number.isSafeInteger(candidate.storedCount) && (candidate.storedCount as number) >= 0
@@ -120,19 +135,24 @@ function active(guard?: DiagnosticsOperationGuard): boolean {
   return !guard || guard();
 }
 
+function isNewer(left: LocationRuntimeDiagnostics, right: LocationRuntimeDiagnostics): boolean {
+  return left.updatedAt > right.updatedAt
+    || (left.updatedAt === right.updatedAt && left.operationId > right.operationId);
+}
+
 /**
- * All read-modify-write operations share one serialized queue. A stale session
- * can therefore never overwrite diagnostics that have already been initialized
- * for a replacement customer/technician session. A callback deadline guard is
- * rechecked after each awaited storage boundary, so a late operation may not
- * write or emit state after its TaskManager callback has expired.
+ * Each operation writes an immutable scope-specific record. A setItem already
+ * issued by expired A cannot overwrite B's later accepted diagnostic because it
+ * has a different key; reads select the newest operation-start timestamp. This
+ * is intentionally stronger than replacing a shared write queue after timeout.
  */
 export class LocationRuntimeDiagnosticsStore {
   private writes: Promise<unknown> = Promise.resolve();
+  private sequence = 0;
 
   public constructor(
     private readonly storage: KeyValueStorage,
-    private readonly key = "location_tracking_runtime_diagnostics_v1",
+    private readonly keyPrefix = "location_tracking_runtime_diagnostics_v2",
   ) {}
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -141,41 +161,124 @@ export class LocationRuntimeDiagnosticsStore {
     return next;
   }
 
+  private scopePrefix(state: TrackingLifecycleState): string {
+    const scope = diagnosticScopeOf(state);
+    return `${this.keyPrefix}:${scope.requestId}:${scope.technicianUserId}:${scope.startedAt}:`;
+  }
+
+  private legacyKey(): string {
+    return this.keyPrefix.replace(/_v2$/, "_v1");
+  }
+
+  private nextOperationId(now: number): string {
+    this.sequence += 1;
+    return operationId(now, this.sequence);
+  }
+
   /**
    * A TaskManager deadline may detach a hung best-effort storage promise. The
-   * operation itself received an inactive guard and cannot write after it later
-   * resolves; releasing this chain lets the next native callback record its own
-   * diagnostic and continue to upload instead of inheriting the old stall.
+   * detached operation can only append its own immutable record; it cannot
+   * overwrite a newer callback's selected diagnostics. Releasing this local
+   * chain lets the next callback continue without inheriting the old stall.
    */
   public releaseExpiredWork(): void {
     this.writes = Promise.resolve();
   }
 
-  private async readUnsafe(guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
+  private async recordsForScope(
+    state: TrackingLifecycleState,
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<LocationRuntimeDiagnostics[]> {
+    if (!active(guard)) return [];
+    const prefix = this.scopePrefix(state);
+    try {
+      const keys = this.storage.getAllKeys ? await this.storage.getAllKeys() : [];
+      if (!active(guard)) return [];
+      const matching = keys.filter((key) => key.startsWith(prefix));
+      const pairs = this.storage.multiGet
+        ? await this.storage.multiGet(matching)
+        : await Promise.all(matching.map(async (key) => [key, await this.storage.getItem(key)] as [string, string | null]));
+      if (!active(guard)) return [];
+      const records: LocationRuntimeDiagnostics[] = [];
+      for (const [, raw] of pairs) {
+        if (!raw) continue;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (isValidDiagnostics(parsed) && sameDiagnosticScope(parsed, diagnosticScopeOf(state))) {
+            records.push(normalizeDiagnostics(parsed));
+          }
+        } catch {
+          // A corrupt diagnostic is never allowed to block a location callback.
+        }
+      }
+      return records;
+    } catch {
+      return [];
+    }
+  }
+
+  private async legacyRecord(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
     if (!active(guard)) return null;
     try {
-      const raw = await this.storage.getItem(this.key);
+      const raw = await this.storage.getItem(this.legacyKey());
       if (!active(guard) || !raw) return null;
       const parsed: unknown = JSON.parse(raw);
-      return isValidDiagnostics(parsed) ? normalizeDiagnostics(parsed) : null;
+      if (!parsed || typeof parsed !== "object" || !sameDiagnosticScope(parsed as LocationRuntimeDiagnosticScope, diagnosticScopeOf(state))) return null;
+      const candidate = parsed as Partial<LocationRuntimeDiagnostics>;
+      const updatedAt = normalizeTimestamp(candidate.lastStoredAt)
+        ?? normalizeTimestamp(candidate.lastResponseAt)
+        ?? normalizeTimestamp(candidate.lastUploadStartedAt)
+        ?? normalizeTimestamp(candidate.lastCallbackAt)
+        ?? state.startedAt;
+      const converted = { ...candidate, schemaVersion: 1, updatedAt, operationId: `legacy-${updatedAt}` } as LocationRuntimeDiagnostics;
+      return isValidDiagnostics(converted) ? normalizeDiagnostics(converted) : null;
     } catch {
       return null;
     }
   }
 
-  private async writeUnsafe(value: LocationRuntimeDiagnostics, guard?: DiagnosticsOperationGuard): Promise<boolean> {
+  private async readUnsafe(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
+    const records = await this.recordsForScope(state, guard);
+    if (!active(guard)) return null;
+    let newest: LocationRuntimeDiagnostics | null = null;
+    for (const record of records) {
+      if (!newest || isNewer(record, newest)) newest = record;
+    }
+    return newest ?? await this.legacyRecord(state, guard);
+  }
+
+  private async writeUnsafe(
+    state: TrackingLifecycleState,
+    value: LocationRuntimeDiagnostics,
+    guard?: DiagnosticsOperationGuard,
+  ): Promise<boolean> {
     if (!active(guard)) return false;
     try {
-      await this.storage.setItem(this.key, JSON.stringify(value));
-      return active(guard);
+      await this.storage.setItem(`${this.scopePrefix(state)}${value.operationId}`, JSON.stringify(value));
+      if (!active(guard)) return false;
+      void this.pruneScope(state);
+      return true;
     } catch {
       // Diagnostics are intentionally best effort and must not block collection.
       return false;
     }
   }
 
+  /** Keeps a bounded immutable journal without making callback completion wait for cleanup. */
+  private async pruneScope(state: TrackingLifecycleState): Promise<void> {
+    if (!this.storage.removeItem) return;
+    const records = await this.recordsForScope(state);
+    if (records.length <= 24) return;
+    const stale = [...records]
+      .sort((left, right) => isNewer(left, right) ? -1 : 1)
+      .slice(24);
+    await Promise.all(stale.map((record) => this.storage.removeItem!(
+      `${this.scopePrefix(state)}${record.operationId}`,
+    ).catch(() => undefined)));
+  }
+
   public async read(state: TrackingLifecycleState, guard?: DiagnosticsOperationGuard): Promise<LocationRuntimeDiagnostics | null> {
-    const current = await this.readUnsafe(guard);
+    const current = await this.readUnsafe(state, guard);
     return active(guard) && sameDiagnosticScope(current, diagnosticScopeOf(state)) ? current : null;
   }
 
@@ -185,39 +288,42 @@ export class LocationRuntimeDiagnosticsStore {
     now = Date.now(),
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
+    const id = this.nextOperationId(now);
     return this.enqueue(async () => {
       if (!active(guard)) return null;
-      const next = createLocationRuntimeDiagnostics(state, now);
-      return (await this.writeUnsafe(next, guard)) ? next : null;
+      const next = createLocationRuntimeDiagnostics(state, now, id);
+      return (await this.writeUnsafe(state, next, guard)) ? next : null;
     });
   }
 
-  /** Creates a legacy/missing record only when no other session diagnostic exists. */
+  /** Creates a legacy/missing record only when this exact scope has no record. */
   public ensure(
     state: TrackingLifecycleState,
     now = Date.now(),
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
+    const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(guard);
+      const current = await this.readUnsafe(state, guard);
       if (!active(guard)) return null;
-      if (sameDiagnosticScope(current, diagnosticScopeOf(state))) return current;
-      if (current) return null;
-      const next = createLocationRuntimeDiagnostics(state, now);
-      return (await this.writeUnsafe(next, guard)) ? next : null;
+      if (current) return current;
+      const next = createLocationRuntimeDiagnostics(state, now, id);
+      return (await this.writeUnsafe(state, next, guard)) ? next : null;
     });
   }
 
   public patch(
     state: TrackingLifecycleState,
-    patch: Partial<Omit<LocationRuntimeDiagnostics, "schemaVersion" | "requestId" | "technicianUserId" | "startedAt">>,
+    patch: Partial<Omit<LocationRuntimeDiagnostics, "schemaVersion" | "requestId" | "technicianUserId" | "startedAt" | "updatedAt" | "operationId">>,
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
+    const now = Date.now();
+    const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(guard);
+      const current = await this.readUnsafe(state, guard);
       if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
-      const next = normalizeDiagnostics({ ...current, ...patch });
-      return (await this.writeUnsafe(next, guard)) ? next : null;
+      const next = normalizeDiagnostics({ ...current, ...patch, updatedAt: now, operationId: id });
+      return (await this.writeUnsafe(state, next, guard)) ? next : null;
     });
   }
 
@@ -227,12 +333,14 @@ export class LocationRuntimeDiagnosticsStore {
     update: (current: LocationRuntimeDiagnostics) => LocationRuntimeDiagnostics,
     guard?: DiagnosticsOperationGuard,
   ): Promise<LocationRuntimeDiagnostics | null> {
+    const now = Date.now();
+    const id = this.nextOperationId(now);
     return this.enqueue(async () => {
-      const current = await this.readUnsafe(guard);
+      const current = await this.readUnsafe(state, guard);
       if (!active(guard) || !current || !sameDiagnosticScope(current, diagnosticScopeOf(state))) return null;
-      const next = normalizeDiagnostics(update(current));
+      const next = normalizeDiagnostics({ ...update(current), updatedAt: now, operationId: id });
       if (!active(guard) || !sameDiagnosticScope(next, diagnosticScopeOf(state))) return null;
-      return (await this.writeUnsafe(next, guard)) ? next : null;
+      return (await this.writeUnsafe(state, next, guard)) ? next : null;
     });
   }
 

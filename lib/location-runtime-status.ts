@@ -5,6 +5,8 @@ export type RestoredLocationRuntimeStatus = {
   serverError: string | null;
 };
 
+export const CALLBACK_DEADLINE_ERROR = "CALLBACK_DEADLINE_EXCEEDED";
+
 /**
  * Registration is not evidence of a live callback or stored location. This
  * maps only persisted event evidence into a fresh UI runtime and deliberately
@@ -21,7 +23,10 @@ export function locationRuntimeStatusFromDiagnostics(
     && now - diagnostics.lastUploadStartedAt > callbackBudgetMs,
   );
   if (diagnostics.lastErrorCode) {
-    return { serverStatus: "error", serverError: `최근 위치 전송 오류: ${diagnostics.lastErrorCode}` };
+    const message = diagnostics.lastErrorCode === CALLBACK_DEADLINE_ERROR
+      ? "위치 전송 시간 제한으로 저장 여부를 확인하지 못했습니다."
+      : `최근 위치 전송 오류: ${diagnostics.lastErrorCode}`;
+    return { serverStatus: "error", serverError: message };
   }
   if (uploadStillPending) {
     return { serverStatus: "error", serverError: "오래된 위치 전송 시도는 완료로 표시하지 않습니다." };

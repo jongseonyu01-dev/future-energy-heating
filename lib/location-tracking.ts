@@ -25,7 +25,7 @@ import {
   LocationRuntimeDiagnosticsStore,
   type LocationRuntimeDiagnostics,
 } from "@/lib/location-runtime-diagnostics";
-import { locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
+import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
 import { parseJsonWithin } from "@/lib/location-upload-response";
 import {
   matchesTrackingStopAction,
@@ -237,11 +237,14 @@ async function isNativeLocationTaskRegistered(): Promise<boolean> {
   }
 }
 
-async function stopNativeLocationTask(): Promise<void> {
+async function stopNativeLocationTask(isStillAuthorized: () => boolean = () => true): Promise<void> {
   if (Platform.OS === "web") return;
   try {
+    if (!isStillAuthorized()) return;
     const Location = await getLocationModule();
+    if (!isStillAuthorized()) return;
     if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK_NAME)) {
+      if (!isStillAuthorized()) return;
       await Location.stopLocationUpdatesAsync(BACKGROUND_TASK_NAME);
     }
   } catch (error) {
@@ -249,13 +252,17 @@ async function stopNativeLocationTask(): Promise<void> {
   }
 }
 
-async function dismissPresentedTrackingNotifications(): Promise<void> {
+async function dismissPresentedTrackingNotifications(isStillAuthorized: () => boolean = () => true): Promise<void> {
   if (Platform.OS === "web") return;
   try {
+    if (!isStillAuthorized()) return;
     const presented = await Notifications.getPresentedNotificationsAsync();
+    if (!isStillAuthorized()) return;
     await Promise.all(presented
       .filter((notification) => notification.request.content.data?.trackingControl === "stop")
-      .map((notification) => Notifications.dismissNotificationAsync(notification.request.identifier)));
+      .map((notification) => isStillAuthorized()
+        ? Notifications.dismissNotificationAsync(notification.request.identifier)
+        : Promise.resolve()));
   } catch {
     // Some Android variants cannot enumerate presented notifications; the known ID is handled below.
   }
@@ -286,13 +293,22 @@ async function ensureControlNotification(state: PersistedTrackingState): Promise
   });
 }
 
-async function clearControlNotification(_state: PersistedTrackingState | null): Promise<void> {
+async function clearControlNotification(
+  _state: PersistedTrackingState | null,
+  isStillAuthorized: () => boolean = () => true,
+): Promise<void> {
+  if (!isStillAuthorized()) return;
   if (trackingNotificationId) {
-    try { await Notifications.cancelScheduledNotificationAsync(trackingNotificationId); } catch { /* best effort */ }
-    try { await Notifications.dismissNotificationAsync(trackingNotificationId); } catch { /* best effort */ }
+    try {
+      if (isStillAuthorized()) await Notifications.cancelScheduledNotificationAsync(trackingNotificationId);
+    } catch { /* best effort */ }
+    try {
+      if (isStillAuthorized()) await Notifications.dismissNotificationAsync(trackingNotificationId);
+    } catch { /* best effort */ }
+    if (!isStillAuthorized()) return;
     trackingNotificationId = null;
   }
-  await dismissPresentedTrackingNotifications();
+  if (isStillAuthorized()) await dismissPresentedTrackingNotifications(isStillAuthorized);
 }
 
 async function startNativeLocationTask(): Promise<void> {
@@ -465,12 +481,36 @@ export async function getCurrentLocationFull(): Promise<{
   }
 }
 
-async function deactivateAfterTerminalResponse(state: PersistedTrackingState): Promise<void> {
-  const stopped = await trackingLifecycle.stopForTerminalResponse(state);
-  if (stopped) {
-    emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
-    emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
-  }
+function publishCallbackDeadline(state: PersistedTrackingState): void {
+  if (!sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)) return;
+  const now = Date.now();
+  emitDebug({
+    serverStatus: "error",
+    serverError: "위치 전송 시간 제한으로 저장 여부를 확인하지 못했습니다.",
+    lastResponseAt: now,
+  });
+  void runtimeDiagnostics.patch(state, {
+    lastErrorCode: CALLBACK_DEADLINE_ERROR,
+    lastErrorAt: now,
+    lastResponseAt: now,
+  }, () => sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state))
+    .then(emitPersistedDiagnostics)
+    .catch(() => undefined);
+}
+
+function deactivateAfterTerminalResponse(state: PersistedTrackingState): boolean {
+  // This synchronous invalidation must precede diagnostics persistence. A
+  // permanently stalled setItem therefore cannot permit the next /update.
+  if (!trackingLifecycle.invalidateForTerminalResponse(state)) return false;
+  lastUploadMeasurement = { key: "", measuredAt: 0 };
+  emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
+  void runtimeDiagnostics.patch(state, {
+    lastErrorCode: "SERVER_TERMINAL",
+    lastErrorAt: Date.now(),
+  }).then(emitPersistedDiagnostics).catch(() => undefined);
+  void runtimeDiagnostics.finalize(state).then(emitPersistedDiagnostics).catch(() => undefined);
+  void trackingLifecycle.completeInvalidatedTerminalCleanup(state);
+  return true;
 }
 
 async function withinTaskDeadline<T>(
@@ -510,9 +550,13 @@ export async function sendLocationToServer(
   }
   if (lastUploadMeasurement.key === key && location.measuredAt <= lastUploadMeasurement.measuredAt) return;
   const initialOwner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
-  if (initialOwner.kind !== "VALUE" || !initialOwner.value) return;
+  if (initialOwner.kind !== "VALUE") {
+    if (!isActive()) publishCallbackDeadline(state);
+    return;
+  }
+  if (!initialOwner.value) return;
 
-  await uploadQueue.enqueue(key, location, async (queuedLocation) => {
+  const queuedUpload = uploadQueue.enqueue(key, location, async (queuedLocation) => {
     if (!isActive()) return;
     const owner = await withinTaskDeadline(taskFence, () => trackingLifecycle.isCurrent(state, undefined, isActive));
     if (owner.kind !== "VALUE" || !owner.value) return;
@@ -665,12 +709,13 @@ export async function sendLocationToServer(
       return;
     }
     if (disposition === "terminal") {
-      const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
-        lastResponseAt: respondedAt, lastErrorCode: "SERVER_TERMINAL", lastErrorAt: respondedAt,
-      }, isActive));
-      if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
-      if (isActive()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
-      if (isActive()) await deactivateAfterTerminalResponse(state);
+      if (deactivateAfterTerminalResponse(state)) {
+        emitDebug({
+          serverStatus: "error",
+          serverError: formatLocationRequestFailure(response.status, payload?.error),
+          lastResponseAt: respondedAt,
+        });
+      }
       return;
     }
     const diagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.patch(state, {
@@ -681,6 +726,9 @@ export async function sendLocationToServer(
     if (diagnostics.kind === "VALUE" && isActive()) emitPersistedDiagnostics(diagnostics.value);
     if (isActive()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: respondedAt });
   });
+
+  const queuedResult = await withinTaskDeadline(taskFence, () => queuedUpload);
+  if (queuedResult.kind !== "VALUE" || !isActive()) publishCallbackDeadline(state);
 }
 
 export async function notifySessionStop(
@@ -841,7 +889,14 @@ if (Platform.OS !== "web") {
           },
           isActive: () => taskFence.isActive(),
         }));
-        if (adoptedResult.kind !== "VALUE" || !taskFence.isActive()) return;
+        if (adoptedResult.kind !== "VALUE" || !taskFence.isActive()) {
+          emitDebug({
+            serverStatus: "error",
+            serverError: "위치 전송 준비 시간 제한으로 저장 여부를 확인하지 못했습니다.",
+            source: "foreground-service-task",
+          });
+          return;
+        }
         const adopted = adoptedResult.value;
         if (!adopted) {
           emitDebug({ serverStatus: "error", serverError: "현재 기사 로그인 인증 또는 위치공유 세션을 확인하지 못했습니다.", source: "foreground-service-task" });
@@ -859,7 +914,10 @@ if (Platform.OS !== "web") {
           callbackAt,
           () => taskFence.isActive(),
         ));
-        if (ensured.kind !== "VALUE" || !taskFence.isActive()) return;
+        if (ensured.kind !== "VALUE" || !taskFence.isActive()) {
+          publishCallbackDeadline(adopted.state);
+          return;
+        }
         const callbackDiagnostics = await withinDiagnosticsDeadline(taskFence, () => runtimeDiagnostics.update(adopted.state, (current) => ({
           ...current,
           lastCallbackAt: callbackAt,
@@ -867,7 +925,10 @@ if (Platform.OS !== "web") {
           nativeRegistration: "registered",
           lastNativeCheckAt: callbackAt,
         }), () => taskFence.isActive()));
-        if (callbackDiagnostics.kind !== "VALUE" || !taskFence.isActive()) return;
+        if (callbackDiagnostics.kind !== "VALUE" || !taskFence.isActive()) {
+          publishCallbackDeadline(adopted.state);
+          return;
+        }
         emitPersistedDiagnostics(callbackDiagnostics.value);
         await sendLocationToServer(adopted.state, {
           lat,
