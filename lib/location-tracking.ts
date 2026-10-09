@@ -17,6 +17,7 @@ import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
 import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";
 import {
+  readExistingLocationTrackingPermissionEligibility,
   requestBackgroundLocationPermissionFlow,
   type LocationPermissionFlowDependencies,
 } from "@/lib/location-permission-flow";
@@ -476,6 +477,19 @@ async function getLocationModule() {
 }
 
 /**
+ * Reads permission state only. This helper must not trigger Android Settings or
+ * a prompt because it is also called from a headless TaskManager callback.
+ */
+async function readExistingTrackingPermissionEligibility() {
+  if (Platform.OS === "web") return { eligible: true, status: "granted" as const };
+  const nativeLocation = await getLocationModule();
+  return readExistingLocationTrackingPermissionEligibility({
+    getForeground: () => nativeLocation.getForegroundPermissionsAsync(),
+    getBackground: () => nativeLocation.getBackgroundPermissionsAsync(),
+  });
+}
+
+/**
  * Expo's hasStarted API confirms persisted task/consumer registration only. It
  * does not prove a foreground service, GPS callback, JS runtime, HTTP request,
  * or server storage is currently alive.
@@ -699,9 +713,56 @@ export async function stopLocationTracking(): Promise<void> {
   lastUploadMeasurement = { key: "", measuredAt: 0 };
 }
 
+async function stopExactTrackingForPermissionDenial(state: PersistedTrackingState): Promise<boolean> {
+  // Do not use a broad cold stop here. A permission read for old A can finish
+  // after B begins, so the lifecycle re-reads and matches this exact state
+  // before invalidating local collection.
+  invalidateLocationStatusOverlayOwner(state);
+  const stopped = await trackingLifecycle.stopStoredExact(state);
+  if (!stopped) return false;
+  clearDebugUploadForState(stopped);
+  lastUploadMeasurement = { key: "", measuredAt: 0 };
+  emitDebug({
+    serverStatus: "error",
+    serverError: "위치 권한이 변경되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
+  });
+  const diagnostics = await runtimeDiagnostics.patch(stopped, {
+    lastErrorCode: "LOCATION_PERMISSION_DENIED",
+    lastErrorAt: Date.now(),
+  });
+  emitPersistedDiagnostics(diagnostics);
+  emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
+  return true;
+}
+
 export async function restoreLocationTrackingForUser(userId: number): Promise<PersistedTrackingState | null> {
   if (Platform.OS === "web") return null;
   try {
+    // Permission eligibility adds another asynchronous boundary before the
+    // lifecycle restore read. Capture ownership first so a logout/stop/B start
+    // during that check cannot let a delayed A restore acquire a fresh
+    // generation and re-register native collection.
+    const restoreGeneration = trackingLifecycle.captureGeneration();
+    // A persisted APK56 session must pass the same non-interactive eligibility
+    // check as a new departure before this path can register/restart native
+    // collection. This check never opens Settings from restore/headless code.
+    const candidate = await getPersistedTrackingState();
+    if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
+    if (candidate?.technicianUserId === userId) {
+      const eligibility = await readExistingTrackingPermissionEligibility();
+      if (!trackingLifecycle.isGenerationCurrent(restoreGeneration)) return null;
+      if (!eligibility.eligible) {
+        if (eligibility.status === "denied") {
+          await stopExactTrackingForPermissionDenial(candidate);
+          return null;
+        }
+        emitDebug({
+          serverStatus: "error",
+          serverError: "위치 권한 상태를 확인하지 못해 기존 위치 공유를 복원하지 않았습니다.",
+        });
+        return null;
+      }
+    }
     const restored = await trackingLifecycle.restoreForUser(userId);
     if (!restored) return null;
     // read() folds an independently persisted accepted outcome into the session
@@ -799,16 +860,20 @@ function publishCallbackDeadline(
     .catch(() => undefined);
 }
 
-function deactivateAfterTerminalResponse(state: PersistedTrackingState): boolean {
+function deactivateAfterTerminalResponse(
+  state: PersistedTrackingState,
+  errorCode = "SERVER_TERMINAL",
+  errorMessage = "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다.",
+): boolean {
   // This synchronous invalidation must precede diagnostics persistence. A
   // permanently stalled setItem therefore cannot permit the next /update.
   if (!trackingLifecycle.invalidateForTerminalResponse(state)) return false;
   clearDebugUploadForState(state);
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   invalidateLocationStatusOverlayOwner(state);
-  emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
+  emitDebug({ serverStatus: "error", serverError: errorMessage });
   void runtimeDiagnostics.patch(state, {
-    lastErrorCode: "SERVER_TERMINAL",
+    lastErrorCode: errorCode,
     lastErrorAt: Date.now(),
   }).then(emitPersistedDiagnostics).catch(() => undefined);
   void runtimeDiagnostics.finalize(state).then(emitPersistedDiagnostics).catch(() => undefined);
@@ -905,6 +970,29 @@ async function recordUnboundTaskCallback(
     () => parentFence.isActive() && entryFence.isActive(),
   ));
   if (result.kind === "EXPIRED") runtimeDiagnostics.releaseExpiredWork();
+}
+
+function isConfirmedNativeLocationPermissionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = String((error as { code?: unknown }).code ?? "").trim().toUpperCase();
+  // Generic native task errors do not prove a permission revocation. Keep this
+  // exact code narrow so an old A error can never terminate a replacement B.
+  return code === "E_LOCATION_UNAUTHORIZED";
+}
+
+function stopCurrentTrackingForPermissionRevocation(
+  state: PersistedTrackingState | null,
+): boolean {
+  // A native error does not carry the persisted session identifier. Never
+  // adopt whichever state happens to be stored after an await: that could be a
+  // replacement B. Only an exact owner already held by this JS runtime is safe
+  // to invalidate here; a cold/unbound error remains separate evidence.
+  if (!state) return false;
+  return deactivateAfterTerminalResponse(
+    state,
+    "LOCATION_PERMISSION_REVOKED",
+    "위치 권한이 철회되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
+  );
 }
 
 export async function sendLocationToServer(
@@ -1422,7 +1510,16 @@ export function registerLocationTrackingTask(): boolean {
         // stall. It is detached from the collection/upload critical path.
         void recordUnboundTaskCallback("TASK_CALLBACK_ENTERED", callbackEnteredAt, taskFence);
         if (error) {
-          await recordUnboundTaskCallback("TASK_NATIVE_ERROR", callbackEnteredAt, taskFence);
+          const permissionRevoked = isConfirmedNativeLocationPermissionError(error);
+          const permissionErrorOwner = permissionRevoked ? trackingLifecycle.currentIntent() : null;
+          await recordUnboundTaskCallback(
+            permissionRevoked ? "TASK_NATIVE_PERMISSION_REVOKED" : "TASK_NATIVE_ERROR",
+            callbackEnteredAt,
+            taskFence,
+          );
+          if (permissionRevoked && taskFence.isActive()) {
+            stopCurrentTrackingForPermissionRevocation(permissionErrorOwner);
+          }
           return;
         }
         const taskLocations = (Array.isArray(data?.locations) ? data.locations : []) as {
@@ -1471,6 +1568,23 @@ export function registerLocationTrackingTask(): boolean {
               callbackEnteredAt,
               taskFence,
             );
+          }
+          return;
+        }
+        const permissionEligibility = await taskFence.run(readExistingTrackingPermissionEligibility);
+        if (permissionEligibility.kind !== "VALUE" || !taskFence.isActive()) {
+          await recordUnboundTaskCallback("PERMISSION_CHECK_TIMEOUT", callbackEnteredAt, taskFence);
+          return;
+        }
+        if (!permissionEligibility.value.eligible) {
+          if (permissionEligibility.value.status === "denied") {
+            deactivateAfterTerminalResponse(
+              adopted.state,
+              "LOCATION_PERMISSION_DENIED",
+              "위치 권한이 변경되어 위치 공유를 중지했습니다. 앱을 연 뒤 권한을 확인해 주세요.",
+            );
+          } else {
+            await recordUnboundTaskCallback("PERMISSION_CHECK_UNAVAILABLE", callbackEnteredAt, taskFence);
           }
           return;
         }

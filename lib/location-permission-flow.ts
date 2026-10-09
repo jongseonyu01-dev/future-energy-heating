@@ -25,6 +25,25 @@ export type LocationPermissionFlowDependencies = {
   isProvisionalNotification?: (result: PermissionStatusLike) => boolean;
 };
 
+/**
+ * A background/headless runtime must never open permission UI. This result
+ * distinguishes an actual denial from a platform-query failure so the caller
+ * can locally fence the exact saved share and show the normal foreground UI
+ * only after the technician opens the app.
+ */
+export type ExistingLocationTrackingPermissionEligibility = {
+  eligible: boolean;
+  foregroundGranted: boolean;
+  backgroundGranted: boolean;
+  /** `unavailable` means the native permission state could not be verified. */
+  status: "granted" | "denied" | "unavailable";
+};
+
+export type ExistingLocationTrackingPermissionDependencies = {
+  getForeground: () => Promise<PermissionStatusLike>;
+  getBackground: () => Promise<PermissionStatusLike>;
+};
+
 /** A server location session may be created only after every required gate succeeds. */
 export function canStartLocationTrackingSession(result: LocationPermissionFlowResult): boolean {
   return result.granted && result.foregroundGranted && result.backgroundGranted && result.notificationGranted;
@@ -32,6 +51,37 @@ export function canStartLocationTrackingSession(result: LocationPermissionFlowRe
 
 function isGranted(result: PermissionStatusLike): boolean {
   return result.granted === true || result.status === "granted";
+}
+
+/**
+ * Reads already-granted location access without presenting Settings or any
+ * prompt. It is used before a persisted share restores/re-registers native
+ * collection and immediately before a headless callback may upload.
+ */
+export async function readExistingLocationTrackingPermissionEligibility(
+  dependencies: ExistingLocationTrackingPermissionDependencies,
+): Promise<ExistingLocationTrackingPermissionEligibility> {
+  try {
+    const [foreground, background] = await Promise.all([
+      dependencies.getForeground(),
+      dependencies.getBackground(),
+    ]);
+    const foregroundGranted = isGranted(foreground);
+    const backgroundGranted = isGranted(background);
+    return {
+      eligible: foregroundGranted && backgroundGranted,
+      foregroundGranted,
+      backgroundGranted,
+      status: foregroundGranted && backgroundGranted ? "granted" : "denied",
+    };
+  } catch {
+    return {
+      eligible: false,
+      foregroundGranted: false,
+      backgroundGranted: false,
+      status: "unavailable",
+    };
+  }
 }
 
 /**

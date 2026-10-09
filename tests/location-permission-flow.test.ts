@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canStartLocationTrackingSession,
+  readExistingLocationTrackingPermissionEligibility,
   requestBackgroundLocationPermissionFlow,
 } from "../lib/location-permission-flow";
 
@@ -95,5 +96,49 @@ describe("Android background location departure gate", () => {
     expect(outcome.started).toBe(true);
     expect(calls).toEqual(["foreground", "explain", "background", "notification", "session"]);
     expect(createServerSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses only non-interactive reads for an already approved restored session", async () => {
+    const getForeground = vi.fn(async () => granted);
+    const getBackground = vi.fn(async () => granted);
+
+    const eligibility = await readExistingLocationTrackingPermissionEligibility({ getForeground, getBackground });
+
+    expect(eligibility).toEqual({
+      eligible: true,
+      foregroundGranted: true,
+      backgroundGranted: true,
+      status: "granted",
+    });
+    expect(getForeground).toHaveBeenCalledTimes(1);
+    expect(getBackground).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a restored session on confirmed background denial without requesting UI", async () => {
+    const getForeground = vi.fn(async () => granted);
+    const getBackground = vi.fn(async () => denied);
+
+    const eligibility = await readExistingLocationTrackingPermissionEligibility({ getForeground, getBackground });
+
+    expect(eligibility).toEqual({
+      eligible: false,
+      foregroundGranted: true,
+      backgroundGranted: false,
+      status: "denied",
+    });
+  });
+
+  it("does not treat a failed non-interactive permission read as approval", async () => {
+    const eligibility = await readExistingLocationTrackingPermissionEligibility({
+      getForeground: async () => granted,
+      getBackground: async () => { throw new Error("SYNTHETIC_PERMISSION_QUERY_FAILURE"); },
+    });
+
+    expect(eligibility).toEqual({
+      eligible: false,
+      foregroundGranted: false,
+      backgroundGranted: false,
+      status: "unavailable",
+    });
   });
 });

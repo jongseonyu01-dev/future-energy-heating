@@ -40,9 +40,11 @@ async function main() {
     await writeFile(join(stubs, "async-storage.ts"), `
       let readCount = 0;
       const markers = new Map<string, string>();
+      const values = new Map<string, string>();
       export default {
         getItem: async (key: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) return markers.get(key) ?? null;
+          if (key.startsWith("location_tracking_runtime_diagnostics")) return values.get(key) ?? null;
           readCount += 1;
           if (readCount === 1) return globalThis.__read1;
           if (readCount === 2) return globalThis.__read2;
@@ -50,12 +52,19 @@ async function main() {
         },
         setItem: async (key: string, value: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) markers.set(key, value);
+          else if (key.startsWith("location_tracking_runtime_diagnostics")) values.set(key, value);
           else globalThis.__stored = value;
         },
         removeItem: async (key: string) => {
           if (key.startsWith("location_tracking_inactive_v1:")) markers.delete(key);
+          else if (key.startsWith("location_tracking_runtime_diagnostics")) values.delete(key);
           else globalThis.__stored = null;
         },
+        getAllKeys: async () => [...markers.keys(), ...values.keys()],
+        multiGet: async (keys: readonly string[]) => keys.map((key) => [
+          key,
+          key.startsWith("location_tracking_inactive_v1:") ? markers.get(key) ?? null : values.get(key) ?? null,
+        ] as [string, string | null]),
       };
     `);
     await writeFile(join(stubs, "notifications.ts"), `
@@ -76,6 +85,8 @@ async function main() {
       export const startLocationUpdatesAsync = async () => { globalThis.__nativeStarts += 1; };
       export const stopLocationUpdatesAsync = async () => { globalThis.__nativeStops += 1; if (globalThis.__nativeStopGate) await globalThis.__nativeStopGate; };
       export const requestForegroundPermissionsAsync = async () => ({ status: "granted" });
+      export const getForegroundPermissionsAsync = async () => globalThis.__foregroundPermission ?? ({ status: "granted" });
+      export const getBackgroundPermissionsAsync = async () => globalThis.__backgroundPermission ?? ({ status: "granted" });
       export const getCurrentPositionAsync = async () => null;
     `);
     await writeFile(join(stubs, "task-manager.ts"), 'export const isTaskDefined = () => true; export const defineTask = () => undefined;\n');
@@ -99,7 +110,8 @@ async function main() {
       .replace('import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "@/lib/location-status-overlay";', 'import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "./stubs/status-overlay.ts";')
       .replace('} from "@/lib/location-tracking-lifecycle";', `} from ${JSON.stringify(join(root, "lib/location-tracking-lifecycle.ts"))};`)
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
-      .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`);
+      .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`)
+      + '\nexport const __testLifecycleIntent = () => trackingLifecycle.currentIntent();\n';
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     Object.assign(globalThis as Record<string, unknown>, {
@@ -113,21 +125,52 @@ async function main() {
     });
     const tracking = await import(`${pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href}?v=${Date.now()}`);
 
-    // Public entrypoint order: restore read1 is held, logout-stop enters and starts
-    // its cold-state read2, then read1 completes before read2.
+    // Public entrypoint order: restore's permission pre-read holds read1,
+    // logout-stop enters its cold-state read2, and both reads then settle.
     const restoring = tracking.restoreLocationTrackingForUser(stateA.technicianUserId);
     await tick();
     const stopping = tracking.stopStoredTrackingAndNotify("업무취소");
     await tick();
     read1.resolve(stored);
-    assert.equal(await restoring, null, "invalidated restore must not start persisted A");
     read2.resolve(stored);
+    assert.equal(await restoring, null, "invalidated restore must not start persisted A");
     await stopping;
 
     const globals = globalThis as Record<string, unknown>;
     assert.equal(globals.__stored, null, "public stop must clear stored A after its cold read");
     assert.equal(globals.__nativeStarts, 0, "late restore must never start native collection");
     assert.equal(globals.__nativeStops, 1, "public stop must terminate the existing native task once");
+
+    // APK56 can already hold a persisted session when the permission contract
+    // changes. A non-interactive denied background check must stop that exact
+    // local state before restore/reconcile can start native collection; no
+    // Settings request is possible in this restore code path.
+    const deniedRestore = { ...stateA, token: "d".repeat(43), requestId: 92, startedAt: 92_000 };
+    globals.__stored = JSON.stringify(deniedRestore);
+    globals.__foregroundPermission = { status: "granted" };
+    globals.__backgroundPermission = { status: "denied" };
+    const nativeStartsBeforeDeniedRestore = Number(globals.__nativeStarts);
+    const nativeStopsBeforeDeniedRestore = Number(globals.__nativeStops);
+    assert.equal(
+      await tracking.restoreLocationTrackingForUser(deniedRestore.technicianUserId),
+      null,
+      "unapproved stored share must not restore or re-register native collection",
+    );
+    assert.equal(globals.__nativeStarts, nativeStartsBeforeDeniedRestore, "denied restored share must issue zero native starts");
+    assert.equal(globals.__nativeStops, nativeStopsBeforeDeniedRestore + 1, "denied restored share must stop its exact existing native task");
+    assert.equal(globals.__stored, null, "denied restored share must clear only its matching local pointer");
+
+    // An already approved state is read-only: it proceeds without a repeated
+    // Android Settings prompt and restores the exact persisted session.
+    const approvedRestore = { ...stateA, token: "g".repeat(43), requestId: 93, startedAt: 93_000 };
+    globals.__stored = JSON.stringify(approvedRestore);
+    globals.__backgroundPermission = { status: "granted" };
+    assert.equal((await tracking.getPersistedTrackingState())?.requestId, approvedRestore.requestId, "approved fixture must remain eligible before restore");
+    assert.equal(tracking.__testLifecycleIntent(), null, "denied predecessor must leave no in-memory owner before an approved restore");
+    const nativeStartsBeforeApprovedRestore = Number(globals.__nativeStarts);
+    const restoredApproved = await tracking.restoreLocationTrackingForUser(approvedRestore.technicianUserId);
+    assert.equal(restoredApproved?.requestId, approvedRestore.requestId, `already approved exact session must restore normally: ${JSON.stringify(restoredApproved)}`);
+    assert.equal(globals.__nativeStarts, nativeStartsBeforeApprovedRestore + 1, "approved restored share may start its exact native collector once");
 
     // A visible optional overlay is revoked immediately when an exact in-memory
     // share stops. It must not wait for delayed Android native cleanup.
@@ -148,7 +191,16 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+export const locationTrackingPublicStopRaceIntegration = main();
+// Some Node/tsx runner combinations compile this standalone module as CJS and
+// allow an unresolved promise to exit without a failure or PASS marker. Hold a
+// harmless handle until every exact-restore assertion has actually settled.
+const completionKeepalive = setInterval(() => undefined, 1_000);
+void locationTrackingPublicStopRaceIntegration.then(
+  () => clearInterval(completionKeepalive),
+  (error) => {
+    clearInterval(completionKeepalive);
+    console.error(error);
+    process.exitCode = 1;
+  },
+);
