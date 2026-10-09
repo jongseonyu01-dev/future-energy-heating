@@ -506,6 +506,10 @@ export class LocationRuntimeDiagnosticsStore {
     for (const record of records) {
       const candidate = normalizeDiagnostics(record);
       for (const id of candidate.acceptedOutcomeIds) acknowledged.add(id);
+      // Every acknowledged immutable outcome has already been folded into the
+      // count in the summary that carries its id. Two detached writers can each
+      // carry one different id with storedCount=1, so Math.max alone loses one
+      // accepted server save after releaseExpiredWork detaches their queues.
       storedCount = Math.max(storedCount, candidate.storedCount);
       attemptCount = Math.max(attemptCount, candidate.attemptCount);
       lastAcceptedAt = Math.max(lastAcceptedAt ?? 0, candidate.lastAcceptedAt ?? 0) || null;
@@ -517,6 +521,10 @@ export class LocationRuntimeDiagnosticsStore {
         checkpoint = candidate.acceptedOutcomeThrough;
       }
     }
+    // The id union is the exact durable evidence floor for events represented
+    // by v2 summaries. Keep a legacy/previous aggregate count if it is larger,
+    // but never let two disjoint acknowledged outcomes collapse to one.
+    storedCount = Math.max(storedCount, acknowledged.size);
     return normalizeDiagnostics({
       ...normalizedNewest,
       acceptedOutcomeIds: [...acknowledged],
@@ -576,14 +584,12 @@ export class LocationRuntimeDiagnosticsStore {
     current: LocationRuntimeDiagnostics,
     outcomes: readonly AcceptedLocationOutcomeEvent[],
   ): LocationRuntimeDiagnostics {
-    const presentOutcomeIds = new Set(outcomes.map((outcome) => outcome.eventId));
-    // After a successful getAllKeys listing, IDs whose immutable event keys were
-    // already compacted no longer need acknowledgement slots. Keep them only on
-    // storage implementations that cannot enumerate outcome keys.
-    const retainedIds = this.storage.getAllKeys
-      ? normalizeDiagnostics(current).acceptedOutcomeIds.filter((id) => presentOutcomeIds.has(id))
-      : normalizeDiagnostics(current).acceptedOutcomeIds;
-    let merged = normalizeDiagnostics({ ...current, acceptedOutcomeIds: retainedIds });
+    // Do not remove an acknowledgement merely because its immutable event key
+    // has been compacted. A later follow-up snapshot from the same accepted
+    // callback can otherwise mistake the missing key for an uncounted save and
+    // increment storedCount a second time. Scope summaries are bounded, but an
+    // acknowledged event remains durable evidence for their lifetime.
+    let merged = normalizeDiagnostics(current);
     for (const outcome of [...outcomes].sort((left, right) => isNewerAcceptedOutcome(left, right) ? 1 : -1)) {
       // A delayed write can carry an older observedAt than a summary checkpoint
       // written by a newer callback. Only this exact durable eventId proves the

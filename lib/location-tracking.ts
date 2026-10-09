@@ -170,6 +170,8 @@ type DebugCallbackOwner = {
   key: string;
   generation: number;
   callbackId: number;
+  /** A callback can publish progress only until its response has a final result. */
+  result: "pending" | "accepted" | "ignored" | "error" | "terminal";
 };
 // A persisted diagnostic describes an earlier event. It must never turn an
 // already-started current request back into "stored", and a late A callback
@@ -194,7 +196,7 @@ function isCurrentDebugOwner(state: PersistedTrackingState, generation: number):
 
 function beginDebugCallback(state: PersistedTrackingState, generation: number): DebugCallbackOwner | null {
   if (!isCurrentDebugOwner(state, generation)) return null;
-  const owner = { key: stateKey(state), generation, callbackId: ++nextDebugCallbackId };
+  const owner = { key: stateKey(state), generation, callbackId: ++nextDebugCallbackId, result: "pending" as const };
   activeDebugCallbackOwner = owner;
   return owner;
 }
@@ -205,6 +207,25 @@ function ownsCurrentDebugCallback(state: PersistedTrackingState, owner: DebugCal
     && activeDebugCallbackOwner.generation === owner.generation
     && activeDebugCallbackOwner.callbackId === owner.callbackId
     && isCurrentDebugOwner(state, owner.generation));
+}
+
+function canPublishCallbackProgress(state: PersistedTrackingState, owner: DebugCallbackOwner | undefined): boolean {
+  return ownsCurrentDebugCallback(state, owner) && owner?.result === "pending";
+}
+
+/**
+ * The final HTTP classification wins for this exact callback. A detached
+ * diagnostics snapshot can still persist safe evidence afterwards, but it
+ * cannot reclassify a newer error/ignored/accepted result in the live view.
+ */
+function completeDebugCallback(
+  state: PersistedTrackingState,
+  owner: DebugCallbackOwner | undefined,
+  result: DebugCallbackOwner["result"],
+): boolean {
+  if (!ownsCurrentDebugCallback(state, owner) || !owner || owner.result !== "pending") return false;
+  owner.result = result;
+  return true;
 }
 
 function beginDebugUpload(state: PersistedTrackingState, generation: number): number | null {
@@ -746,6 +767,7 @@ function publishCallbackDeadline(
   )) return;
   const canPublishDeadline = () => sameTrackingLifecycleState(trackingLifecycle.currentIntent(), state)
     && (!callbackOwner || ownsCurrentDebugCallback(state, callbackOwner));
+  if (callbackOwner && !completeDebugCallback(state, callbackOwner, "error")) return;
   // Keep this callback lease until its bounded error evidence is scheduled. A
   // stop/replacement still clears both leases through clearDebugUploadForState.
   clearActiveDebugUploadForState(state);
@@ -889,9 +911,11 @@ export async function sendLocationToServer(
   const isActive = () => taskStillActive(taskFence);
   const callbackGeneration = suppliedCallbackOwner?.generation ?? trackingLifecycle.captureGeneration();
   const callbackOwner = suppliedCallbackOwner ?? beginDebugCallback(state, callbackGeneration);
-  const canPublishCurrentCallback = () => isActive()
+  const canPersistCurrentCallback = () => isActive()
     && isCurrentDebugOwner(state, callbackGeneration)
     && ownsCurrentDebugCallback(state, callbackOwner ?? undefined);
+  const canPublishCurrentCallback = () => canPersistCurrentCallback()
+    && canPublishCallbackProgress(state, callbackOwner ?? undefined);
   const now = Date.now();
   const key = stateKey(state);
   if (!isActive()) return;
@@ -1032,7 +1056,9 @@ export async function sendLocationToServer(
       scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
         lastErrorCode: "MISSING_CREDENTIAL", lastErrorAt: Date.now(),
       }, isActive), () => false);
-      if (canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
+      if (completeDebugCallback(state, callbackOwner ?? undefined, "error") && canPersistCurrentCallback()) {
+        emitDebug({ serverStatus: "error", serverError: "기사 로그인 인증 정보가 없어 위치를 전송하지 못했습니다." });
+      }
       return;
     }
     if (guarded.kind === "REQUEST_ERROR") {
@@ -1045,7 +1071,9 @@ export async function sendLocationToServer(
       scheduleSessionDiagnostics(state, taskFence, () => runtimeDiagnostics.patch(state, {
         lastErrorCode: errorCode, lastErrorAt: Date.now(),
       }, isActive), () => false);
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
+      if (canPublishResult && completeDebugCallback(state, callbackOwner ?? undefined, "error") && canPersistCurrentCallback()) {
+        emitDebug({ serverStatus: "error", serverError: timeoutMessage(guarded.error) });
+      }
       return;
     }
 
@@ -1060,6 +1088,9 @@ export async function sendLocationToServer(
       if (canPublishCurrentCallback()) {
         emitDebug({ lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt });
       }
+      // Terminal invalidation is safety-critical and must not be skipped if a
+      // newer callback owns the view; only its visual publication is owned.
+      void completeDebugCallback(state, callbackOwner ?? undefined, "terminal");
       deactivateAfterTerminalResponse(state);
       return;
     }
@@ -1082,7 +1113,7 @@ export async function sendLocationToServer(
         lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
         lastErrorCode: "RESPONSE_BODY_TIMEOUT", lastErrorAt: responseBodyAt,
       }, isActive), () => false);
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({
+      if (canPublishResult && completeDebugCallback(state, callbackOwner ?? undefined, "error") && canPersistCurrentCallback()) emitDebug({
         serverStatus: "error", serverError: "응답 본문 시간 초과로 위치 저장 여부를 확인하지 못했습니다.",
         lastResponseAt: responseHeadersAt, lastResponseHeadersAt: responseHeadersAt,
       });
@@ -1101,7 +1132,7 @@ export async function sendLocationToServer(
       // The fallback is defensive for a nonstandard mock and is never a token or
       // coordinate-derived value.
       const acceptedAttemptStartedAt = requestStartedAt ?? responseHeadersAt;
-      if (canPublishResult && canPublishCurrentCallback()) {
+      if (canPublishResult && completeDebugCallback(state, callbackOwner ?? undefined, "accepted") && canPersistCurrentCallback()) {
         emitDebug({
           serverStatus: "stored", serverError: null,
           lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt,
@@ -1127,10 +1158,6 @@ export async function sendLocationToServer(
         if (!outcome) return;
         void runtimeDiagnostics.update(state, (current) => ({
           ...current,
-          acceptedOutcomeIds: current.acceptedOutcomeIds.includes(outcome.eventId)
-            ? current.acceptedOutcomeIds
-            : [...current.acceptedOutcomeIds, outcome.eventId].slice(-64),
-          acceptedOutcomeThrough: current.acceptedOutcomeThrough ?? outcome.eventId,
           lastResponseAt: responseBodyAt,
           lastResponseHeadersAt: responseHeadersAt,
           lastResponseBodyAt: responseBodyAt,
@@ -1138,16 +1165,13 @@ export async function sendLocationToServer(
           lastStoredAt: recordedAt,
           lastErrorCode: null,
           lastErrorAt: null,
-          storedCount: current.acceptedOutcomeIds.includes(outcome.eventId)
-            ? current.storedCount
-            : current.storedCount + 1,
           lastCallbackStage: "SERVER_ACCEPTED",
           lastCallbackStageAt: responseBodyAt,
           lastCallbackStageElapsedMs: Math.max(0, responseBodyAt - callbackAt),
           lastAttemptStage: "SERVER_ACCEPTED",
           lastAttemptStageAt: responseBodyAt,
           lastAttemptStageElapsedMs: Math.max(0, responseBodyAt - acceptedAttemptStartedAt),
-        }), canPublishCurrentCallback).then((diagnostics) => {
+        }), canPersistCurrentCallback).then((diagnostics) => {
           if (diagnostics) emitPersistedDiagnostics(diagnostics, canPublishCurrentCallback);
         }).catch(() => undefined);
       }).catch(() => undefined);
@@ -1167,11 +1191,11 @@ export async function sendLocationToServer(
         lastErrorAt: responseBodyAt,
         ignoredCount: current.ignoredCount + 1,
       }), isActive), () => false);
-      if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt, ignoredCount: debugState.ignoredCount + 1 });
+      if (canPublishResult && completeDebugCallback(state, callbackOwner ?? undefined, "ignored") && canPersistCurrentCallback()) emitDebug({ serverStatus: "ignored", serverError: "이전 또는 중복 위치 측정값으로 새 저장은 발생하지 않았습니다.", lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt, ignoredCount: debugState.ignoredCount + 1 });
       return;
     }
     if (disposition === "terminal") {
-      if (deactivateAfterTerminalResponse(state)) {
+      if (completeDebugCallback(state, callbackOwner ?? undefined, "terminal") && deactivateAfterTerminalResponse(state)) {
         emitDebug({
           serverStatus: "error",
           serverError: formatLocationRequestFailure(response.status, payload?.error),
@@ -1192,7 +1216,7 @@ export async function sendLocationToServer(
       lastErrorCode: parsed.kind === "INVALID" ? "INVALID_RESPONSE_BODY" : "SERVER_RETRYABLE",
       lastErrorAt: responseBodyAt,
     }, isActive), () => false);
-    if (canPublishResult && canPublishCurrentCallback()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
+    if (canPublishResult && completeDebugCallback(state, callbackOwner ?? undefined, "error") && canPersistCurrentCallback()) emitDebug({ serverStatus: "error", serverError: formatLocationRequestFailure(response.status, payload?.error), lastResponseAt: responseBodyAt, lastResponseHeadersAt: responseHeadersAt, lastResponseBodyAt: responseBodyAt });
   });
 
   const queuedResult = await withinTaskDeadline(taskFence, () => queuedUpload);
@@ -1472,7 +1496,7 @@ export function registerLocationTrackingTask(): boolean {
             lastErrorCode: "COORDINATE_INVALID",
             lastErrorAt: Date.now(),
           }, canPublish), canPublish);
-          if (canPublish()) {
+          if (completeDebugCallback(adopted.state, callbackOwner, "error") && canPublish()) {
             emitDebug({ serverStatus: "error", serverError: "위치 좌표 형식을 확인하지 못했습니다.", source: "foreground-service-task" });
           }
           return;

@@ -162,7 +162,7 @@ async function main() {
       // exercises the actual callback boundary; shrinking it would turn Node
       // loader scheduling into a false deadline result.
       .replace("const TASK_ENTRY_EVENT_BUDGET_MS = 750;", "const TASK_ENTRY_EVENT_BUDGET_MS = 8;")
-      + "\nexport const __publishCallbackDeadlineForTest = publishCallbackDeadline;\nexport const __beginDebugCallbackForTest = (state: PersistedTrackingState) => beginDebugCallback(state, trackingLifecycle.captureGeneration());\n";
+      + "\nexport const __publishCallbackDeadlineForTest = publishCallbackDeadline;\nexport const __beginDebugCallbackForTest = (state: PersistedTrackingState) => beginDebugCallback(state, trackingLifecycle.captureGeneration());\nexport const __readRuntimeDiagnosticsForTest = (state: PersistedTrackingState) => runtimeDiagnostics.read(state);\n";
     await writeFile(join(sandbox, "location-tracking-under-test.ts"), transformed);
 
     let requests = 0;
@@ -522,6 +522,72 @@ async function main() {
       }
       assert.equal(displayUpdates.at(-1)?.serverStatus, "ignored", "ignored response must publish its own terminal display state");
       unsubscribeDisplay();
+
+      // A completed callback owns its final response classification. Delayed
+      // HTTP_HEADERS/attempt snapshots from its best-effort diagnostics must
+      // not restore an earlier accepted state over a later error or ignored
+      // response in the same active session.
+      const finalResultState = { ...state, token: "f".repeat(43), requestId: 5071, startedAt: 507_100 };
+      const finalResultUpdates: { serverStatus?: string; serverError?: string | null; lastResponseAt?: number | null; storedCount?: number }[] = [];
+      const unsubscribeFinalResult = tracking.subscribeDebug((next: typeof finalResultUpdates[number]) => finalResultUpdates.push(next));
+      let finalFetchCall = 0;
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => {
+          finalFetchCall += 1;
+          if (finalFetchCall === 1) {
+            return { ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) };
+          }
+          if (finalFetchCall === 2) throw new Error("SYNTHETIC_FINAL_NETWORK_ERROR");
+          return { ok: true, status: 200, json: async () => ({ success: true, accepted: false }) };
+        },
+      });
+      await tracking.startLocationTracking(finalResultState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 5));
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      for (let attempt = 0; attempt < 20 && finalResultUpdates.at(-1)?.serverStatus !== "error"; attempt += 1) await waitForDiagnostics();
+      assert.equal(finalResultUpdates.at(-1)?.serverStatus, "error", "a later network error must remain the current final result");
+      await waitForDiagnostics();
+      assert.equal(finalResultUpdates.at(-1)?.serverStatus, "error", "late accepted-progress diagnostics must not restore stored over error");
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 5));
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      for (let attempt = 0; attempt < 20 && finalResultUpdates.at(-1)?.serverStatus !== "ignored"; attempt += 1) await waitForDiagnostics();
+      assert.equal(finalResultUpdates.at(-1)?.serverStatus, "ignored", "a later duplicate response must remain ignored");
+      await waitForDiagnostics();
+      assert.equal(finalResultUpdates.at(-1)?.serverStatus, "ignored", "late accepted-progress diagnostics must not restore stored over ignored");
+      const finalRestored = await tracking.__readRuntimeDiagnosticsForTest(finalResultState) as { storedCount?: number; lastResponseAt?: number | null } | null;
+      assert.equal(finalRestored?.storedCount, 1, "one accepted response must restore as one stored server save");
+      assert.ok(finalRestored?.lastResponseAt, "the later ignored response must preserve its real response time");
+      unsubscribeFinalResult();
+
+      // Immutable accepted outcomes are the sole counting path. One and two
+      // normal TaskManager acceptances must remain one and two after detached
+      // diagnostics settle and after a fresh runtime reads the same storage.
+      const exactCountState = { ...state, token: "x".repeat(43), requestId: 5072, startedAt: 507_200 };
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) }),
+      });
+      await tracking.startLocationTracking(exactCountState);
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      let exactRestored = await tracking.__readRuntimeDiagnosticsForTest(exactCountState) as { storedCount?: number } | null;
+      assert.equal(exactRestored?.storedCount, 1, "one normal accepted callback must restore as exactly one save");
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 5));
+      await taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 1, longitude: 1, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await waitForDiagnostics();
+      exactRestored = await tracking.__readRuntimeDiagnosticsForTest(exactCountState) as { storedCount?: number } | null;
+      assert.equal(exactRestored?.storedCount, 2, "two normal accepted callbacks must restore as exactly two saves");
 
       // A's durable attempt history may finish late, but only B owns the current
       // debug view. The exact module must not emit A counters/status over B.

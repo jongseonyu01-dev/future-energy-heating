@@ -92,3 +92,12 @@
 - Android 실기기에서 다른 앱 전환·일반 화면 잠금 **중**, 앱을 다시 열기 전 callback·HTTP response·서버 accepted 저장 시각이 계속 증가하는지.
 - 일반 앱 전환/일반 잠금과 Android force-stop, OEM battery restriction, 권한 철회는 서로 다른 조건이다. source harness와 Kotlin compile로 하나를 다른 하나로 대체할 수 없다.
 - APK54와 APK55 내부 검증 APK 원본은 보존한다. 이 새 source 후보는 코드 재검수 전 APK 재빌드·재서명·교체를 하지 않으며, main merge·Production 배포·운영 위치 호출도 하지 않는다.
+
+## 2026-10-09 20:59 Codex 최종 결과·accepted 합산 3건 보완
+
+> **확정 범위:** 아래는 `09b4e00` 위 source-level actual TaskManager/합성 storage 재현의 진단 결함과 후보 보완이다. 실제 Android 단말의 3~4분 accepted 공백 원인으로 확정하지 않으며, 운영 HTTP·고객/기사 위치·출발/도착·DB에는 접근하지 않았다.
+
+1. **최종 응답 결과 보호:** callback lease에 `pending → accepted|ignored|error|terminal` 최종 결과를 추가했다. HTTP_HEADERS·attempt 같은 늦은 진행 진단 snapshot은 안전하게 영속될 수 있지만, 같은 callback의 verified accepted나 그 뒤 callback의 network error/`accepted:false`를 다시 `stored`로 화면에 표시할 수 없다. `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`에서 accepted → network error, accepted → ignored 뒤 detached diagnostics가 모두 settle된 뒤에도 최종 화면이 각각 error/ignored로 유지되고, durable restore도 `storedCount:1`로 확인했다.
+2. **accepted 단일 합산 경로:** verified accepted는 immutable `accepted outcome`을 `readMergedUnsafe()`에서 정확히 한 번 fold하는 경로만 count를 올린다. response follow-up은 response/stage 시각만 보완하며 outcome ID·`storedCount`를 다시 수정하지 않는다. compaction 뒤에도 summary의 acknowledged exact ID를 제거하지 않아, event key가 사라진 것을 “미합산”으로 오인하지 않는다. actual TaskManager normal acceptance 1회/2회는 settle·fresh read 뒤 각각 count 1/2로 확인했다.
+3. **만료 뒤 분리 summary 합산:** `releaseExpiredWork()`로 먼저 시작한 summary write가 detach된 뒤 두 번째 Store가 서로 다른 accepted outcome을 기록하면, summary merge는 acknowledged ID 합집합의 크기를 count floor로 사용한다. 따라서 `ID=[A,B]`/저장2건이 `Math.max(1,1)`로 1건이 되는 것을 막는다. 실제 gate-based store regression은 late first summary와 newer second summary가 교차·compaction을 끝낸 뒤 `storedCount:2`, `acceptedOutcomeIds:2`, immutable key 0으로 fresh restore됨을 확인했다.
+4. **실행 결과:** `npx vitest run tests/location-runtime-diagnostics.test.ts --reporter=dot` → 21 tests PASS; `node --import tsx tests/location-taskmanager-terminal.integration.test.ts` → `LOCATION_TASKMANAGER_TERMINAL_INTEGRATION_PASS`; 기존 terminal/headless/owner/auth standalone 10개 marker와 Vitest 6 files/47 tests도 PASS했다. edited-file ESLint·`git diff --check` PASS. full TypeScript는 `09b4e00` 기준과 각각 83 errors/normalized diff 0으로, 기존 전역 오류를 통과로 표기하지 않는다.

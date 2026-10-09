@@ -330,6 +330,54 @@ describe("세션별 위치 런타임 진단", () => {
     expect(restored).toMatchObject({ storedCount: 1, lastAcceptedAt: 400_100, lastStoredAt: 400_100 });
   });
 
+  it("만료 뒤 분리된 summary가 서로 다른 accepted 두 건을 하나로 줄이지 않는다", async () => {
+    const values = new Map<string, string>();
+    const firstSummaryStarted = Promise.withResolvers<void>();
+    const firstSummaryGate = Promise.withResolvers<void>();
+    let holdFirstSummary = true;
+    const storage: KeyValueStorage = {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        const parsed = JSON.parse(value) as { storedCount?: number };
+        if (holdFirstSummary && key.includes("location_tracking_runtime_diagnostics_v2:") && parsed.storedCount === 1) {
+          holdFirstSummary = false;
+          firstSummaryStarted.resolve();
+          await firstSummaryGate.promise;
+        }
+        values.set(key, value);
+      },
+      getAllKeys: async () => [...values.keys()],
+      multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
+      removeItem: async (key) => { values.delete(key); },
+    };
+    const first = new LocationRuntimeDiagnosticsStore(storage);
+    const second = new LocationRuntimeDiagnosticsStore(storage);
+    await first.begin(stateA, 450_000);
+    await first.recordAcceptedOutcome(stateA, {
+      callbackAt: 450_100, attemptStartedAt: 450_100, responseHeadersAt: 450_100,
+      responseBodyAt: 450_100, acceptedAt: 450_100, storedAt: 450_100,
+    }, 450_100);
+    const blockedFirstSummary = first.patch(stateA, { nativeRegistration: "registered" });
+    await firstSummaryStarted.promise;
+
+    // This mirrors a callback deadline detaching the first Store's old I/O
+    // before it writes, while a new runtime records a disjoint accepted result.
+    first.releaseExpiredWork();
+    await second.recordAcceptedOutcome(stateA, {
+      callbackAt: 450_200, attemptStartedAt: 450_200, responseHeadersAt: 450_200,
+      responseBodyAt: 450_200, acceptedAt: 450_200, storedAt: 450_200,
+    }, 450_200);
+    await second.patch(stateA, { lastAppState: "background", lastAppStateAt: 450_210 });
+    firstSummaryGate.resolve();
+    await blockedFirstSummary;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const restored = await new LocationRuntimeDiagnosticsStore(storage).read(stateA);
+    expect(restored).toMatchObject({ storedCount: 2, lastStoredAt: 450_200 });
+    expect(restored?.acceptedOutcomeIds).toHaveLength(2);
+    expect([...values.keys()].filter((key) => key.includes("_accepted_outcome_v1:"))).toHaveLength(0);
+  });
+
   it("summary가 없는 정상 callback도 fetch 뒤 비차단 update로 callback·measurement를 복원한다", async () => {
     const values = new Map<string, string>();
     const storage: KeyValueStorage = {
