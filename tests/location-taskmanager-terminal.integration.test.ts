@@ -34,7 +34,15 @@ async function main() {
       const values = new Map<string, string>();
       export default {
         getItem: async (key: string) => values.get(key) ?? null,
-        setItem: async (key: string, value: string) => { values.set(key, value); },
+      setItem: async (key: string, value: string) => {
+        const record = key.startsWith("location_tracking_runtime_diagnostics_v2:") ? JSON.parse(value) : null;
+        const testGlobals = globalThis as Record<string, any>;
+        if (record?.requestId === testGlobals.__delayDiagnosticRequestId && record?.lastUploadStartedAt) {
+          testGlobals.__diagnosticWriteStarted?.resolve();
+          await testGlobals.__diagnosticWriteGate;
+        }
+        values.set(key, value);
+      },
         removeItem: async (key: string) => { values.delete(key); },
         getAllKeys: async () => [...values.keys()],
         multiGet: async (keys: readonly string[]) => keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]),
@@ -212,6 +220,89 @@ async function main() {
       await waitForDiagnostics();
       assert.equal(maxAttempts(noCredentialState.requestId), 0, "credential failure before fetch must retain zero attempts");
       Object.assign(globalThis as Record<string, unknown>, { __tokenGate: null });
+
+      // A stored result is historical evidence only. A following actual fetch
+      // must remain "uploading" until its own response is classified.
+      const displayState = { ...state, token: "d".repeat(43), requestId: 507, startedAt: 507_000 };
+      const responseGates: { resolve: (response: { ok: boolean; status: number; json: () => Promise<unknown> }) => void }[] = [];
+      const displayUpdates: {
+        serverStatus?: string; lastStoredAt?: number | null; serverError?: string | null;
+      }[] = [];
+      const unsubscribeDisplay = tracking.subscribeDebug((next: {
+        serverStatus?: string; lastStoredAt?: number | null; serverError?: string | null;
+      }) => displayUpdates.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        fetch: async () => {
+          requests += 1;
+          const gate = Promise.withResolvers<{ ok: boolean; status: number; json: () => Promise<unknown> }>();
+          responseGates.push(gate);
+          return gate.promise;
+        },
+      });
+      await tracking.startLocationTracking(displayState);
+      const firstDisplayCallback = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.0, longitude: 127.5, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      while (responseGates.length !== 1) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      assert.equal(displayUpdates.at(-1)?.serverStatus, "uploading", "started fetch must publish uploading, not prior storage evidence");
+      responseGates[0]!.resolve({ ok: true, status: 200, json: async () => ({ success: true, accepted: true, updatedAt: new Date().toISOString() }) });
+      await firstDisplayCallback;
+      await waitForDiagnostics();
+      const firstStoredAt = displayUpdates.at(-1)?.lastStoredAt;
+      assert.equal(displayUpdates.at(-1)?.serverStatus, "stored", "accepted response must publish stored");
+
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 2));
+      const secondDisplayCallback = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.1, longitude: 127.6, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      const hasSecondResponseGate = () => responseGates.length === 2;
+      while (!hasSecondResponseGate()) await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      assert.equal(displayUpdates.at(-1)?.serverStatus, "uploading", "second pending fetch must not remain stored from first acceptance");
+      assert.equal(displayUpdates.at(-1)?.lastStoredAt, firstStoredAt, "pending fetch must retain the prior stored timestamp as history");
+      responseGates[1]!.resolve({ ok: true, status: 200, json: async () => ({ success: true, accepted: false }) });
+      await secondDisplayCallback;
+      await waitForDiagnostics();
+      assert.equal(displayUpdates.at(-1)?.serverStatus, "ignored", "ignored response must publish its own terminal display state");
+      unsubscribeDisplay();
+
+      // A's durable attempt history may finish late, but only B owns the current
+      // debug view. The exact module must not emit A counters/status over B.
+      const staleA = { ...state, token: "a".repeat(43), requestId: 508, startedAt: 508_000 };
+      const freshB = { ...state, token: "b".repeat(43), requestId: 509, startedAt: 509_000 };
+      const delayedAttemptWrite = Promise.withResolvers<void>();
+      const delayedAttemptStarted = Promise.withResolvers<void>();
+      const replacementUpdates: {
+        serverStatus?: string; attemptCount?: number; storedCount?: number; serverError?: string | null;
+      }[] = [];
+      const unsubscribeReplacement = tracking.subscribeDebug((next: {
+        serverStatus?: string; attemptCount?: number; storedCount?: number; serverError?: string | null;
+      }) => replacementUpdates.push(next));
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayDiagnosticRequestId: staleA.requestId,
+        __diagnosticWriteGate: delayedAttemptWrite.promise,
+        __diagnosticWriteStarted: delayedAttemptStarted,
+        fetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true, accepted: true }) }),
+      });
+      await tracking.startLocationTracking(staleA);
+      const delayedACallback = taskManager.invokeTask({
+        data: { locations: [{ timestamp: Date.now(), coords: { latitude: 38.2, longitude: 127.7, speed: null, heading: null, accuracy: 5 } }] },
+      });
+      await delayedAttemptStarted.promise;
+      const startingB = tracking.startLocationTracking(freshB);
+      await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      delayedAttemptWrite.resolve();
+      await delayedACallback;
+      await startingB;
+      await waitForDiagnostics();
+      assert.equal(replacementUpdates.at(-1)?.serverStatus, "idle", "late A attempt must not overwrite fresh B's idle view");
+      assert.equal(replacementUpdates.at(-1)?.attemptCount, 0, "late A attempt count must not appear on fresh B");
+      assert.equal(replacementUpdates.at(-1)?.storedCount, 0, "late A accepted result must not appear on fresh B");
+      unsubscribeReplacement();
+      Object.assign(globalThis as Record<string, unknown>, {
+        __delayDiagnosticRequestId: null,
+        __diagnosticWriteGate: null,
+        __diagnosticWriteStarted: null,
+      });
     } finally {
       Object.assign(globalThis as Record<string, unknown>, { fetch: originalFetch });
     }
@@ -222,7 +313,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+export const locationTaskmanagerTerminalIntegration = main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
+  throw error;
 });
