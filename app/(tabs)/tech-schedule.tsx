@@ -12,6 +12,7 @@ import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
 import { openNavigation } from "@/lib/navigation";
 import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
+import { canStartLocationTrackingSession } from "@/lib/location-permission-flow";
 import {
   createLocationStopAuthSnapshot,
   notifySessionStop,
@@ -20,6 +21,7 @@ import {
 import { saveAndConfirmLocationConsent } from "@/lib/location-consent-confirmation";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { useLocationTracking } from "@/lib/location-tracking-context";
+import { isAuthenticatedScheduleReady, refreshAuthenticatedSchedule } from "@/lib/authenticated-schedule-refresh";
 import { formatKstDateLabel, getUpcomingWorksForDate } from "@/lib/technician-weekly-schedule";
 import {
   getTechnicianScheduleRouteState,
@@ -40,10 +42,11 @@ const STATUS_COLOR: Record<string, string> = {
 export default function TechScheduleScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user } = useAppAuth();
+  const { user, isLoading: isAuthLoading } = useAppAuth();
 
   const technicianId = user?.technicianId;
   const userId = user?.userId;
+  const canRefreshSchedule = isAuthenticatedScheduleReady({ userId, isAuthLoading });
   // KST(Asia/Seoul) 기준 날짜 계산 - UTC+9 고정 (getTimezoneOffset 사용 금지)
   const getKSTDate = (offsetDays = 0) => {
     const now = new Date();
@@ -73,12 +76,19 @@ export default function TechScheduleScreen() {
   // 전역 위치 추적 컨텍스트 (화면 이동과 무관하게 위치 전송 유지)
   const {
     isTracking,
+    isPermissionPending,
+    isPermissionResumeChecking,
     trackingToken,
     trackingRequestId,
     trackingUrl,
     debugState,
+    unboundTaskEvent,
+    statusOverlay,
+    openStatusOverlay,
+    closeStatusOverlay,
     permStatus,
     startTracking,
+    resumeTrackingAfterPermissionCheck,
     stopTracking,
     checkPermissions,
   } = useLocationTracking();
@@ -88,7 +98,11 @@ export default function TechScheduleScreen() {
   // 세션 기반 내 일정 조회 (서버에서 기사 ID 자동 판별)
   const { data: allWorks, isLoading, isError, error: scheduleError, refetch } = trpc.repair.listMySchedule.useQuery(
     undefined,
-    { enabled: !!userId, retry: 1 }
+    { enabled: canRefreshSchedule, retry: 1 }
+  );
+  const refreshSchedule = useCallback(
+    () => refreshAuthenticatedSchedule({ ready: canRefreshSchedule, refetch }),
+    [canRefreshSchedule, refetch],
   );
   // resolvedTechnicianId: 위치추적 등 기존 기능 호환용
   const resolvedTechnicianId = technicianId ?? (allWorks && allWorks.length > 0 ? allWorks[0].technicianId : null);
@@ -96,22 +110,22 @@ export default function TechScheduleScreen() {
   // 화면 복귀 시 새 배정 반영. tab route는 date 없이 교체하므로 이전 주간 선택이 되살아나지 않는다.
   useFocusEffect(
     useCallback(() => {
-      refetch();
+      void refreshSchedule();
       setActiveTab(requestedTab);
       setSelectedScheduleDate(requestedDate);
-    }, [refetch, requestedTab, requestedDate])
+    }, [refreshSchedule, requestedTab, requestedDate])
   );
 
   const consentQuery = trpc.location.getConsent.useQuery(
     { technicianId: resolvedTechnicianId ?? technicianId ?? 0 },
-    { enabled: !!(resolvedTechnicianId ?? technicianId) }
+    { enabled: canRefreshSchedule && !!(resolvedTechnicianId ?? technicianId) }
   );
 
   const startTrackingMutation = trpc.location.startTracking.useMutation();
   const saveConsentMutation = trpc.location.saveConsent.useMutation();
   const sessionQuery = trpc.location.getSessionByRequest.useQuery(
     { requestId: trackingRequestId ?? 0 },
-    { enabled: !!trackingRequestId, refetchInterval: 10000 }
+    { enabled: canRefreshSchedule && !!trackingRequestId, refetchInterval: 10000 }
   );
 
 
@@ -143,25 +157,37 @@ export default function TechScheduleScreen() {
     }
     setIsStartingTracking(true);
     try {
-      // 위치 권한 요청
-      const { granted, notificationGranted, message } = await requestLocationPermissions();
+      // Android 11+ opens its Settings page for background access. Explain the
+      // exact departure-only purpose before requesting that special choice.
+      const confirmBackgroundAccess = Platform.OS === "android"
+        ? () => new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "항상 위치 권한 필요",
+            "출발 후 다른 앱·홈 화면·잠금 화면에서도 고객에게 위치를 공유하려면 Android 설정에서 위치 권한을 ‘항상 허용’으로 바꿔야 합니다. 도착·취소·로그아웃·권한 철회 후에는 공유가 중지됩니다. 고객 이름·주소·좌표는 작은 상태창에 표시하지 않습니다.",
+            [
+              { text: "취소", style: "cancel", onPress: () => resolve(false) },
+              { text: "설정 열기", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        })
+        : undefined;
+      const permissionResult = await requestLocationPermissions({ confirmBackgroundAccess });
       await checkPermissions();
-      if (!granted && Platform.OS !== "web") {
-        Alert.alert(
-          "위치 권한 필요",
-          "위치 공유를 위해 위치 권한이 필요합니다.\n설정 → 앱 → 퓨처에너지테크 → 위치 → 앱 사용 중 허용",
-          [{ text: "확인" }]
-        );
-        setIsStartingTracking(false);
-        return;
-      }
-      if (!notificationGranted && Platform.OS !== "web") {
-        Alert.alert(
-          "알림 권한 필요",
-          message || "위치 공유 중 알림과 중지 버튼을 표시하려면 알림 권한이 필요합니다.",
-          [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
-        );
-        setIsStartingTracking(false);
+      if (!canStartLocationTrackingSession(permissionResult) && Platform.OS !== "web") {
+        if (!permissionResult.granted) {
+          Alert.alert(
+            "위치 권한 필요",
+            permissionResult.message || "다른 앱·잠금 화면에서도 위치를 공유하려면 위치 권한을 ‘항상 허용’으로 바꿔 주세요.",
+            [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+          );
+        } else {
+          Alert.alert(
+            "알림 권한 필요",
+            permissionResult.message || "위치 공유 중 알림과 중지 버튼을 표시하려면 알림 권한이 필요합니다.",
+            [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+          );
+        }
         return;
       }
 
@@ -205,7 +231,7 @@ export default function TechScheduleScreen() {
       Alert.alert(
         "출발 완료 ✅",
         result.smsSent
-          ? `고객에게 위치 공유 링크 문자가 발송되었습니다.\n\n앱을 닫지 않은 상태에서는 홈·다른 앱·잠금 화면에서도 위치 공유가 계속됩니다.`
+          ? `고객에게 위치 공유 링크 문자가 발송되었습니다.\n\n도착·취소·로그아웃 전까지 다른 앱·홈·잠금 화면에서도 위치 공유를 계속 시도합니다. 실제 새 저장은 ‘마지막 새 위치 저장’으로 확인해 주세요.`
           : `위치 공유가 시작되었습니다.\n고객 문자 발송 결과는 별도 서버 처리 상태를 확인해 주세요.`,
         [{ text: "확인" }]
       );
@@ -232,7 +258,7 @@ export default function TechScheduleScreen() {
           onPress: async () => {
             if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await stopTracking("도착완료");
-            refetch();
+            void refreshSchedule();
             Alert.alert("도착 완료", "위치 공유가 종료되었습니다.\n고객용 링크가 만료됩니다.");
           },
         },
@@ -255,7 +281,7 @@ export default function TechScheduleScreen() {
             if (trackingToken && trackingRequestId === work.id) {
               await stopTracking("업무취소");
             }
-            refetch();
+            void refreshSchedule();
           },
         },
       ]
@@ -273,6 +299,72 @@ export default function TechScheduleScreen() {
   };
 
   const s = styles(colors);
+  const trackingStatus = debugState?.serverStatus ?? "idle";
+  const trackingStatusLabel: Record<typeof trackingStatus, string> = {
+    idle: "⏳ 위치 전송 대기",
+    uploading: "⏳ 위치 전송 중",
+    stored: "✅ 새 위치 저장됨",
+    ignored: "ℹ️ 이전·중복 위치 (새 저장 없음)",
+    error: "❌ 위치 전송 실패",
+  };
+  const trackingStatusColor: Record<typeof trackingStatus, string> = {
+    idle: "#F59E0B",
+    uploading: "#F59E0B",
+    stored: "#22C55E",
+    ignored: "#64748B",
+    error: "#EF4444",
+  };
+  const formatTrackingTime = (time: number | null | undefined) => time
+    ? `${Math.max(0, Math.round((Date.now() - time) / 1000))}초 전 (${new Date(time).toLocaleTimeString("ko-KR")})`
+    : "아직 없음";
+  const formatStage = (stage: string | null | undefined, at: number | null | undefined, elapsedMs: number | null | undefined) => stage
+    ? `${stage} · ${formatTrackingTime(at)}${elapsedMs != null ? ` · ${elapsedMs}ms` : ""}`
+    : "아직 없음";
+  const nativeRegistrationLabel: Record<NonNullable<typeof debugState>["nativeRegistration"], string> = {
+    unknown: "미확인",
+    registered: "등록 확인 (수집·저장 별도 확인)",
+    not_registered: "등록되지 않음",
+    restart_failed: "재등록 실패",
+  };
+  const handleStatusOverlay = async () => {
+    if (statusOverlay.visible) {
+      await closeStatusOverlay();
+      return;
+    }
+    if (statusOverlay.available && !statusOverlay.permission) {
+      Alert.alert(
+        "작은 상태창 권한",
+        "다른 앱 위에 ‘위치 공유 중’과 마지막 서버 저장 경과만 표시합니다. 고객 이름·주소·좌표는 표시하지 않으며, 이 창은 위치 수집·서버 저장 성공을 보장하지 않습니다. 시스템 설정에서 허용할 수 있습니다.",
+        [
+          { text: "취소", style: "cancel" },
+          { text: "설정 열기", onPress: () => { void openStatusOverlay(); } },
+        ],
+      );
+      return;
+    }
+    const result = await openStatusOverlay();
+    if (result === "unavailable") {
+      Alert.alert("상태창 준비 중", "이 기능은 다음 내부 검증 Android 설치본에서만 사용할 수 있습니다.");
+    }
+  };
+
+  const handleResumePermissionPendingTracking = async () => {
+    if (isPermissionResumeChecking) return;
+    const result = await resumeTrackingAfterPermissionCheck();
+    if (result === "resumed") {
+      Alert.alert("위치 공유 재개 준비", "기존 업무의 위치 공유를 다시 시작했습니다. 새 위치 저장은 이후 ‘마지막 새 위치 저장’ 시각으로 별도 확인해 주세요.");
+      return;
+    }
+    if (result === "permission_required") {
+      Alert.alert(
+        "위치 권한 확인 필요",
+        "기존 업무는 유지되어 도착·업무 취소를 계속 사용할 수 있습니다. Android 설정에서 위치 권한을 ‘항상 허용’으로 바꾼 뒤 다시 확인해 주세요.",
+        [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }],
+      );
+      return;
+    }
+    Alert.alert("위치 공유 재개 확인", "기존 위치 공유 상태를 확인하지 못했습니다. 도착 또는 업무 취소는 기존 업무 화면에서 계속 사용할 수 있습니다.");
+  };
 
   // 유량 이상 상태 일괄 조회 (배정된 오더의 고객 전화번호 기준)
   useEffect(() => {
@@ -343,7 +435,7 @@ export default function TechScheduleScreen() {
 
         {isThisTracking && (
           <View style={s.trackingIndicator}>
-            <Text style={s.trackingIndicatorText}>📍 위치 공유 중</Text>
+            <Text style={s.trackingIndicatorText}>{isPermissionPending ? "📍 위치 권한 확인 대기 · 도착·취소 가능" : "📍 위치 공유 세션 유지 중 · 수집·저장 별도 확인"}</Text>
           </View>
         )}
 
@@ -399,21 +491,60 @@ export default function TechScheduleScreen() {
             <Text style={s.locationStatusTitle}>📡 위치 전송 상태</Text>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>전송 상태</Text>
-              <Text style={[s.locationStatusValue, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#F59E0B' }]}>
-                {debugState?.serverOk === true ? '✅ 서버 전송 성공' : debugState?.serverOk === false ? '❌ 전송 실패' : '⏳ 전송 대기 중'}
+              <Text style={[s.locationStatusValue, { color: trackingStatusColor[trackingStatus] }]}>
+                {trackingStatusLabel[trackingStatus]}
               </Text>
             </View>
+            {isPermissionPending && (
+              <View style={s.permissionPendingBox}>
+                <Text style={s.permissionPendingText}>위치 권한 확인 대기 중입니다. 기존 업무는 유지되며 도착·업무 취소를 계속 사용할 수 있습니다.</Text>
+                <TouchableOpacity
+                  style={[s.resumeTrackingBtn, isPermissionResumeChecking && s.btnDisabled]}
+                  onPress={() => { void handleResumePermissionPendingTracking(); }}
+                  activeOpacity={0.8}
+                  disabled={isPermissionResumeChecking}
+                >
+                  {isPermissionResumeChecking
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={s.resumeTrackingBtnText}>권한 확인·공유 재개</Text>}
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={s.locationStatusRow}>
-              <Text style={s.locationStatusLabel}>마지막 전송</Text>
+              <Text style={s.locationStatusLabel}>native 등록</Text>
               <Text style={s.locationStatusValue}>
-                {debugState?.lastSuccessAt
-                  ? `${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 (${new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR')})`
-                  : '아직 전송 없음'}
+                {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]}
               </Text>
             </View>
             <View style={s.locationStatusRow}>
-              <Text style={s.locationStatusLabel}>전송 횟수</Text>
-              <Text style={s.locationStatusValue}>{debugState?.sendCount ?? 0}회</Text>
+              <Text style={s.locationStatusLabel}>마지막 Task callback</Text>
+              <Text style={s.locationStatusValue}>
+                {formatTrackingTime(debugState?.lastCallbackAt)}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 측정 시각</Text>
+              <Text style={s.locationStatusValue}>
+                {formatTrackingTime(debugState?.lastMeasuredAt)}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>마지막 새 위치 저장</Text>
+              <Text style={s.locationStatusValue}>
+                {formatTrackingTime(debugState?.lastStoredAt)}
+              </Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>전송 시도</Text>
+              <Text style={s.locationStatusValue}>{debugState?.attemptCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>새 위치 저장</Text>
+              <Text style={s.locationStatusValue}>{debugState?.storedCount ?? 0}회</Text>
+            </View>
+            <View style={s.locationStatusRow}>
+              <Text style={s.locationStatusLabel}>중복·이전 응답</Text>
+              <Text style={s.locationStatusValue}>{debugState?.ignoredCount ?? 0}회</Text>
             </View>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>현재 좌표</Text>
@@ -429,9 +560,10 @@ export default function TechScheduleScreen() {
             </View>
             <View style={s.locationStatusRow}>
               <Text style={s.locationStatusLabel}>위치 권한</Text>
-              <Text style={s.locationStatusValue}>{permStatus.bg}</Text>
+              <Text style={s.locationStatusValue}>앱 사용 중 {permStatus.foregroundLocation} · 항상 {permStatus.backgroundLocation} · 알림 {permStatus.notification}</Text>
             </View>
-            <Text style={s.locationStatusNote}>💡 고객은 문자로 받은 링크에서 위치를 확인합니다</Text>
+            {debugState?.serverError ? <Text style={s.locationStatusNote}>안내: {debugState.serverError}</Text> : null}
+            <Text style={s.locationStatusNote}>💡 새 위치 저장 시점만 고객 지도 최신 위치로 반영됩니다.</Text>
           </View>
         )}
 
@@ -517,11 +649,11 @@ export default function TechScheduleScreen() {
         >
           <Text style={s.trackingBannerIcon}>📍</Text>
           <View style={s.trackingBannerText}>
-            <Text style={s.trackingBannerTitle}>위치 공유 중 {debugState?.serverOk === true ? '✅' : debugState?.serverOk === false ? '⚠️' : ''}</Text>
+            <Text style={s.trackingBannerTitle}>위치 공유 세션 유지 중 {trackingStatus === 'stored' ? '✅' : trackingStatus === 'error' ? '⚠️' : ''}</Text>
             <Text style={s.trackingBannerSub}>
-              {debugState?.lastSuccessAt
-                ? `마지막 전송: ${Math.round((Date.now() - debugState.lastSuccessAt) / 1000)}초 전 · ${debugState.sendCount}회`
-                : '전송 대기 중...'}
+              {debugState?.lastCallbackAt
+                ? `Task callback: ${formatTrackingTime(debugState.lastCallbackAt)} · 새 저장: ${formatTrackingTime(debugState.lastStoredAt)}`
+                : `Task callback 미확인 · 새 저장: ${formatTrackingTime(debugState?.lastStoredAt)}`}
             </Text>
           </View>
           <Text style={{ color: '#fff', fontSize: 11 }}>{showDebug ? '▲' : '▼'}</Text>
@@ -537,16 +669,47 @@ export default function TechScheduleScreen() {
           <Text style={s.debugRow}>정확도: {debugState?.accuracy != null ? `${Math.round(debugState.accuracy)}m` : '-'}</Text>
           <Text style={s.debugRow}>속도: {debugState?.speed != null ? `${(debugState.speed * 3.6).toFixed(1)} km/h` : '-'}</Text>
           <Text style={s.debugRow}>방향: {debugState?.heading != null ? `${Math.round(debugState.heading)}°` : '-'}</Text>
-          <Text style={s.debugRow}>전송 횟수: {debugState?.sendCount ?? 0}회</Text>
+          <Text style={s.debugRow}>전송 시도: {debugState?.attemptCount ?? 0}회 · 새 위치 저장: {debugState?.storedCount ?? 0}회 · 중복·이전: {debugState?.ignoredCount ?? 0}회</Text>
+          <Text style={s.debugRow}>native 등록: {nativeRegistrationLabel[debugState?.nativeRegistration ?? "unknown"]} · 확인: {formatTrackingTime(debugState?.lastNativeCheckAt)}</Text>
+          <Text style={s.debugRow}>마지막 Task callback: {formatTrackingTime(debugState?.lastCallbackAt)} · 마지막 측정: {formatTrackingTime(debugState?.lastMeasuredAt)}</Text>
+          <Text style={s.debugRow}>callback 단계: {formatStage(debugState?.lastCallbackStage, debugState?.lastCallbackStageAt, debugState?.lastCallbackStageElapsedMs)}</Text>
+          <Text style={s.debugRow}>전송 단계: {formatStage(debugState?.lastAttemptStage, debugState?.lastAttemptStageAt, debugState?.lastAttemptStageElapsedMs)}</Text>
+          <Text style={s.debugRow}>앱 상태 전환: {debugState?.lastAppState || '기록 전'} · {formatTrackingTime(debugState?.lastAppStateAt)}</Text>
+          <Text style={s.debugRow}>
+            최근 Task 수신·미귀속 기록: {unboundTaskEvent
+              ? `${unboundTaskEvent.code === 'TASK_CALLBACK_ENTERED' ? 'TASK_CALLBACK_ENTERED (진입 확인)' : unboundTaskEvent.code} · ${formatTrackingTime(unboundTaskEvent.observedAt)} (현재 세션과 연결하지 않음)`
+              : '없음'}
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+            onPress={() => { void handleStatusOverlay(); }}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {statusOverlay.visible
+                ? '작은 상태창 닫기'
+                : statusOverlay.available && !statusOverlay.permission
+                  ? '작은 상태창 권한 열기'
+                  : '작은 상태창 표시'}
+            </Text>
+          </TouchableOpacity>
+          <Text style={s.debugRow}>
+            작은 상태창: {statusOverlay.visible ? '표시 중' : statusOverlay.available ? (statusOverlay.permission ? '닫힘' : '권한 미허용') : '현재 설치본 미지원'} · 잠금 화면에서는 표시를 보장하지 않음
+          </Text>
           <Text style={s.debugRow}>전송 소스: {debugState?.source || '-'}</Text>
-          <Text style={[s.debugRow, { color: debugState?.serverOk === true ? '#22C55E' : debugState?.serverOk === false ? '#EF4444' : '#9BA1A6' }]}>
-            서버 응답: {debugState?.serverOk === true ? '✅ 성공' : debugState?.serverOk === false ? `❌ ${debugState?.serverError}` : '대기'}
+          <Text style={s.debugRow}>앱 빌드: {debugState?.buildLabel || '기록 전'}</Text>
+          <Text style={[s.debugRow, { color: trackingStatusColor[trackingStatus] }]}>
+            서버 상태: {trackingStatusLabel[trackingStatus]}{debugState?.serverError ? ` — ${debugState.serverError}` : ''}
           </Text>
           <Text style={s.debugRow}>
-            마지막 성공: {debugState?.lastSuccessAt ? new Date(debugState.lastSuccessAt).toLocaleTimeString('ko-KR') : '-'}
+            응답 headers: {formatTrackingTime(debugState?.lastResponseHeadersAt)} · 본문 완료: {formatTrackingTime(debugState?.lastResponseBodyAt)}
           </Text>
-          <Text style={s.debugRow}>포그라운드 권한: {permStatus.fg}</Text>
-          <Text style={s.debugRow}>백그라운드 권한: {permStatus.bg}</Text>
+          <Text style={s.debugRow}>
+            서버 accepted: {formatTrackingTime(debugState?.lastAcceptedAt)} · 서버 저장 시각: {formatTrackingTime(debugState?.lastStoredAt)} · callback deadline: {formatTrackingTime(debugState?.lastCallbackDeadlineAt)}
+          </Text>
+          <Text style={s.debugRow}>앱 사용 중 위치 권한: {permStatus.foregroundLocation}</Text>
+          <Text style={s.debugRow}>항상 위치 권한: {permStatus.backgroundLocation}</Text>
+          <Text style={s.debugRow}>알림 권한: {permStatus.notification}</Text>
           <Text style={s.debugRow}>API 서버: https://www.xn--h50b270bp0ceuddugnobx2m.kr</Text>
         </View>
       )}
@@ -573,7 +736,8 @@ export default function TechScheduleScreen() {
           </Text>
           <TouchableOpacity
             style={{ marginTop: 16, backgroundColor: '#FF6B35', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}
-            onPress={() => refetch()}
+            onPress={() => { void refreshSchedule(); }}
+            disabled={!canRefreshSchedule}
             activeOpacity={0.8}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>다시 시도</Text>
@@ -644,7 +808,7 @@ export default function TechScheduleScreen() {
           ) : (
             <ScrollView
               contentContainerStyle={s.list}
-              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B35" />}
+              refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { void refreshSchedule(); }} enabled={canRefreshSchedule} tintColor="#FF6B35" />}
             >
               {selectedDateWorks.map((work: any) => renderWorkCard(work))}
             </ScrollView>
@@ -850,6 +1014,16 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic' as const,
   },
+  permissionPendingBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+    marginTop: 6,
+  },
+  permissionPendingText: { fontSize: 12, color: '#92400E', fontWeight: '600' as const, lineHeight: 18 },
+  resumeTrackingBtn: { backgroundColor: '#D97706', borderRadius: 8, paddingVertical: 9, alignItems: 'center' },
+  resumeTrackingBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' as const },
   // 탭 바
   selectedDateNotice: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#FFF7ED" },
   selectedDateNoticeText: { color: "#9A3412", fontSize: 14, fontWeight: "700" },

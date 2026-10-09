@@ -4,7 +4,10 @@ import {
   type TrackingLifecycleAdapter,
   type TrackingLifecycleState,
 } from "../lib/location-tracking-lifecycle";
-import { adoptHeadlessTrackingWithCredential } from "../lib/location-tracking-runtime";
+import {
+  adoptHeadlessTrackingWithCredential,
+  adoptHeadlessTrackingWithCredentialResult,
+} from "../lib/location-tracking-runtime";
 import { runGuardedLocationUpload } from "../lib/location-upload-guard";
 
 type State = TrackingLifecycleState;
@@ -49,6 +52,23 @@ async function main() {
     await lifecycle.stopCurrent();
     bearer.resolve("A-bearer");
     assert.equal(await adoption, null);
+  }
+
+  // The TaskManager entry must distinguish a missing current credential from a
+  // missing/terminal session without exposing either value in diagnostics.
+  {
+    const stored = { value: { ...state } };
+    const lifecycle = new TrackingLifecycleCoordinator(adapterFor(stored));
+    assert.deepEqual(
+      await adoptHeadlessTrackingWithCredentialResult({ lifecycle, getBearerToken: async () => null }),
+      { kind: "NO_CREDENTIAL" },
+    );
+    const absent = { value: null as State | null };
+    const absentLifecycle = new TrackingLifecycleCoordinator(adapterFor(absent));
+    assert.deepEqual(
+      await adoptHeadlessTrackingWithCredentialResult({ lifecycle: absentLifecycle, getBearerToken: async () => "unused" }),
+      { kind: "NO_ADOPTABLE_SESSION" },
+    );
   }
 
   // The already-captured A logout credential is usable without reading B, while local invalidation blocks A updates.

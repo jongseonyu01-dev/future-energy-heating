@@ -1,12 +1,17 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import superjson from "superjson";
+import { Platform } from "react-native";
 import type { AppRouter } from "@/server/routers";
 import * as Auth from "@/lib/_core/auth";
 import { getApiBaseUrl } from "@/constants/oauth";
+import {
+  getTRPCOperationHeaders,
+  temporaryAuthTokenFromOperationContext,
+} from "@/lib/trpc-operation-headers";
 
-// 운영 build는 기존 www 포함 주소를, review build는 EAS profile이 주입한
-// 격리 preview URL만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
+// 운영 build는 리다이렉트 없는 canonical 공식 API 주소를, review build는
+// 명시적으로 지정된 격리 API 주소만 사용한다. 호출부는 이 상수를 직접 바꾸지 않는다.
 const API_URL = getApiBaseUrl();
 
 export const trpc = createTRPCReact<AppRouter>();
@@ -25,13 +30,16 @@ export function createTRPCClient() {
         url: `${API_URL}/api/trpc`,
         // tRPC v11: transformer는 httpLink 내부에 설정
         transformer: superjson,
-        async headers() {
-          try {
-            const token = await Auth.getSessionToken();
-            return token ? { Authorization: `Bearer ${token}` } : {};
-          } catch {
-            return {};
-          }
+        async headers({ op }) {
+          // Browser requests retain cookie authentication. Native protected
+          // procedures are explicitly blocked before fetch if SecureStore is
+          // unavailable or the session is absent.
+          return getTRPCOperationHeaders({
+            path: op.path,
+            platform: Platform.OS,
+            readToken: Auth.getSessionToken,
+            temporaryAuthToken: temporaryAuthTokenFromOperationContext(op.context),
+          });
         },
       }),
     ],

@@ -15,8 +15,9 @@ describe("location REST technician authentication", () => {
     expect(buildLocationRequestHeaders("   ")).toBeNull();
   });
 
-  it("keeps the actual server status and safe response reason in the failed-send state", () => {
-    expect(formatLocationRequestFailure(401, "로그인이 필요합니다.")).toBe("HTTP 401: 로그인이 필요합니다.");
-    expect(formatLocationRequestFailure(500, null)).toBe("HTTP 500: 응답 본문 없음");
+  it("maps server failures to safe, actionable categories without echoing response bodies", () => {
+    expect(formatLocationRequestFailure(401, "sensitive server detail")).toBe("기사 로그인 인증이 만료되었거나 유효하지 않습니다.");
+    expect(formatLocationRequestFailure(403, "sensitive server detail")).toBe("이 위치공유 세션의 기사 배정 또는 권한이 변경되었습니다.");
+    expect(formatLocationRequestFailure(500, null)).toBe("서버가 일시적으로 위치 저장을 처리하지 못했습니다.");
   });
 });

@@ -1,11 +1,18 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
+import { OFFICIAL_API_BASE_URL, resolveApiBaseUrl } from "@/lib/api-base-url";
 
-// build-time 검수 profile이 지정한 URL이 있을 때만 격리 API를 사용한다.
-// 운영 build는 기존 www 포함 퓨니코드 주소를 기본값으로 그대로 유지한다.
-// 런타임 변환(domainToASCII, punycode 등)은 사용하지 않는다.
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://www.xn--h50b270bp0ceuddugnobx2m.kr";
 export const IS_REVENUE_REVIEW_MODE = process.env.EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE === "1";
+export { OFFICIAL_API_BASE_URL };
+// Expo Metro only replaces EXPO_PUBLIC_* values accessed with dot notation.
+// Do not pass the complete process.env object: it would leave the release URL
+// decision to a runtime object which Android bundles do not provide.
+const apiBaseUrlEnvironment = {
+  EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+  EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE: process.env.EXPO_PUBLIC_TECH_REVENUE_REVIEW_MODE,
+  EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE: process.env.EXPO_PUBLIC_TECH_ESTIMATE_REVIEW_MODE,
+};
+export const API_BASE_URL = resolveApiBaseUrl(apiBaseUrlEnvironment);
 
 const env = {
   portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL || "",
