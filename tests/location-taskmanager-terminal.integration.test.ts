@@ -45,6 +45,7 @@ async function main() {
         if (unbound?.code === testGlobals.__delayUnboundCode) {
           testGlobals.__unboundWriteStarted?.resolve();
           await testGlobals.__unboundWriteGate;
+          testGlobals.__unboundWriteCompleted?.resolve();
         }
         values.set(key, value);
       },
@@ -93,8 +94,16 @@ async function main() {
       export const formatLocationRequestFailure = () => "";
     `);
     await writeFile(join(stubs, "status-overlay.ts"), `
-      export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });
-      export const hideLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });
+      export type LocationStatusOverlayPresentation = { statusText: string; lastStoredAt: number | null };
+      let owner: { ownerId: string; generation: number } | null = null;
+      export const activateLocationStatusOverlayOwner = (state: { requestId: number; technicianUserId: number; startedAt: number }) => {
+        owner = { ownerId: state.requestId + ":" + state.technicianUserId + ":" + state.startedAt, generation: (owner?.generation ?? 0) + 1 };
+        return owner;
+      };
+      export const getLocationStatusOverlayOwner = () => owner;
+      export const invalidateActiveLocationStatusOverlayOwner = () => { owner = null; };
+      export const invalidateLocationStatusOverlayOwner = () => { owner = null; };
+      export const synchronizeLocationStatusOverlayOwner = async () => true; export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });
     `);
 
     const source = await readFile(join(root, "lib/location-tracking.ts"), "utf8");
@@ -108,7 +117,7 @@ async function main() {
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
-      .replace('import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";', 'import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "./stubs/status-overlay.ts";')
+      .replace('import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "@/lib/location-status-overlay";', 'import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "./stubs/status-overlay.ts";')
       .replace('} from "@/lib/location-upload-scheduler";', `} from ${JSON.stringify(join(root, "lib/location-upload-scheduler.ts"))};`)
       .replace('} from "@/lib/location-runtime-diagnostics";', `} from ${JSON.stringify(join(root, "lib/location-runtime-diagnostics.ts"))};`)
       .replace('import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";', `import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from ${JSON.stringify(join(root, "lib/location-runtime-status.ts"))};`)
@@ -253,15 +262,21 @@ async function main() {
       // TaskManager callback, not the store helper in isolation.
       const lateAStarted = Promise.withResolvers<void>();
       const lateAGate = Promise.withResolvers<void>();
+      const lateACompleted = Promise.withResolvers<void>();
       Object.assign(globalThis as Record<string, unknown>, {
         __delayUnboundCode: "TASK_NATIVE_ERROR",
-        __unboundWriteStarted: lateAStarted.resolve,
+        __unboundWriteStarted: lateAStarted,
         __unboundWriteGate: lateAGate.promise,
+        __unboundWriteCompleted: lateACompleted,
       });
       await taskManager.invokeTask({ error: new Error("SYNTHETIC_DELAYED_A") });
       await lateAStarted.promise;
       await taskManager.invokeTask({ data: { locations: [] } });
       lateAGate.resolve();
+      await Promise.race([
+        lateACompleted.promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("late A unbound write did not settle")), 1_000)),
+      ]);
       await waitForDiagnostics();
       const latestUnbound = await tracking.getLatestUnboundLocationTaskEvent();
       assert.equal(latestUnbound?.code, "NO_FRESH_MEASUREMENT", "late A must not replace newer B unbound evidence");
@@ -269,6 +284,7 @@ async function main() {
         __delayUnboundCode: undefined,
         __unboundWriteStarted: undefined,
         __unboundWriteGate: undefined,
+        __unboundWriteCompleted: undefined,
       });
 
       const invalidCoordinateState = { ...state, token: "i".repeat(43), requestId: 5061, startedAt: 506_100 };

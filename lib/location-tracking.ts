@@ -29,7 +29,7 @@ import {
 } from "@/lib/location-runtime-diagnostics";
 import { CALLBACK_DEADLINE_ERROR, locationRuntimeStatusFromDiagnostics } from "@/lib/location-runtime-status";
 import { parseJsonWithin } from "@/lib/location-upload-response";
-import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";
+import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "@/lib/location-status-overlay";
 import {
   matchesTrackingStopAction,
   TrackingLifecycleCoordinator,
@@ -239,21 +239,27 @@ function emitDebug(patch: Partial<LocationDebugState>) {
   debugState = { ...debugState, ...patch };
   for (const listener of debugListeners) listener({ ...debugState });
   // This only changes an overlay already opened by the technician. It cannot
-  // reopen a closed overlay or start/stop collection, and carries no PII.
-  void updateVisibleLocationStatusOverlay(statusOverlayText(debugState)).catch(() => undefined);
+  // reopen a closed overlay or start/stop collection, and carries no PII. The
+  // native surface derives accepted-storage age from its own clock so a silent
+  // callback period cannot leave a frozen "0초 전" label.
+  const current = trackingLifecycle.currentIntent();
+  const owner = current ? getLocationStatusOverlayOwner(current) : null;
+  if (owner) {
+    void updateVisibleLocationStatusOverlay(owner, statusOverlayPresentation(debugState)).catch(() => undefined);
+  }
 }
 
-function statusOverlayText(state: LocationDebugState): string {
-  if (!trackingLifecycle.currentIntent()) return "위치 공유가 종료되었습니다.";
-  if (state.serverStatus === "error") return "위치 공유 중 · 서버 저장 확인 필요";
-  if (state.lastStoredAt) {
-    const ageSeconds = Math.max(0, Math.floor((Date.now() - state.lastStoredAt) / 1000));
-    const age = ageSeconds < 60 ? `${ageSeconds}초 전` : `${Math.floor(ageSeconds / 60)}분 전`;
-    return `위치 공유 중 · 마지막 서버 저장 ${age}`;
-  }
-  return state.serverStatus === "uploading"
-    ? "위치 공유 중 · 서버 저장 확인 중"
-    : "위치 공유 중 · 서버 저장 대기";
+function statusOverlayPresentation(state: LocationDebugState): LocationStatusOverlayPresentation {
+  return {
+    statusText: state.serverStatus === "error"
+      ? "위치 공유 중 · 서버 저장 확인 필요"
+      : state.serverStatus === "uploading"
+        ? "위치 공유 중 · 서버 저장 확인 중"
+        : state.lastStoredAt
+          ? "위치 공유 중"
+          : "위치 공유 중 · 서버 저장 대기",
+    lastStoredAt: state.lastStoredAt,
+  };
 }
 
 function diagnosticBuildLabel(): string | null {
@@ -559,6 +565,10 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
   if (Platform.OS === "web") throw new Error("기사 위치공유는 Android 앱에서만 시작할 수 있습니다.");
   const started = await trackingLifecycle.start(state);
   if (!started) throw new Error("위치 공유 시작이 취소되었거나 다른 공유로 교체되었습니다.");
+  // This claims only optional visual ownership. It does not show the overlay,
+  // start an upload, or treat native registration as collection success.
+  const overlayOwner = activateLocationStatusOverlayOwner(state);
+  void synchronizeLocationStatusOverlayOwner(overlayOwner).catch(() => undefined);
   activeDebugUploadOwner = null;
   lastUploadMeasurement = { key: stateKey(state), measuredAt: 0 };
   await runtimeDiagnostics.begin(state);
@@ -576,6 +586,9 @@ export async function startLocationTracking(state: PersistedTrackingState): Prom
 
 /** Stops only native/local state. A separate token-scoped server stop is best effort. */
 export async function stopLocationTracking(): Promise<void> {
+  const current = trackingLifecycle.currentIntent();
+  if (current) invalidateLocationStatusOverlayOwner(current);
+  else invalidateActiveLocationStatusOverlayOwner();
   const stopped = await trackingLifecycle.stopCurrent();
   if (stopped) {
     clearDebugUploadForState(stopped);
@@ -661,7 +674,7 @@ function deactivateAfterTerminalResponse(state: PersistedTrackingState): boolean
   if (!trackingLifecycle.invalidateForTerminalResponse(state)) return false;
   clearDebugUploadForState(state);
   lastUploadMeasurement = { key: "", measuredAt: 0 };
-  void hideLocationStatusOverlay().catch(() => undefined);
+  invalidateLocationStatusOverlayOwner(state);
   emitDebug({ serverStatus: "error", serverError: "서버에서 위치공유 세션이 종료되었거나 권한이 변경되었습니다." });
   void runtimeDiagnostics.patch(state, {
     lastErrorCode: "SERVER_TERMINAL",
@@ -1005,10 +1018,12 @@ export async function stopStoredTrackingAndNotify(
   authSnapshot?: LocationStopAuthSnapshot | null,
 ): Promise<void> {
   // `stopCurrent()` also fences a cold runtime before it performs its stored read.
+  const current = trackingLifecycle.currentIntent();
+  if (current) invalidateLocationStatusOverlayOwner(current);
+  else invalidateActiveLocationStatusOverlayOwner();
   const stopped = await trackingLifecycle.stopCurrent();
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) {
-    void hideLocationStatusOverlay().catch(() => undefined);
     emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
     const matchingSnapshot = authSnapshot?.technicianUserId === stopped.technicianUserId ? authSnapshot : null;
     void notifySessionStop(stopped.token, reason, stopped.technicianUserId, matchingSnapshot);
@@ -1024,10 +1039,10 @@ export async function stopExactStoredTrackingAndNotify(
   state: PersistedTrackingState,
   reason: TrackingStopReason,
 ): Promise<void> {
+  invalidateLocationStatusOverlayOwner(state);
   const stopped = await trackingLifecycle.stopStoredExact(state);
   if (!stopped) return;
   lastUploadMeasurement = { key: "", measuredAt: 0 };
-  void hideLocationStatusOverlay().catch(() => undefined);
   emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
   void notifySessionStop(stopped.token, reason, stopped.technicianUserId);
 }
@@ -1051,12 +1066,13 @@ async function handleTrackingNotificationResponse(response: Notifications.Notifi
   const data = response.notification.request.content.data;
   const current = trackingLifecycle.currentIntent();
   if (current && !matchesTrackingStopAction(current, data)) return;
+  if (current) invalidateLocationStatusOverlayOwner(current);
+  else invalidateActiveLocationStatusOverlayOwner();
   const stopped = current
     ? await trackingLifecycle.stopCurrent()
     : await trackingLifecycle.stopStoredIf((state) => matchesTrackingStopAction(state, data));
   lastUploadMeasurement = { key: "", measuredAt: 0 };
   if (stopped) {
-    void hideLocationStatusOverlay().catch(() => undefined);
     emitPersistedDiagnostics(await runtimeDiagnostics.finalize(stopped));
     void notifySessionStop(stopped.token, "업무취소", stopped.technicianUserId);
   }
@@ -1116,10 +1132,6 @@ export function registerLocationTrackingTask(): boolean {
           await recordUnboundTaskCallback("NO_FRESH_MEASUREMENT", callbackEnteredAt, taskFence);
           return;
         }
-        // Capture before the first adoption read. A later B start advances this
-        // generation, so A's deadline cannot publish a preparation error over
-        // B's active or idle UI state.
-        const preparationGeneration = trackingLifecycle.captureGeneration();
         // Keep a small, dedicated tail budget for the unbound timeout marker.
         // Otherwise a stalled credential/read could consume all 10 seconds and
         // make "callback entered but adoption timed out" indistinguishable from

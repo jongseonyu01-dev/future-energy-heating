@@ -29,23 +29,26 @@
 ### 3. 고객 지도 polling·SDK 실패·종료 세대 보호
 
 - `DELAYED`/`LEGACY_RECEIPT_DELAYED`는 server가 좌표를 `null`로 제공하는 정책을 유지한다. Kakao map init에도 delay-specific empty message를 전달해 generic “기사 위치 수신 대기”가 덮지 못하게 한다.
-- SDK `onerror`는 polling render 뒤에도 별도 실패 안내를 유지하고 즉시 무한 재시도 대신 최대 한 번의 5초 지연 재시도만 허용한다.
+- SDK의 각 script 시도는 attempt generation·settled·개별 timeout을 가진다. 첫 10초 timeout 뒤 재시도 B가 성공하면, 이전 A의 늦은 `onerror`/`onload`/map-load timeout이 B의 `sdkLoaded=true`와 오류 상태를 바꾸지 못한다. 즉시 무한 재시도 대신 최대 한 번의 5초 지연 재시도만 허용한다.
 - fetch timeout은 HTTP headers뿐 아니라 `response.json()` body까지 포함한다. terminal 410/ended가 먼저 오면 request generation을 무효화해 앞선 200 response body·error·timeout이 화면·지도·poll을 되살리지 못하게 한다.
-- `TRACK_LOCATION_DISPLAY_TERMINAL_AND_SDK_INTEGRATION_PASS`는 CURRENT map, DELAYED, first-signal wait, SDK failure 유지, network failure, delayed 200 body A → terminal 410 B → late A no-op을 실제 inline script/controlled DOM에서 확인한다. stale coordinates are never rendered as current.
+- HTTP 200의 JSON parse 실패는 빈 위치 payload로 렌더하지 않고 별도 “위치 세션 응답 오류” 카드와 한 번의 제한된 5초 recovery만 남긴다. non-2xx의 parse 실패는 status 기반 terminal/error 카드를 위해 비위치 fallback만 사용한다.
+- `TRACK_LOCATION_DISPLAY_TERMINAL_AND_SDK_INTEGRATION_PASS`는 CURRENT map, DELAYED, first-signal wait, SDK failure 유지, SDK A timeout → B success → late A error, network failure, malformed 200 JSON, delayed 200 body A → terminal 410 B → late A no-op을 실제 inline script/controlled DOM에서 확인한다. stale coordinates are never rendered as current.
 
 ## 선택형 작은 상태창 설계
 
 | 후보 | 권한/플랫폼 조건 | 이번 후보 판단 |
 | --- | --- | --- |
 | 기존 Android location FGS ongoing notification | 기존 location FGS/알림 구성 | **기본·최소 권한 surface.** 위치 수집의 제어/상태 기본면으로 유지한다. 알림이 수집·HTTP·accepted 저장 성공을 증명하지는 않는다. |
-| 선택형 overlay/bubble | `SYSTEM_ALERT_WINDOW` manifest + 사용자가 Android Special app access Settings에서 별도 승인 | **구현 후보.** 기사 진단 화면에서 명시적으로 선택한 경우에만 Settings를 열고, 승인 후 다시 누르면 표시에 들어간다. ‘위치 공유 중’과 마지막 **서버 저장** 경과 또는 저장 확인 필요만 표시한다. 고객명·주소·좌표·token·인증값은 표시·수집하지 않는다. `앱 열기`와 `닫기`만 제공한다. 닫기는 overlay만 제거하고 FGS/session을 정지하지 않으며, terminal/취소/logout 정지는 overlay도 숨긴다. 화면 잠금에서는 표시를 보장하지 않는다. |
+| 선택형 overlay/bubble | `SYSTEM_ALERT_WINDOW` manifest + 사용자가 Android Special app access Settings에서 별도 승인 | **구현 후보.** 기사 진단 화면에서 명시적으로 선택한 경우에만 Settings를 열고, 승인 후 다시 누르면 표시에 들어간다. ‘위치 공유 중’과 마지막 **서버 저장** 경과 또는 저장 확인 필요만 표시한다. 고객명·주소·좌표·token·인증값은 표시·수집하지 않는다. `앱 열기`와 `닫기`만 제공한다. 상태창 owner/generation을 terminal·A→B·닫기보다 먼저 무효화해 늦은 show/update/hide가 재표시하거나 B를 숨기지 못한다. native는 마지막 accepted 시각과 자체 시계로 경과를 매초 다시 계산한다. 닫기는 overlay만 제거하고 FGS/session을 정지하지 않으며, terminal/취소/logout 정지는 native stop await 전 overlay도 무효화한다. 화면 잠금에서는 표시를 보장하지 않는다. |
 | PiP | Activity/PiP 전환 필요; Android 문서는 video playback/video call/navigation 중심 | **미채택.** location callback/FGS/잠금 생존을 보장하지 않는다. |
 
 ### 구현 검증
 
 - `ANDROID_LOCAL_OVERLAY_AUTOLINKING_PASS`: Expo local module discovery에 `future-energy-status-overlay`가 확인됐다.
-- `LOCATION_STATUS_OVERLAY_CONTRACT_PASS`: 권한 Settings 요청 → show → visible-only update → hide의 JS/native API 경로와 non-sensitive static rule을 실행했다.
-- `ANDROID_STATUS_OVERLAY_KOTLIN_COMPILE_PASS`: Expo prebuild 뒤 Android `:app:compileDebugKotlin`이 local module autolink를 포함해 성공했다. APK는 생성·서명·배포하지 않았다.
+- `LOCATION_STATUS_OVERLAY_OWNER_AND_AGE_CONTRACT_PASS`: 권한 Settings, owner/generation 기반 A→B/닫기 fence, native에 넘기는 absolute accepted timestamp와 non-sensitive static rule을 실행했다.
+- `LOCATION_TRACKING_CONTEXT_OVERLAY_AND_UNBOUND_INTEGRATION_PASS`: 실제 Provider source/hook harness에서 delayed `getStatus` → terminal stop → late resolution이 native show를 호출하지 않는 것과, AppState active가 현 technician scope의 새 unbound event만 재조회하는 것을 실행했다. 이 경로는 위치 upload를 시작하지 않는다.
+- `LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS`: delayed native stop 중에도 exact owner의 overlay invalidation 요청이 먼저 발생하는 것을 실제 tracking module transform으로 확인했다.
+- `FUTURE_ENERGY_STATUS_OVERLAY_KOTLIN_COMPILE_PASS`: Expo prebuild 뒤 Android `:future-energy-status-overlay:compileDebugKotlin`이 local module autolink를 포함해 성공했다. APK는 생성·서명·배포하지 않았다.
 
 공식 근거: [Android Foreground services](https://developer.android.com/develop/background-work/services/fgs), [Android special permissions](https://developer.android.com/training/permissions/requesting-special), [Android PiP](https://developer.android.com/develop/ui/views/picture-in-picture), [Expo Location](https://docs.expo.dev/versions/latest/sdk/location/), [Expo TaskManager](https://docs.expo.dev/versions/latest/sdk/task-manager/), [Expo native modules](https://docs.expo.dev/modules/config-plugin-and-native-module-tutorial/).
 

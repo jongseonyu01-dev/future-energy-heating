@@ -27,12 +27,17 @@ import {
   reconcileLocationTrackingOwner,
 } from "@/lib/location-tracking-owner-reconciliation";
 import {
+  activateLocationStatusOverlayOwner,
   getLocationStatusOverlayState,
-  hideLocationStatusOverlay,
+  invalidateLocationStatusOverlayOwner,
+  isCurrentLocationStatusOverlayOwner,
   requestLocationStatusOverlayPermission,
   showLocationStatusOverlay,
+  synchronizeLocationStatusOverlayOwner,
+  type LocationStatusOverlayPresentation,
   type LocationStatusOverlayState,
 } from "@/lib/location-status-overlay";
+import { sameTrackingLifecycleState } from "@/lib/location-tracking-lifecycle";
 
 export interface LocationTrackingContextValue {
   isTracking: boolean;
@@ -100,8 +105,16 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   const [statusOverlay, setStatusOverlay] = useState<LocationStatusOverlayState>({ available: false, permission: false, visible: false });
   const [permStatus, setPermStatus] = useState({ foregroundLocation: "확인 중...", backgroundLocation: "확인 중...", notification: "확인 중..." });
   const ownerReconciliation = useRef(new LocationTrackingOwnerReconciliationGuard()).current;
+  const trackingStateRef = useRef<PersistedTrackingState | null>(null);
+  const overlayRequestGeneration = useRef(0);
+  const unboundReadGeneration = useRef(0);
+  const unboundScope = useRef("");
 
   const applyState = useCallback((state: PersistedTrackingState | null) => {
+    if (!sameTrackingLifecycleState(trackingStateRef.current, state)) {
+      overlayRequestGeneration.current += 1;
+    }
+    trackingStateRef.current = state;
     const view = stateToView(state);
     setIsTracking(view.isTracking);
     setTrackingToken(view.trackingToken);
@@ -140,40 +153,58 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     if (overlay) setStatusOverlay(overlay);
   }, []);
 
-  const statusOverlayText = useCallback(() => {
-    if (!isTracking) return "위치 공유가 종료되었습니다.";
-    if (debugState?.serverStatus === "error") return "위치 공유 중 · 서버 저장 확인 필요";
-    if (debugState?.lastStoredAt) {
-      const ageSeconds = Math.max(0, Math.floor((Date.now() - debugState.lastStoredAt) / 1000));
-      return `위치 공유 중 · 마지막 서버 저장 ${ageSeconds < 60 ? `${ageSeconds}초 전` : `${Math.floor(ageSeconds / 60)}분 전`}`;
-    }
-    return "위치 공유 중 · 서버 저장 대기";
-  }, [debugState?.lastStoredAt, debugState?.serverStatus, isTracking]);
+  const statusOverlayPresentation = useCallback((): LocationStatusOverlayPresentation => ({
+    statusText: debugState?.serverStatus === "error"
+      ? "위치 공유 중 · 서버 저장 확인 필요"
+      : debugState?.serverStatus === "uploading"
+        ? "위치 공유 중 · 서버 저장 확인 중"
+        : debugState?.lastStoredAt
+          ? "위치 공유 중"
+          : "위치 공유 중 · 서버 저장 대기",
+    lastStoredAt: debugState?.lastStoredAt ?? null,
+  }), [debugState?.lastStoredAt, debugState?.serverStatus]);
 
   const openStatusOverlay = useCallback(async (): Promise<"shown" | "permission_required" | "unavailable"> => {
-    if (!isTracking) return "unavailable";
+    const expectedState = trackingStateRef.current;
+    if (!expectedState || !isTracking) return "unavailable";
+    const requestGeneration = ++overlayRequestGeneration.current;
+    // Explicitly reopening after the native "닫기" action receives a new
+    // generation. Passive debug updates retain their old generation and cannot
+    // resurrect a window the technician closed.
+    const owner = activateLocationStatusOverlayOwner(expectedState, true);
+    const isStillCurrentRequest = () => (
+      requestGeneration === overlayRequestGeneration.current
+      && sameTrackingLifecycleState(trackingStateRef.current, expectedState)
+      && isCurrentLocationStatusOverlayOwner(owner)
+    );
+    const nativeOwnerApplied = await synchronizeLocationStatusOverlayOwner(owner).catch(() => false);
+    if (!nativeOwnerApplied || !isStillCurrentRequest()) return "unavailable";
     const current = await getLocationStatusOverlayState().catch(() => null);
-    if (!current?.available) return "unavailable";
+    if (!isStillCurrentRequest() || !current?.available) return "unavailable";
     if (!current.permission) {
       const requested = await requestLocationStatusOverlayPermission().catch(() => current);
-      setStatusOverlay(requested);
+      if (isStillCurrentRequest()) setStatusOverlay(requested);
       return "permission_required";
     }
-    const next = await showLocationStatusOverlay(statusOverlayText()).catch(() => current);
+    const next = await showLocationStatusOverlay(owner, statusOverlayPresentation()).catch(() => current);
+    if (!isStillCurrentRequest()) return "unavailable";
     setStatusOverlay(next);
     return next.visible ? "shown" : "unavailable";
-  }, [isTracking, statusOverlayText]);
+  }, [isTracking, statusOverlayPresentation]);
 
   const closeStatusOverlay = useCallback(async () => {
-    const next = await hideLocationStatusOverlay().catch(() => null);
-    if (next) setStatusOverlay(next);
+    const current = trackingStateRef.current;
+    ++overlayRequestGeneration.current;
+    if (current) invalidateLocationStatusOverlayOwner(current);
+    setStatusOverlay((previous) => ({ ...previous, visible: false }));
   }, []);
 
   const stopTracking = useCallback(async (reason: "도착완료" | "업무취소") => {
     // Local foreground collection, persisted intent, and control notification are
     // invalidated before the token-scoped server stop is attempted.
-    await stopStoredTrackingAndNotify(reason, createLocationStopAuthSnapshot(user));
+    const stopping = stopStoredTrackingAndNotify(reason, createLocationStopAuthSnapshot(user));
     applyState(null);
+    await stopping;
   }, [applyState, user]);
 
   useEffect(() => subscribeDebug((next) => setDebugState({ ...next })), []);
@@ -183,17 +214,29 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
   // A cold TaskManager callback can occur before an exact A/B session is safely
   // adopted. Keep that module-level evidence visible to an authenticated
   // technician, but never attribute it to the current customer or session.
-  useEffect(() => {
-    let cancelled = false;
-    if (isLoading || user?.appRole !== "technician" || !user.userId) {
+  const refreshUnboundTaskEvent = useCallback(() => {
+    const scope = !isLoading && user?.appRole === "technician" && user.userId
+      ? `technician:${user.userId}`
+      : "";
+    const generation = ++unboundReadGeneration.current;
+    unboundScope.current = scope;
+    if (!scope) {
       setUnboundTaskEvent(null);
-      return () => { cancelled = true; };
+      return;
     }
     void getLatestUnboundLocationTaskEvent()
-      .then((event) => { if (!cancelled) setUnboundTaskEvent(event); })
-      .catch(() => { if (!cancelled) setUnboundTaskEvent(null); });
-    return () => { cancelled = true; };
+      .then((event) => {
+        if (generation === unboundReadGeneration.current && unboundScope.current === scope) setUnboundTaskEvent(event);
+      })
+      .catch(() => {
+        if (generation === unboundReadGeneration.current && unboundScope.current === scope) setUnboundTaskEvent(null);
+      });
   }, [isLoading, user?.appRole, user?.userId]);
+
+  useEffect(() => {
+    refreshUnboundTaskEvent();
+    return () => { unboundReadGeneration.current += 1; };
+  }, [refreshUnboundTaskEvent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,6 +264,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     if (Platform.OS === "web") return;
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active" || isLoading || user?.appRole !== "technician" || !user.userId) return;
+      refreshUnboundTaskEvent();
       let cancelled = false;
       const generation = ownerReconciliation.begin();
       void reconcileLocationTrackingOwner({
@@ -237,7 +281,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       }).finally(() => { cancelled = true; });
     });
     return () => subscription.remove();
-  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation]);
+  }, [isLoading, user?.appRole, user?.userId, applyState, checkPermissions, ownerReconciliation, refreshUnboundTaskEvent]);
 
   const startTracking = useCallback(async (params: StartTrackingParams): Promise<StartTrackingResult> => {
     const existing = await getPersistedTrackingState();

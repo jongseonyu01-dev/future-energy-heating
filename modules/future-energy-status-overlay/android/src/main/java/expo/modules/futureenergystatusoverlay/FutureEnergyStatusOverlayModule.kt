@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -15,15 +17,28 @@ import android.widget.TextView
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlin.math.max
 
 /**
  * A deliberately optional, non-sensitive status surface. It has no location
  * collection, networking, identity, detailed place, coordinate, credential, or stop logic.
  * The existing FGS notification remains the reliable control surface.
+ *
+ * Every native call carries a monotonic owner generation. Delayed A show/update/hide
+ * calls are ignored after terminal invalidation or replacement B has claimed a newer
+ * generation. The displayed storage age is derived only from the native device clock
+ * and the last server-accepted timestamp supplied by JS; it never proves a future
+ * callback, request, response, or server save.
  */
 class FutureEnergyStatusOverlayModule : Module() {
   private var overlay: LinearLayout? = null
   private var label: TextView? = null
+  private var activeOwnerId: String? = null
+  private var activeOwnerGeneration: Long = 0
+  private var statusText: String = "위치 공유 상태 확인 중"
+  private var lastStoredAt: Long? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var ageTicker: Runnable? = null
 
   private val context: Context
     get() = requireNotNull(appContext.reactContext)
@@ -52,10 +67,24 @@ class FutureEnergyStatusOverlayModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("show") { statusText: String ->
-      if (!canDrawOverlays()) return@AsyncFunction status()
+    // Claiming a newer owner hides any old optional window, but does not open a
+    // new one. The technician must explicitly choose to show it again.
+    AsyncFunction("activateOwner") { ownerId: String, generation: Double ->
+      activateOwner(ownerId, generation.toLong())
+      status()
+    }.runOnQueue(Queues.MAIN)
+
+    // Terminal/stop/close revokes the matching owner's visual authority before
+    // native location cleanup awaits. A late A invalidation cannot hide newer B.
+    AsyncFunction("invalidateOwner") { ownerId: String, generation: Double ->
+      invalidateOwner(ownerId, generation.toLong())
+      status()
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("show") { ownerId: String, generation: Double, nextStatusText: String, storedAt: Double? ->
+      if (!owns(ownerId, generation.toLong()) || !canDrawOverlays()) return@AsyncFunction status()
       val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-      val safeText = sanitize(statusText)
+      setPresentation(nextStatusText, storedAt)
       try {
         if (overlay == null) {
           val root = LinearLayout(context).apply {
@@ -84,7 +113,13 @@ class FutureEnergyStatusOverlayModule : Module() {
             setTextColor(Color.rgb(203, 213, 225))
             textSize = 12f
             setPadding(dp(8), dp(8), 0, dp(8))
-            setOnClickListener { hideOverlay() }
+            // This only closes the visual surface. JS owner invalidation blocks
+            // a concurrently delayed show/update from reopening it.
+            setOnClickListener {
+              val currentOwner = activeOwnerId
+              if (currentOwner != null) invalidateOwner(currentOwner, activeOwnerGeneration + 1)
+              else hideOverlay()
+            }
           }
           root.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
           root.addView(open)
@@ -109,7 +144,7 @@ class FutureEnergyStatusOverlayModule : Module() {
           manager.addView(root, params)
           overlay = root
         }
-        label?.text = safeText
+        refreshLabelAndScheduleTicker()
       } catch (_: Exception) {
         // Permission can be revoked while Settings is open; degrade without
         // touching the independent FGS/task/session lifecycle.
@@ -119,20 +154,71 @@ class FutureEnergyStatusOverlayModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     // Headless task diagnostics may update a window the technician already
-    // chose to show, but must never reopen one after the technician closed it.
-    AsyncFunction("updateIfVisible") { statusText: String ->
-      label?.text = sanitize(statusText)
+    // chose to show, but must never reopen one after close/terminal/replacement.
+    AsyncFunction("updateIfVisible") { ownerId: String, generation: Double, nextStatusText: String, storedAt: Double? ->
+      if (!owns(ownerId, generation.toLong()) || !isVisible()) return@AsyncFunction status()
+      setPresentation(nextStatusText, storedAt)
+      refreshLabelAndScheduleTicker()
       status()
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("hide") {
-      hideOverlay()
+    AsyncFunction("hide") { ownerId: String, generation: Double ->
+      if (owns(ownerId, generation.toLong())) hideOverlay()
       status()
     }.runOnQueue(Queues.MAIN)
 
     OnDestroy {
+      activeOwnerId = null
+      activeOwnerGeneration += 1
       hideOverlay()
     }
+  }
+
+  private fun activateOwner(ownerId: String, generation: Long) {
+    if (generation < activeOwnerGeneration) return
+    val changed = activeOwnerId != ownerId || activeOwnerGeneration != generation
+    activeOwnerId = ownerId
+    activeOwnerGeneration = generation
+    if (changed) hideOverlay()
+  }
+
+  private fun invalidateOwner(ownerId: String, generation: Long) {
+    if (generation < activeOwnerGeneration) return
+    if (activeOwnerId != ownerId) return
+    activeOwnerId = null
+    activeOwnerGeneration = generation
+    hideOverlay()
+  }
+
+  private fun owns(ownerId: String, generation: Long): Boolean =
+    activeOwnerId == ownerId && activeOwnerGeneration == generation
+
+  private fun setPresentation(nextStatusText: String, storedAt: Double?) {
+    statusText = sanitize(nextStatusText)
+    lastStoredAt = storedAt?.takeIf { it.isFinite() && it > 0 }?.toLong()
+  }
+
+  private fun refreshLabelAndScheduleTicker() {
+    label?.text = renderedStatusText()
+    ageTicker?.let { mainHandler.removeCallbacks(it) }
+    if (!isVisible() || lastStoredAt == null) {
+      ageTicker = null
+      return
+    }
+    val ticker = Runnable {
+      if (!isVisible() || lastStoredAt == null) return@Runnable
+      label?.text = renderedStatusText()
+      mainHandler.postDelayed(ageTicker!!, 1_000)
+    }
+    ageTicker = ticker
+    mainHandler.postDelayed(ticker, 1_000)
+  }
+
+  private fun renderedStatusText(): String {
+    val storedAt = lastStoredAt ?: return statusText
+    val ageSeconds = max(0, (System.currentTimeMillis() - storedAt) / 1_000)
+    val age = if (ageSeconds < 60) "${ageSeconds}초 전" else "${ageSeconds / 60}분 전"
+    return "$statusText · 마지막 서버 저장 $age"
   }
 
   private fun status(): Map<String, Any> = mapOf(
@@ -147,6 +233,8 @@ class FutureEnergyStatusOverlayModule : Module() {
   private fun isVisible(): Boolean = overlay != null
 
   private fun hideOverlay() {
+    ageTicker?.let { mainHandler.removeCallbacks(it) }
+    ageTicker = null
     val current = overlay ?: return
     try {
       val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager

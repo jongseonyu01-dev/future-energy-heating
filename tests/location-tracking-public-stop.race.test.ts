@@ -74,7 +74,7 @@ async function main() {
       export const Accuracy = { High: 1 };
       export const hasStartedLocationUpdatesAsync = async () => true;
       export const startLocationUpdatesAsync = async () => { globalThis.__nativeStarts += 1; };
-      export const stopLocationUpdatesAsync = async () => { globalThis.__nativeStops += 1; };
+      export const stopLocationUpdatesAsync = async () => { globalThis.__nativeStops += 1; if (globalThis.__nativeStopGate) await globalThis.__nativeStopGate; };
       export const requestForegroundPermissionsAsync = async () => ({ status: "granted" });
       export const getCurrentPositionAsync = async () => null;
     `);
@@ -83,7 +83,7 @@ async function main() {
     await writeFile(join(stubs, "oauth.ts"), 'export const getApiBaseUrl = () => "https://invalid.example";\n');
     await writeFile(join(stubs, "auth.ts"), 'export const getSessionToken = async () => null; export const getUserInfo = async () => null;\n');
     await writeFile(join(stubs, "request-auth.ts"), 'export const buildLocationRequestHeaders = () => null; export const formatLocationRequestFailure = () => "";\n');
-    await writeFile(join(stubs, "status-overlay.ts"), 'export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false }); export const hideLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });\n');
+    await writeFile(join(stubs, "status-overlay.ts"), 'export type LocationStatusOverlayPresentation = { statusText: string; lastStoredAt: number | null }; let owner: { ownerId: string; generation: number } | null = null; export const activateLocationStatusOverlayOwner = (state: { requestId: number; technicianUserId: number; startedAt: number }) => (owner = { ownerId: state.requestId + ":" + state.technicianUserId + ":" + state.startedAt, generation: (owner?.generation ?? 0) + 1 }); export const getLocationStatusOverlayOwner = () => owner; export const invalidateActiveLocationStatusOverlayOwner = () => { if (owner) globalThis.__overlayEvents.push(["invalidate-active", owner.ownerId]); owner = null; }; export const invalidateLocationStatusOverlayOwner = (state: { requestId: number; technicianUserId: number; startedAt: number }) => { const id = state.requestId + ":" + state.technicianUserId + ":" + state.startedAt; if (owner?.ownerId === id) { globalThis.__overlayEvents.push(["invalidate", id]); owner = null; } }; export const synchronizeLocationStatusOverlayOwner = async () => true; export const updateVisibleLocationStatusOverlay = async () => ({ available: false, permission: false, visible: false });\n');
 
     const source = await readFile(join(root, "lib/location-tracking.ts"), "utf8");
     const transformed = source
@@ -96,7 +96,7 @@ async function main() {
       .replace('import { getApiBaseUrl } from "@/constants/oauth";', 'import { getApiBaseUrl } from "./stubs/oauth.ts";')
       .replace('import * as Auth from "@/lib/_core/auth";', 'import * as Auth from "./stubs/auth.ts";')
       .replace('import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";', 'import { buildLocationRequestHeaders, formatLocationRequestFailure } from "./stubs/request-auth.ts";')
-      .replace('import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "@/lib/location-status-overlay";', 'import { hideLocationStatusOverlay, updateVisibleLocationStatusOverlay } from "./stubs/status-overlay.ts";')
+      .replace('import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "@/lib/location-status-overlay";', 'import { activateLocationStatusOverlayOwner, getLocationStatusOverlayOwner, invalidateActiveLocationStatusOverlayOwner, invalidateLocationStatusOverlayOwner, synchronizeLocationStatusOverlayOwner, updateVisibleLocationStatusOverlay, type LocationStatusOverlayPresentation } from "./stubs/status-overlay.ts";')
       .replace('} from "@/lib/location-tracking-lifecycle";', `} from ${JSON.stringify(join(root, "lib/location-tracking-lifecycle.ts"))};`)
       .replace('import { runGuardedLocationUpload } from "@/lib/location-upload-guard";', `import { runGuardedLocationUpload } from ${JSON.stringify(join(root, "lib/location-upload-guard.ts"))};`)
       .replace('import {\n  adoptHeadlessTrackingWithCredential,\n  adoptHeadlessTrackingWithCredentialResult,\n} from "@/lib/location-tracking-runtime";', `import { adoptHeadlessTrackingWithCredential, adoptHeadlessTrackingWithCredentialResult } from ${JSON.stringify(join(root, "lib/location-tracking-runtime.ts"))};`);
@@ -108,6 +108,8 @@ async function main() {
       __stored: stored,
       __nativeStarts: nativeStarts,
       __nativeStops: nativeStops,
+      __nativeStopGate: null,
+      __overlayEvents: [],
     });
     const tracking = await import(`${pathToFileURL(join(sandbox, "location-tracking-under-test.ts")).href}?v=${Date.now()}`);
 
@@ -126,6 +128,20 @@ async function main() {
     assert.equal(globals.__stored, null, "public stop must clear stored A after its cold read");
     assert.equal(globals.__nativeStarts, 0, "late restore must never start native collection");
     assert.equal(globals.__nativeStops, 1, "public stop must terminate the existing native task once");
+
+    // A visible optional overlay is revoked immediately when an exact in-memory
+    // share stops. It must not wait for delayed Android native cleanup.
+    await tracking.startLocationTracking(stateA);
+    const nativeStopsBeforeVisibleStop = Number(globals.__nativeStops);
+    const nativeStopGate = deferred<void>();
+    globals.__nativeStopGate = nativeStopGate.promise;
+    const stoppingVisibleShare = tracking.stopStoredTrackingAndNotify("도착완료");
+    await tick();
+    assert.deepEqual(globals.__overlayEvents, [["invalidate", "91:41:91000"]], "local stop must revoke the exact overlay before native stop settles");
+    assert.equal(globals.__nativeStops, nativeStopsBeforeVisibleStop + 1, "native cleanup may remain pending after visual authority is revoked");
+    nativeStopGate.resolve();
+    await stoppingVisibleShare;
+    globals.__nativeStopGate = null;
     console.log("LOCATION_TRACKING_PUBLIC_STOP_RACE_PASS");
   } finally {
     await rm(sandbox, { recursive: true, force: true });
