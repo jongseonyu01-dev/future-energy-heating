@@ -17,6 +17,10 @@ import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
 import { buildLocationRequestHeaders, formatLocationRequestFailure } from "@/lib/location-request-auth";
 import {
+  requestBackgroundLocationPermissionFlow,
+  type LocationPermissionFlowDependencies,
+} from "@/lib/location-permission-flow";
+import {
   classifyLocationUpdateResponse,
   LatestOnlyUploadQueue,
   selectNewestFreshLocation,
@@ -615,36 +619,39 @@ function serverRecordedAt(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-export async function requestLocationPermissions(): Promise<{
+export async function requestLocationPermissions(options: Pick<LocationPermissionFlowDependencies, "confirmBackgroundAccess"> = {}): Promise<{
   granted: boolean;
+  foregroundGranted: boolean;
+  backgroundGranted: boolean;
   notificationGranted: boolean;
   message?: string;
 }> {
-  if (Platform.OS === "web") return { granted: true, notificationGranted: false };
+  if (Platform.OS === "web") {
+    return {
+      granted: true,
+      foregroundGranted: true,
+      backgroundGranted: true,
+      notificationGranted: false,
+    };
+  }
   try {
     const Location = await getLocationModule();
-    const foreground = await Location.requestForegroundPermissionsAsync();
-    if (foreground.status !== "granted") {
-      return {
-        granted: false,
-        notificationGranted: false,
-        message: "위치 공유를 위해 위치 권한을 허용해 주세요.",
-      };
-    }
-    const notification = await Notifications.requestPermissionsAsync();
-    const notificationGranted = notification.granted || notification.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
-    if (!notificationGranted) {
-      return {
-        granted: true,
-        notificationGranted: false,
-        message: "위치 공유 상태와 중지 버튼을 표시하려면 알림 권한을 허용해 주세요.",
-      };
-    }
-    return { granted: true, notificationGranted: true };
+    return await requestBackgroundLocationPermissionFlow({
+      requestForeground: () => Location.requestForegroundPermissionsAsync(),
+      requestBackground: () => Location.requestBackgroundPermissionsAsync(),
+      requestNotifications: () => Notifications.requestPermissionsAsync(),
+      confirmBackgroundAccess: options.confirmBackgroundAccess,
+      isProvisionalNotification: (notification) => (
+        (notification.ios as { status?: unknown } | null | undefined)?.status
+          === Notifications.IosAuthorizationStatus.PROVISIONAL
+      ),
+    });
   } catch (error) {
     console.warn("[LocationTracking] permission request failed", error);
     return {
       granted: false,
+      foregroundGranted: false,
+      backgroundGranted: false,
       notificationGranted: false,
       message: "위치 또는 알림 권한을 확인하지 못했습니다.",
     };

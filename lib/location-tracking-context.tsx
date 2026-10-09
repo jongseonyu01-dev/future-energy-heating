@@ -129,7 +129,7 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
       return;
     }
     let foregroundLocation = "확인 실패";
-    let backgroundLocation = "FGS 방식 (별도 권한 미요청)";
+    let backgroundLocation = "확인 실패";
     let notification = "확인 실패";
     try {
       const foreground = await Location.getForegroundPermissionsAsync();
@@ -139,9 +139,10 @@ export function LocationTrackingProvider({ children }: { children: React.ReactNo
     }
     try {
       const background = await Location.getBackgroundPermissionsAsync();
-      backgroundLocation = background.status === "granted" ? "✅ 항상 허용" : `ℹ️ ${background.status} (FGS 방식)`;
+      backgroundLocation = background.status === "granted" ? "✅ 항상 허용" : `❌ ${background.status} (항상 허용 필요)`;
     } catch {
-      // expo-location may throw when ACCESS_BACKGROUND_LOCATION is intentionally absent.
+      // Keep the separate foreground and notification findings visible if the
+      // platform permission lookup itself is unavailable.
     }
     try {
       const notifications = await Notifications.getPermissionsAsync();

@@ -12,6 +12,7 @@ import { trpc } from "@/lib/trpc";
 import { LocationConsentModal } from "@/components/location-consent-modal";
 import { openNavigation } from "@/lib/navigation";
 import { formatFullAddress, formatNavAddress } from "@/constants/address-data";
+import { canStartLocationTrackingSession } from "@/lib/location-permission-flow";
 import {
   createLocationStopAuthSnapshot,
   notifySessionStop,
@@ -153,25 +154,37 @@ export default function TechScheduleScreen() {
     }
     setIsStartingTracking(true);
     try {
-      // 위치 권한 요청
-      const { granted, notificationGranted, message } = await requestLocationPermissions();
+      // Android 11+ opens its Settings page for background access. Explain the
+      // exact departure-only purpose before requesting that special choice.
+      const confirmBackgroundAccess = Platform.OS === "android"
+        ? () => new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "항상 위치 권한 필요",
+            "출발 후 다른 앱·홈 화면·잠금 화면에서도 고객에게 위치를 공유하려면 Android 설정에서 위치 권한을 ‘항상 허용’으로 바꿔야 합니다. 도착·취소·로그아웃·권한 철회 후에는 공유가 중지됩니다. 고객 이름·주소·좌표는 작은 상태창에 표시하지 않습니다.",
+            [
+              { text: "취소", style: "cancel", onPress: () => resolve(false) },
+              { text: "설정 열기", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        })
+        : undefined;
+      const permissionResult = await requestLocationPermissions({ confirmBackgroundAccess });
       await checkPermissions();
-      if (!granted && Platform.OS !== "web") {
-        Alert.alert(
-          "위치 권한 필요",
-          message || "위치 공유를 위해 위치 권한이 필요합니다.\n앱이 열린 상태에서 출발을 다시 눌러 주세요.",
-          [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
-        );
-        setIsStartingTracking(false);
-        return;
-      }
-      if (!notificationGranted && Platform.OS !== "web") {
-        Alert.alert(
-          "알림 권한 필요",
-          message || "위치 공유 중 알림과 중지 버튼을 표시하려면 알림 권한이 필요합니다.",
-          [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
-        );
-        setIsStartingTracking(false);
+      if (!canStartLocationTrackingSession(permissionResult) && Platform.OS !== "web") {
+        if (!permissionResult.granted) {
+          Alert.alert(
+            "위치 권한 필요",
+            permissionResult.message || "다른 앱·잠금 화면에서도 위치를 공유하려면 위치 권한을 ‘항상 허용’으로 바꿔 주세요.",
+            [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+          );
+        } else {
+          Alert.alert(
+            "알림 권한 필요",
+            permissionResult.message || "위치 공유 중 알림과 중지 버튼을 표시하려면 알림 권한이 필요합니다.",
+            [{ text: "취소" }, { text: "설정 열기", onPress: () => Linking.openSettings() }]
+          );
+        }
         return;
       }
 
@@ -215,7 +228,7 @@ export default function TechScheduleScreen() {
       Alert.alert(
         "출발 완료 ✅",
         result.smsSent
-          ? `고객에게 위치 공유 링크 문자가 발송되었습니다.\n\n앱을 닫지 않은 상태에서는 홈·다른 앱·잠금 화면에서도 위치 공유가 계속됩니다.`
+          ? `고객에게 위치 공유 링크 문자가 발송되었습니다.\n\n도착·취소·로그아웃 전까지 다른 앱·홈·잠금 화면에서도 위치 공유를 계속 시도합니다. 실제 새 저장은 ‘마지막 새 위치 저장’으로 확인해 주세요.`
           : `위치 공유가 시작되었습니다.\n고객 문자 발송 결과는 별도 서버 처리 상태를 확인해 주세요.`,
         [{ text: "확인" }]
       );

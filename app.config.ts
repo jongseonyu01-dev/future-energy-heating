@@ -77,7 +77,7 @@ const config: ExpoConfig = {
     package: env.androidPackage,
     // SYSTEM_ALERT_WINDOW is requested only from the optional in-app status
     // window action; location collection itself continues without it.
-    permissions: ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION", "SYSTEM_ALERT_WINDOW"],
+    permissions: ["POST_NOTIFICATIONS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION", "SYSTEM_ALERT_WINDOW"],
     intentFilters: [
       {
         action: "VIEW",
@@ -104,7 +104,11 @@ const config: ExpoConfig = {
       {
         "locationAlwaysAndWhenInUsePermission": "퓨처에너지테크 기사 앱이 고객 방문 중 위치를 공유합니다. 출발 버튼을 누를 때만 위치가 전송됩니다.",
         "isIosBackgroundLocationEnabled": true,
-        isAndroidBackgroundLocationEnabled: false
+        // Android must declare ACCESS_BACKGROUND_LOCATION for Expo's restored
+        // LocationTaskConsumer to request updates after the app is backgrounded.
+        // Runtime approval is requested only from the user-initiated departure flow.
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true,
       }
     ],
     "expo-notifications",
